@@ -323,3 +323,36 @@ body.exam-mode .main-layout{
 /* 警告 */
 .timer.warning{ color:#f59e0b; }
 .timer.danger{ color:#ef4444; }
+.option.correct{
+  background:#22c55e;
+  color:#fff;
+}
+
+.option.wrong{
+  background:#ef4444;
+  color:#fff;
+}
+
+.feedback{
+  display:none;
+  padding:12px;
+  border:1px solid #e5e7eb;
+  border-radius:8px;
+  background:#fafafa;
+  line-height:1.7;
+}
+
+.question-start-box{
+  padding:14px;
+  background:#eef2ff;
+  border:1px solid #c7d2fe;
+  border-radius:10px;
+}
+
+.timer.warning{
+  color:#f59e0b;
+}
+
+.timer.danger{
+  color:#ef4444;
+}
