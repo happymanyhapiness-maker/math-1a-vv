@@ -1,616 +1,294 @@
-const STORAGE_KEY = "kyotsu_math_ia_v5";
+const STORAGE_KEY = "kyotsu_app_v8";
 
 let state = {
-  i: 0,
-  total: 0,
+  index: 0,
   correct: 0,
-  review: false,
+  total: 0,
   wrong: [],
-  wrongSet: new Set(),
-  solvedWrong: new Set(),
-  timerId: null,
-  remaining: 60,
-  strictTime: false,
-  startedCurrentQuestion: false
+  mode: "normal",
+  strict: false,
+  timer: null,
+  remaining: 0
 };
 
-/* =========================
-   要素
-========================= */
-const el = {
-  correctCnt: document.getElementById("correctCnt"),
-  totalCnt: document.getElementById("totalCnt"),
-  rateCnt: document.getElementById("rateCnt"),
-  avgCnt: document.getElementById("avgCnt"),
-
-  wCalc: document.getElementById("wCalc"),
-  wSwitch: document.getElementById("wSwitch"),
-  wTime: document.getElementById("wTime"),
-  topWeak: document.getElementById("topWeak"),
-
-  stageRate0: document.getElementById("stageRate0"),
-  stageRate1: document.getElementById("stageRate1"),
-  stageRate2: document.getElementById("stageRate2"),
-  stageRate3: document.getElementById("stageRate3"),
-
-  todayReviewCount: document.getElementById("todayReviewCount"),
-  reviewRate: document.getElementById("reviewRate"),
-  clearedCount: document.getElementById("clearedCount"),
-
-  questionPanel: document.getElementById("questionPanel"),
-  resultBox: document.getElementById("resultBox"),
-  questionText: document.getElementById("questionText"),
-  svgBox: document.getElementById("svgBox"),
-  optionsBox: document.getElementById("optionsBox"),
-  feedback: document.getElementById("feedback"),
-  timer: document.getElementById("timer"),
-
-  qStageLabel: document.getElementById("qStageLabel"),
-  qScoreLabel: document.getElementById("qScoreLabel"),
-  qWeakLabel: document.getElementById("qWeakLabel"),
-  qModeLabel: document.getElementById("qModeLabel"),
-
-  finalScore: document.getElementById("finalScore"),
-  resultSummary: document.getElementById("resultSummary"),
-
-  historyBox: document.getElementById("historyBox"),
-
-  startExamBtn: document.getElementById("startExamBtn"),
-  resumeExamBtn: document.getElementById("resumeExamBtn"),
-  startWrongOnlyReviewBtn: document.getElementById("startWrongOnlyReviewBtn"),
-  startWrongOnlyReviewBtn2: document.getElementById("startWrongOnlyReviewBtn2"),
-
-  goTopBtn: document.getElementById("goTopBtn"),
-  goTopBtn2: document.getElementById("goTopBtn2"),
-  goTopBtn3: document.getElementById("goTopBtn3"),
-
-  nextBtn: document.getElementById("nextBtn"),
-  skipQuestionBtn: document.getElementById("skipQuestionBtn"),
-  toggleStrictTimeBtn: document.getElementById("toggleStrictTimeBtn"),
-
-  resetStatsBtn: document.getElementById("resetStatsBtn"),
-  clearSavedDataBtn: document.getElementById("clearSavedDataBtn"),
-
-  saveStatus: document.getElementById("saveStatus"),
-
-  examTopbar: document.getElementById("examTopbar"),
-  questionStartBox: document.getElementById("questionStartBox"),
-  startQuestionBtn: document.getElementById("startQuestionBtn")
-};
-
-/* =========================
-   統計
-========================= */
 const stats = {
-  weakness: {
-    "計算精度": 0,
-    "方針切替": 0,
-    "時間不足": 0
-  },
+  weakness: { "計算精度":0, "方針切替":0, "時間判断":0, "時間不足":0 },
   stage: {
-    "第1問": { total: 0, correct: 0 },
-    "第2問": { total: 0, correct: 0 },
-    "第3問": { total: 0, correct: 0 },
-    "第4問": { total: 0, correct: 0 }
-  },
-  reviewTotal: 0,
-  reviewCorrect: 0,
-  solvedWrongCount: 0,
-  todayReviewCount: 0,
-  times: [],
-  history: []
+    "第1問":{t:0,c:0},
+    "第2問":{t:0,c:0},
+    "第3問":{t:0,c:0},
+    "第4問":{t:0,c:0}
+  }
 };
 
-/* =========================
-   保存 / 読込
-========================= */
-function save() {
-  const data = {
-    state: {
-      ...state,
-      wrongSet: [...state.wrongSet],
-      solvedWrong: [...state.solvedWrong]
-    },
-    stats
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  if (el.saveStatus) el.saveStatus.textContent = "保存状態: 自動保存済み";
+const el = id => document.getElementById(id);
+
+/* ===== 保存 ===== */
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({state,stats}));
+  el("saveStatus").innerText = "保存状態: 保存済み（" + new Date().toLocaleTimeString("ja-JP") + "）";
+}
+function load(){
+  const d = localStorage.getItem(STORAGE_KEY);
+  if(!d) return;
+  try{
+    const obj = JSON.parse(d);
+    Object.assign(state, obj.state);
+    Object.assign(stats, obj.stats);
+    el("saveStatus").innerText = "保存状態: 前回データ読み込み済み";
+  }catch{}
 }
 
-function load() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-
-  try {
-    const data = JSON.parse(raw);
-
-    if (data.state) {
-      state = {
-        ...state,
-        ...data.state,
-        wrongSet: new Set(data.state.wrongSet || []),
-        solvedWrong: new Set(data.state.solvedWrong || [])
-      };
-    }
-
-    if (data.stats) {
-      if (data.stats.weakness) stats.weakness = data.stats.weakness;
-      if (data.stats.stage) stats.stage = data.stats.stage;
-      if (typeof data.stats.reviewTotal === "number") stats.reviewTotal = data.stats.reviewTotal;
-      if (typeof data.stats.reviewCorrect === "number") stats.reviewCorrect = data.stats.reviewCorrect;
-      if (typeof data.stats.solvedWrongCount === "number") stats.solvedWrongCount = data.stats.solvedWrongCount;
-      if (typeof data.stats.todayReviewCount === "number") stats.todayReviewCount = data.stats.todayReviewCount;
-      if (Array.isArray(data.stats.times)) stats.times = data.stats.times;
-      if (Array.isArray(data.stats.history)) stats.history = data.stats.history;
-    }
-  } catch (e) {
-    console.error(e);
-  }
+/* ===== 問題取得 ===== */
+function list(){
+  return state.mode === "review" ? state.wrong : questions;
+}
+function q(){
+  return list()[state.index];
 }
 
-/* =========================
-   touch / click 共通
-========================= */
-function bindPress(element, handler) {
-  if (!element) return;
-
-  let touched = false;
-
-  element.addEventListener("touchend", (e) => {
-    e.preventDefault();
-    touched = true;
-    handler(e);
-    setTimeout(() => {
-      touched = false;
-    }, 250);
-  }, { passive: false });
-
-  element.addEventListener("click", (e) => {
-    if (touched) return;
-    handler(e);
-  });
+/* ===== 試験UI切替 ===== */
+function enterExamMode(){
+  el("examTopbar").style.display = "flex";
+  el("controlPanel").style.display = "none";
+}
+function exitExamMode(){
+  el("examTopbar").style.display = "none";
+  el("controlPanel").style.display = "block";
+  el("questionPanel").style.display = "none";
+  el("resultBox").style.display = "none";
 }
 
-/* =========================
-   補助
-========================= */
-function getCurrentList() {
-  return state.review ? state.wrong : questions;
-}
+/* ===== 表示 ===== */
+function show(){
+  const x = q();
+  if(!x){ finish(); return; }
 
-function getCurrentQuestion() {
-  return getCurrentList()[state.i];
-}
+  enterExamMode();
 
-function getBaseTime() {
-  if (state.strictTime) return 30;
-  return state.review ? 40 : 60;
-}
+  el("questionPanel").style.display = "flex";
+  el("resultBox").style.display = "none";
 
-function updateTopWeak() {
-  const entries = Object.entries(stats.weakness).sort((a, b) => b[1] - a[1]);
-  el.topWeak.textContent = entries[0][1] === 0 ? "未判定" : entries[0][0];
-}
+  el("questionText").innerHTML = `<b>${x.stage}</b><br>${x.q}`;
+  el("qStageLabel").innerText = x.stage;
+  el("qScoreLabel").innerText = "配点 " + x.score + "点";
+  el("qWeakLabel").innerText = x.weakness;
+  el("qModeLabel").innerText = state.mode === "review" ? "復習モード" : "本番モード";
 
-function updateStageRates() {
-  const stageNames = ["第1問", "第2問", "第3問", "第4問"];
-  stageNames.forEach((stageName, idx) => {
-    const s = stats.stage[stageName];
-    const rate = s.total === 0 ? 0 : Math.round((s.correct / s.total) * 100);
-    const target = el[`stageRate${idx}`];
-    if (target) target.textContent = `${rate}%`;
-  });
-}
+  el("optionsBox").innerHTML = "";
+  el("optionsBox").classList.add("disabled");
 
-function updateHistory() {
-  if (!el.historyBox) return;
-
-  if (!stats.history.length) {
-    el.historyBox.innerHTML = `<div class="history-item">まだ履歴がありません。</div>`;
-    return;
-  }
-
-  el.historyBox.innerHTML = stats.history.slice(0, 20).map(item => `
-    <div class="history-item">
-      <strong>${item.time}</strong><br>
-      ${item.text}
-    </div>
-  `).join("");
-}
-
-function addHistory(text) {
-  stats.history.unshift({
-    time: new Date().toLocaleString("ja-JP"),
-    text
-  });
-  if (stats.history.length > 50) {
-    stats.history = stats.history.slice(0, 50);
-  }
-  updateHistory();
-}
-
-function updateDashboard() {
-  if (el.correctCnt) el.correctCnt.textContent = state.correct;
-  if (el.totalCnt) el.totalCnt.textContent = state.total;
-  if (el.rateCnt) {
-    el.rateCnt.textContent =
-      state.total === 0 ? "0%" : `${Math.round((state.correct / state.total) * 100)}%`;
-  }
-  if (el.avgCnt) {
-    el.avgCnt.textContent =
-      stats.times.length === 0
-        ? "0"
-        : (stats.times.reduce((a, b) => a + b, 0) / stats.times.length).toFixed(1);
-  }
-
-  if (el.wCalc) el.wCalc.textContent = stats.weakness["計算精度"];
-  if (el.wSwitch) el.wSwitch.textContent = stats.weakness["方針切替"];
-  if (el.wTime) el.wTime.textContent = stats.weakness["時間不足"];
-  updateTopWeak();
-  updateStageRates();
-
-  if (el.todayReviewCount) el.todayReviewCount.textContent = stats.todayReviewCount;
-  if (el.reviewRate) {
-    el.reviewRate.textContent =
-      stats.reviewTotal === 0 ? "0%" : `${Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%`;
-  }
-  if (el.clearedCount) el.clearedCount.textContent = stats.solvedWrongCount;
-
-  if (el.toggleStrictTimeBtn) {
-    el.toggleStrictTimeBtn.textContent =
-      state.strictTime ? "時間制限: 厳格" : "時間制限: 通常";
-  }
-}
-
-function resetFeedback() {
-  el.feedback.className = "feedback";
-  el.feedback.style.display = "none";
-  el.feedback.innerHTML = "";
-}
-
-function setQuestionInteractive(enabled) {
-  if (!el.optionsBox) return;
-  if (enabled) {
-    el.optionsBox.classList.remove("disabled");
-  } else {
-    el.optionsBox.classList.add("disabled");
-  }
-
-  document.querySelectorAll(".option").forEach(btn => {
-    btn.disabled = !enabled;
-  });
-}
-
-function showExamLayout() {
-  document.body.classList.add("exam-mode");
-  if (el.examTopbar) el.examTopbar.style.display = "flex";
-}
-
-function hideExamLayout() {
-  document.body.classList.remove("exam-mode");
-  if (el.examTopbar) el.examTopbar.style.display = "none";
-  if (el.questionPanel) el.questionPanel.style.display = "none";
-  if (el.resultBox) el.resultBox.style.display = "none";
-}
-
-/* =========================
-   画面表示
-========================= */
-function showQuestion() {
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  showExamLayout();
-
-  el.questionPanel.style.display = "flex";
-  el.resultBox.style.display = "none";
-
-  el.qStageLabel.textContent = q.stage;
-  el.qScoreLabel.textContent = `配点 ${q.score}点`;
-  el.qWeakLabel.textContent = `弱点軸: ${q.weakness}`;
-  el.qModeLabel.textContent = state.review ? "復習モード" : "本番モード";
-
-  el.questionText.innerHTML = q.q;
-  if (el.svgBox) el.svgBox.innerHTML = q.svg || "";
-
-  el.optionsBox.innerHTML = q.a.map((choice, idx) => `
-    <button class="option" data-index="${idx}">
-      ${String.fromCharCode(65 + idx)}. ${choice}
-    </button>
-  `).join("");
-
-  document.querySelectorAll(".option").forEach((btn, idx) => {
-    bindPress(btn, () => answer(idx, btn));
+  x.a.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "option";
+    b.innerText = String.fromCharCode(65+i) + ". " + c;
+    b.onclick = () => answer(i);
+    b.disabled = true;
+    el("optionsBox").appendChild(b);
   });
 
-  resetFeedback();
-  el.nextBtn.style.display = "none";
+  el("feedback").style.display = "none";
+  el("nextBtn").style.display = "none";
+  el("questionStartBox").style.display = "block";
 
-  state.startedCurrentQuestion = false;
-  state.remaining = getBaseTime();
-  el.timer.className = "timer";
-  el.timer.textContent = `${state.remaining}s`;
-
-  if (el.questionStartBox) el.questionStartBox.style.display = "block";
-  setQuestionInteractive(false);
-
-  updateDashboard();
-  save();
+  resetTimer();
+  update();
 }
 
-function startCurrentQuestion() {
-  if (state.startedCurrentQuestion) return;
-  state.startedCurrentQuestion = true;
+/* ===== タイマー ===== */
+function timeLimit(){ return state.strict ? 30 : 60; }
 
-  if (el.questionStartBox) el.questionStartBox.style.display = "none";
-  setQuestionInteractive(true);
-  startTimer();
+function resetTimer(){
+  clearInterval(state.timer);
+  state.remaining = timeLimit();
+  el("timer").innerText = state.remaining + "s";
+  el("timer").className = "timer";
 }
 
-/* =========================
-   タイマー
-========================= */
-function startTimer() {
-  clearInterval(state.timerId);
+function startQ(){
+  el("questionStartBox").style.display = "none";
+  el("optionsBox").classList.remove("disabled");
 
-  el.timer.className = "timer";
-  el.timer.textContent = `${state.remaining}s`;
+  [...document.querySelectorAll(".option")].forEach(b => b.disabled = false);
 
-  state.timerId = setInterval(() => {
-    state.remaining -= 1;
-    el.timer.textContent = `${state.remaining}s`;
+  clearInterval(state.timer);
+  state.timer = setInterval(() => {
+    state.remaining--;
+    el("timer").innerText = state.remaining + "s";
 
-    if (state.remaining <= 10) {
-      el.timer.className = "timer danger";
-    } else if (state.remaining <= 20) {
-      el.timer.className = "timer warning";
-    } else {
-      el.timer.className = "timer";
-    }
+    if(state.remaining <= 10) el("timer").className = "timer danger";
+    else if(state.remaining <= 20) el("timer").className = "timer warning";
 
-    if (state.remaining <= 0) {
-      clearInterval(state.timerId);
-      timeoutQuestion();
+    if(state.remaining <= 0){
+      clearInterval(state.timer);
+      timeout();
     }
   }, 1000);
 }
 
-/* =========================
-   回答
-========================= */
-function answer(index, buttonEl) {
-  if (!state.startedCurrentQuestion) return;
+/* ===== 回答 ===== */
+function answer(i){
+  const x = q();
+  clearInterval(state.timer);
 
-  clearInterval(state.timerId);
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  document.querySelectorAll(".option").forEach(btn => btn.classList.remove("selected"));
-  buttonEl.classList.add("selected");
+  const ok = i === x.correct;
 
   state.total++;
-  stats.stage[q.stage].total++;
+  stats.stage[x.stage].t++;
 
-  const elapsed = getBaseTime() - state.remaining;
-  stats.times.push(elapsed > 0 ? elapsed : 1);
-
-  const ok = index === q.correct;
-
-  if (state.review) {
-    stats.reviewTotal++;
-  }
-
-  if (ok) {
+  if(ok){
     state.correct++;
-    stats.stage[q.stage].correct++;
-
-    if (state.review) {
-      stats.reviewCorrect++;
-      if (!state.solvedWrong.has(q.id)) {
-        state.solvedWrong.add(q.id);
-        stats.solvedWrongCount++;
-      }
-      state.wrong = state.wrong.filter(item => item.id !== q.id);
-    }
-
-    buttonEl.classList.add("correctFlash");
-    el.feedback.className = "feedback ok";
-    el.feedback.style.display = "block";
-    el.feedback.innerHTML = `<strong>正解です。</strong><br>${q.explain}`;
-    addHistory(`${q.stage} / 正解 / 加点: ${q.score}`);
-  } else {
-    stats.weakness[q.weakness]++;
-
-    if (!state.review && !state.wrongSet.has(q.id)) {
-      state.wrong.push(q);
-      state.wrongSet.add(q.id);
-    }
-
-    el.feedback.className = "feedback ng";
-    el.feedback.style.display = "block";
-    el.feedback.innerHTML = `<strong>不正解です。</strong><br>${q.explain}`;
-    addHistory(`${q.stage} / 不正解 / 弱点軸: ${q.weakness}`);
+    stats.stage[x.stage].c++;
+  }else{
+    stats.weakness[x.weakness]++;
+    if(!state.wrong.find(q => q.id === x.id)) state.wrong.push(x);
   }
 
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
+  [...document.querySelectorAll(".option")].forEach((b, idx) => {
+    b.disabled = true;
+    if(idx === x.correct) b.classList.add("correct");
+    if(idx === i && idx !== x.correct) b.classList.add("wrong");
+  });
 
-  updateDashboard();
+  el("feedback").style.display = "block";
+  el("feedback").innerHTML = explain(x, ok);
+
+  el("nextBtn").style.display = "inline-block";
+
+  update();
   save();
 }
 
-function timeoutQuestion() {
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  state.total++;
-  stats.weakness["時間不足"]++;
-  stats.stage[q.stage].total++;
-  stats.times.push(getBaseTime());
-
-  if (state.review) {
-    stats.reviewTotal++;
-  } else if (!state.wrongSet.has(q.id)) {
-    state.wrong.push(q);
-    state.wrongSet.add(q.id);
-  }
-
-  el.feedback.className = "feedback ng";
-  el.feedback.style.display = "block";
-  el.feedback.innerHTML = `<strong>時間切れです。</strong><br>${q.explain}`;
-
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
-
-  addHistory(`${q.stage} / 時間切れ / 弱点軸: 時間不足`);
-  updateDashboard();
-  save();
-}
-
-function skipQuestion() {
-  clearInterval(state.timerId);
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  state.total++;
-  stats.weakness["時間不足"]++;
-  stats.stage[q.stage].total++;
-
-  const elapsed = state.startedCurrentQuestion ? (getBaseTime() - state.remaining) : 1;
-  stats.times.push(elapsed > 0 ? elapsed : 1);
-
-  if (!state.review && !state.wrongSet.has(q.id)) {
-    state.wrong.push(q);
-    state.wrongSet.add(q.id);
-  }
-
-  el.feedback.className = "feedback ng";
-  el.feedback.style.display = "block";
-  el.feedback.innerHTML = `<strong>この設問を飛ばしました。</strong><br>${q.explain}`;
-
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
-
-  if (el.questionStartBox) el.questionStartBox.style.display = "none";
-  addHistory(`${q.stage} / スキップ / 弱点軸: 時間不足`);
-  updateDashboard();
-  save();
-}
-
-function nextQuestion() {
-  state.i++;
-
-  if (state.review) {
-    if (state.i >= state.wrong.length) {
-      finishReview();
-      return;
-    }
-  } else {
-    if (state.i >= questions.length) {
-      finishExam();
-      return;
-    }
-  }
-
-  showQuestion();
-}
-
-/* =========================
-   開始 / 再開 / 終了
-========================= */
-function startExam() {
-  state.review = false;
-  state.i = 0;
-  showQuestion();
-}
-
-function resumeExam() {
-  if (state.i >= getCurrentList().length) {
-    state.i = 0;
-  }
-  showQuestion();
-}
-
-function startWrongOnlyReview() {
-  if (state.wrong.length === 0) {
-    alert("再挑戦できる間違い問題がありません。");
-    return;
-  }
-
-  state.review = true;
-  state.i = 0;
-  stats.todayReviewCount += state.wrong.length;
-  showQuestion();
-}
-
-function finishExam() {
-  clearInterval(state.timerId);
-  hideExamLayout();
-
-  el.resultBox.style.display = "block";
-  el.finalScore.textContent = `${state.correct} / ${questions.length}`;
-  el.resultSummary.innerHTML = `
-    正答率は <strong>${state.total === 0 ? 0 : Math.round((state.correct / state.total) * 100)}%</strong> でした。<br>
-    最重要課題は <strong>${el.topWeak.textContent}</strong> です。
+/* ===== 解説 ===== */
+function explain(q, ok){
+  return `
+  <b style="color:${ok ? "green" : "red"}">${ok ? "✅ 正解" : "❌ 不正解"}</b><br><br>
+  <b>◆ 解き方</b><br>${q.explain.why}<br><br>
+  <b>◆ ミス</b><br>${q.explain.mistake}<br><br>
+  <b>◆ コツ</b><br>${q.explain.tip}
   `;
-  addHistory(`試験終了 / 正答 ${state.correct} / ${questions.length}`);
+}
+
+/* ===== タイムアウト ===== */
+function timeout(){
+  const x = q();
+  state.total++;
+  stats.stage[x.stage].t++;
+  stats.weakness["時間不足"]++;
+
+  if(!state.wrong.find(q => q.id === x.id)) state.wrong.push(x);
+
+  el("feedback").style.display = "block";
+  el("feedback").innerHTML = `<b style="color:#d97706">⏰ 時間切れ</b><br><br>` + explain(x, false).replace(/<b[^>]*>.*?<\/b><br><br>/, "");
+  el("nextBtn").style.display = "inline-block";
+
+  // 正解選択肢を表示
+  [...document.querySelectorAll(".option")].forEach((b, idx) => {
+    b.disabled = true;
+    if(idx === x.correct) b.classList.add("correct");
+  });
+
+  update();
   save();
 }
 
-function finishReview() {
-  clearInterval(state.timerId);
-  hideExamLayout();
+/* ===== 次 ===== */
+function next(){
+  state.index++;
+  show();
+}
 
-  el.resultBox.style.display = "block";
-  el.finalScore.textContent = "復習完了";
-  el.resultSummary.innerHTML = `
-    復習モード正答率は <strong>${stats.reviewTotal === 0 ? 0 : Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%</strong> でした。<br>
-    完全に直した問題数は <strong>${stats.solvedWrongCount}</strong> 件です。
-  `;
-  addHistory(`復習終了 / 正答率 ${stats.reviewTotal === 0 ? 0 : Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%`);
+/* ===== 終了 ===== */
+function finish(){
+  el("questionPanel").style.display = "none";
+  el("examTopbar").style.display = "none";
+  el("controlPanel").style.display = "none";
+  el("resultBox").style.display = "block";
+  el("finalScore").innerText = `${state.correct} / ${state.total}`;
+  el("resultSummary").innerHTML = `正答率 ${rate()}%<br>最重要課題：${topWeak()}`;
   save();
 }
 
-/* =========================
-   その他
-========================= */
-function resetStats() {
-  localStorage.removeItem(STORAGE_KEY);
-  location.reload();
+/* ===== 統計 ===== */
+function rate(){
+  return state.total ? Math.round(state.correct / state.total * 100) : 0;
 }
 
-function clearSavedData() {
-  localStorage.removeItem(STORAGE_KEY);
-  location.reload();
+function topWeak(){
+  const entries = Object.entries(stats.weakness).filter(([,v]) => v > 0);
+  if(!entries.length) return "未判定";
+  return entries.sort((a,b) => b[1]-a[1])[0][0];
 }
 
-/* =========================
-   イベント
-========================= */
-bindPress(el.startExamBtn, startExam);
-bindPress(el.resumeExamBtn, resumeExam);
-bindPress(el.startWrongOnlyReviewBtn, startWrongOnlyReview);
-bindPress(el.startWrongOnlyReviewBtn2, startWrongOnlyReview);
+function update(){
+  el("correctCnt").innerText = state.correct;
+  el("totalCnt").innerText = state.total;
+  el("rateCnt").innerText = rate() + "%";
 
-bindPress(el.startQuestionBtn, startCurrentQuestion);
-bindPress(el.nextBtn, nextQuestion);
-bindPress(el.skipQuestionBtn, skipQuestion);
+  el("wCalc").innerText = stats.weakness["計算精度"];
+  el("wSwitch").innerText = stats.weakness["方針切替"];
+  el("wJudge").innerText = stats.weakness["時間判断"];   // ← 追加
+  el("wTime").innerText = stats.weakness["時間不足"];
 
-bindPress(el.goTopBtn, hideExamLayout);
-bindPress(el.goTopBtn2, hideExamLayout);
-bindPress(el.goTopBtn3, hideExamLayout);
+  el("topWeak").innerText = topWeak();
 
-bindPress(el.resetStatsBtn, resetStats);
-bindPress(el.clearSavedDataBtn, clearSavedData);
+  ["第1問","第2問","第3問","第4問"].forEach((s, i) => {
+    const d = stats.stage[s];
+    const r = d.t ? Math.round(d.c / d.t * 100) : 0;
+    el("stageRate"+i).innerText = r + "%";
+  });
+}
 
-bindPress(el.toggleStrictTimeBtn, () => {
-  state.strictTime = !state.strictTime;
-  updateDashboard();
-  save();
-});
+/* ===== モード ===== */
+function start(){
+  state.index = 0;
+  state.correct = 0;
+  state.total = 0;
+  state.wrong = [];
+  state.mode = "normal";
+  show();
+}
 
-/* 初期化 */
+function review(){
+  if(!state.wrong.length){ alert("復習問題がありません"); return; }
+  state.mode = "review";
+  state.index = 0;
+  show();
+}
+
+function toggle(){
+  state.strict = !state.strict;
+  el("toggleStrictTimeBtn").innerText = state.strict ? "⏱ 厳格モード（30s）" : "⏱ 通常モード（60s）";
+}
+
+/* ===== ボタン ===== */
+el("startExamBtn").onclick = start;
+el("resumeExamBtn").onclick = show;
+el("startWrongOnlyReviewBtn").onclick = review;
+el("startWrongOnlyReviewBtn2").onclick = review;
+el("startQuestionBtn").onclick = startQ;
+el("nextBtn").onclick = next;
+el("skipQuestionBtn").onclick = next;
+
+el("goTopBtn").onclick   = () => { exitExamMode(); };
+el("goTopBtn2").onclick  = () => { exitExamMode(); };
+el("goTopBtn3").onclick  = () => { exitExamMode(); };
+
+el("toggleStrictTimeBtn").onclick = toggle;
+
+el("resetStatsBtn").onclick = () => {
+  if(confirm("学習ログをリセットしますか？")) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+};
+el("clearSavedDataBtn").onclick = () => {
+  if(confirm("保存データをすべて削除しますか？")) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+};
+
+/* ===== 初期 ===== */
 load();
-updateDashboard();
-updateHistory();
-hideExamLayout();
+update();
