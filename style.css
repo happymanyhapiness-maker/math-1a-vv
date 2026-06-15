@@ -25,7 +25,7 @@ body{
 }
 
 /* =========================
-   ✅ ヘッダー（横1列統計）
+   ヘッダー
 ========================= */
 
 .topbar{
@@ -34,12 +34,10 @@ body{
   justify-content:space-between;
   gap:16px;
   padding:10px;
-
   background:#fff;
   border-bottom:1px solid #ddd;
 }
 
-/* 左 */
 .brand{
   flex:1;
   min-width:0;
@@ -48,7 +46,6 @@ body{
 .brand h1{
   font-size:14px;
   margin:0;
-
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -59,40 +56,30 @@ body{
   color:#888;
 }
 
-/* ✅ 右：横1列 */
 .top-stats{
   flex-shrink:0;
-
-  display:flex;         /* ←横並び */
+  display:flex;
   gap:6px;
-
-  width:auto;           /* 固定幅やめる */
 }
 
-/* カード */
 .stat-card{
   padding:4px 6px;
   border:1px solid #e5e7eb;
   border-radius:6px;
   background:#fff;
   text-align:center;
-
-  min-width:52px; /* サイズ固定で崩れ防止 */
+  min-width:52px;
 }
 
-/* ラベル */
 .stat-label{
   font-size:8px;
   color:#666;
-  line-height:1.1;
 }
 
-/* 数字 */
 .stat-value{
   font-size:14px;
   font-weight:800;
   color:#2563eb;
-  line-height:1.1;
 }
 
 /* =========================
@@ -118,7 +105,7 @@ body{
 }
 
 /* =========================
-   ✅ ボタン（控えめゲームUI）
+   ボタン
 ========================= */
 
 .btn{
@@ -128,20 +115,9 @@ body{
   font-size:14px;
   font-weight:700;
   cursor:pointer;
-
-  background:#ffffff;
-  color:#111;
+  background:#fff;
   border:1px solid #d1d5db;
-
   box-shadow:0 2px 0 rgba(0,0,0,0.08);
-  transition:0.12s;
-
-  touch-action:manipulation;
-  -webkit-tap-highlight-color:transparent;
-}
-
-.btn:hover{
-  background:#f8fafc;
 }
 
 .btn:active{
@@ -149,37 +125,11 @@ body{
   box-shadow:none;
 }
 
-/* ===== 色（弱め） ===== */
-
-.btn.primary{
-  background:#eff6ff;
-  border-color:#93c5fd;
-  color:#1d4ed8;
-}
-
-.btn.success{
-  background:#ecfdf5;
-  border-color:#86efac;
-  color:#166534;
-}
-
-.btn.warning{
-  background:#fffbeb;
-  border-color:#fde68a;
-  color:#92400e;
-}
-
-.btn.secondary{
-  background:#f3f4f6;
-  color:#374151;
-  border-color:#d1d5db;
-}
-
-.btn.danger{
-  background:#fef2f2;
-  border-color:#fecaca;
-  color:#991b1b;
-}
+.btn.primary{ background:#eff6ff; color:#1d4ed8; }
+.btn.success{ background:#ecfdf5; color:#166534; }
+.btn.warning{ background:#fffbeb; color:#92400e; }
+.btn.secondary{ background:#f3f4f6; }
+.btn.danger{ background:#fef2f2; color:#991b1b; }
 
 /* =========================
    問題
@@ -199,7 +149,7 @@ body{
 }
 
 .options-list.disabled{
-  opacity:.65;
+  opacity:0.6;
   pointer-events:none;
 }
 
@@ -209,129 +159,20 @@ body{
   border:1px solid #ccc;
   font-size:18px;
   cursor:pointer;
-  transition:0.12s;
 }
 
-.option:hover{
-  background:#f1f5ff;
-}
-
-.option.selected{
-  outline:2px solid #4c6ef5;
-}
-
-.option.correctFlash{
-  background:#dff7ea !important;
-}
-
-/* =========================
-   タイマー
-========================= */
-
-.timer{
-  font-size:20px;
-  font-weight:bold;
-}
-
-.timer.warning{
-  color:#d97706;
-}
-
-.timer.danger{
-  color:#dc2626;
-}
-
-/* =========================
-   集中モード
-========================= */
-
-body.exam-mode .topbar{
-  display:none;
-}
-
-body.exam-mode .left-panel{
-  display:none;
-}
-
-body.exam-mode .control-panel{
-  display:none;
-}
-
-body.exam-mode .main-layout{
-  grid-template-columns:1fr;
-}
-
-/* =========================
-   モバイル
-========================= */
-
-@media (max-width:900px){
-
-  .topbar{
-    flex-direction:column;
-    align-items:flex-start;
-  }
-
-  .top-stats{
-    width:100%;
-    justify-content:space-between;
-  }
-
-  .options-list{
-    grid-template-columns:1fr;
-  }
-}
-.option.correct { background-color: #4caf50; }
-.option.wrong { background-color: #f44336; }
-/* 正解・不正解 */
-.option.correct{
-  background:#22c55e;
-  color:white;
-}
-.option.wrong{
-  background:#ef4444;
-  color:white;
-}
-
-/* disabled */
-.options-list.disabled{
-  opacity:0.5;
-  pointer-events:none;
-}
-
-/* 解説 */
-.feedback{
-  padding:10px;
-  border-top:1px solid #ccc;
-  background:#fafafa;
-}
-
-/* 問題開始 */
-.question-start-box{
-  padding:10px;
-  background:#eef2ff;
-  border:1px solid #c7d2fe;
-  border-radius:6px;
-}
-
-/* タイマー */
-.timer{
-  font-size:18px;
-  font-weight:bold;
-}
-
-/* 警告 */
-.timer.warning{ color:#f59e0b; }
-.timer.danger{ color:#ef4444; }
 .option.correct{
   background:#22c55e;
   color:#fff;
 }
-
 .option.wrong{
   background:#ef4444;
   color:#fff;
 }
+
+/* =========================
+   解説
+========================= */
 
 .feedback{
   display:none;
@@ -342,6 +183,10 @@ body.exam-mode .main-layout{
   line-height:1.7;
 }
 
+/* =========================
+   問題開始
+========================= */
+
 .question-start-box{
   padding:14px;
   background:#eef2ff;
@@ -349,35 +194,8 @@ body.exam-mode .main-layout{
   border-radius:10px;
 }
 
-.timer.warning{
-  color:#f59e0b;
-}
-
-.timer.danger{
-  color:#ef4444;
-}
-.day-guide{
-  margin-top:12px;
-  padding:10px 12px;
-  background:#f8fafc;
-  border:1px solid #e5e7eb;
-  border-radius:10px;
-  font-size:12px;
-  color:#374151;
-}
-
-.stop-guide{
-  display:none;
-  padding:10px 12px;
-  background:#fff7ed;
-  border:1px solid #fdba74;
-  border-radius:10px;
-  color:#9a3412;
-  font-size:13px;
-  line-height:1.6;
-}
 /* =========================
-   問題ヘッダー（横1列UI）
+   ✅ 問題ヘッダー（今回の完成部分）
 ========================= */
 
 .exam-meta-inline{
@@ -391,7 +209,6 @@ body.exam-mode .main-layout{
 #qStageLabel{
   font-weight:700;
   font-size:16px;
-  color:#111827;
 }
 
 /* 配点 */
@@ -406,24 +223,79 @@ body.exam-mode .main-layout{
   font-weight:600;
 }
 
-/* 進捗（右に飛ばす） */
+/* 進捗 */
 #progressLabel{
   margin-left:auto;
-  color:#374151;
   font-weight:600;
 }
 
-/* タイマー */
+/* =========================
+   ✅ タイマー（完全修正）
+========================= */
+
 #timer{
-  margin-left:12px;
+  display:flex;
+  align-items:center;
   font-weight:700;
   font-size:16px;
 }
 
-/* 残り時間カラー */
+/* アイコン（確実に表示） */
+#timer::before{
+  content:"⏱";
+  margin-right:6px;
+}
+
+/* 警告色 */
 .timer.warning{
   color:#f59e0b;
 }
 .timer.danger{
   color:#ef4444;
+}
+
+/* =========================
+   補助UI
+========================= */
+
+.day-guide{
+  margin-top:12px;
+  padding:10px;
+  background:#f8fafc;
+  border-radius:10px;
+}
+
+.stop-guide{
+  display:none;
+  padding:10px;
+  background:#fff7ed;
+  border-radius:10px;
+}
+
+/* =========================
+   集中モード
+========================= */
+
+body.exam-mode .topbar,
+body.exam-mode .left-panel{
+  display:none;
+}
+
+body.exam-mode .main-layout{
+  grid-template-columns:1fr;
+}
+
+/* =========================
+   モバイル
+========================= */
+
+@media (max-width:900px){
+  .topbar{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .options-list{
+    grid-template-columns:1fr;
+  }
 }
