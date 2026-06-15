@@ -281,4 +281,45 @@ body.exam-mode .main-layout{
     grid-template-columns:1fr;
   }
 }
-``
+.option.correct { background-color: #4caf50; }
+.option.wrong { background-color: #f44336; }
+/* 正解・不正解 */
+.option.correct{
+  background:#22c55e;
+  color:white;
+}
+.option.wrong{
+  background:#ef4444;
+  color:white;
+}
+
+/* disabled */
+.options-list.disabled{
+  opacity:0.5;
+  pointer-events:none;
+}
+
+/* 解説 */
+.feedback{
+  padding:10px;
+  border-top:1px solid #ccc;
+  background:#fafafa;
+}
+
+/* 問題開始 */
+.question-start-box{
+  padding:10px;
+  background:#eef2ff;
+  border:1px solid #c7d2fe;
+  border-radius:6px;
+}
+
+/* タイマー */
+.timer{
+  font-size:18px;
+  font-weight:bold;
+}
+
+/* 警告 */
+.timer.warning{ color:#f59e0b; }
+.timer.danger{ color:#ef4444; }
