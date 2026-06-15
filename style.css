@@ -445,4 +445,10 @@ body.real-exam-ui .option{
   background:#ffffff;
   border-color:#bbb;
 }
-``
+/* iPad/Safari のタップ操作安定化 */
+button,
+.option,
+.btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
