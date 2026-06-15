@@ -1,0 +1,71 @@
+:root{
+  --bg:#12151f;
+  --card:#202534;
+  --text:#e6eaf5;
+  --accent:#6f8fe8;
+  --muted:#9aa3c3;
+}
+
+body{
+  margin:0;
+  font-family:sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.wrap{
+  max-width:1000px;
+  margin:auto;
+  padding:20px;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+}
+
+.titleBox{
+  background:var(--card);
+  padding:15px;
+  border-radius:12px;
+}
+
+.statusBox{
+  background:var(--card);
+  padding:15px;
+  border-radius:12px;
+}
+
+.main{
+  display:flex;
+  margin-top:20px;
+}
+
+.side{
+  width:200px;
+  background:var(--card);
+  padding:10px;
+  border-radius:12px;
+}
+
+.game{
+  flex:1;
+  margin-left:10px;
+}
+
+button{
+  background:var(--accent);
+  color:white;
+  border:none;
+  padding:10px;
+  border-radius:8px;
+  margin:5px 0;
+  cursor:pointer;
+}
+
+.timer{
+  font-size:20px;
+  margin-bottom:10px;
+}
+
+.hidden{ display:none }
