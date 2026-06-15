@@ -1,71 +1,212 @@
-:root{
-  --bg:#12151f;
-  --card:#202534;
-  --text:#e6eaf5;
-  --accent:#6f8fe8;
-  --muted:#9aa3c3;
+/* ===============================
+   🎯 iPad横専用・1画面完結   🎯 点が取れるUI（シンプル版）
+=============================== */
+
+*{
+  box-sizing:border-box;
 }
 
-body{
+html,body{
   margin:0;
-  font-family:sans-serif;
-  background:var(--bg);
-  color:var(--text);
+  padding:0;
+  height:100%;
+  font-family:"Helvetica Neue", Arial, sans-serif;
+  background:#111827;
+  color:#fff;
+  overflow:hidden; /* ✅ スクロール禁止 */
 }
 
-.wrap{
-  max-width:1000px;
-  margin:auto;
-  padding:20px;
+/* ===== 全体 ===== */
+
+.app-shell{
+  height:100vh;
+  display:flex;
+  flex-direction:column;
 }
 
-.header{
+/* ===== ヘッダー（軽く） ===== */
+
+.topbar{
+  padding:10px 20px;
+  background:#1f2937;
   display:flex;
   justify-content:space-between;
+  align-items:center;
 }
 
-.titleBox{
-  background:var(--card);
-  padding:15px;
-  border-radius:12px;
+.topbar h1{
+  font-size:18px;
+  margin:0;
 }
 
-.statusBox{
-  background:var(--card);
-  padding:15px;
-  border-radius:12px;
+.brand-sub{
+  font-size:11px;
+  color:#9ca3af;
 }
 
-.main{
-  display:flex;
-  margin-top:20px;
-}
+/* ===== メイン ===== */
 
-.side{
-  width:200px;
-  background:var(--card);
-  padding:10px;
-  border-radius:12px;
-}
-
-.game{
+.main-layout{
   flex:1;
-  margin-left:10px;
+  display:flex;
+  gap:10px;
+  padding:10px;
 }
 
-button{
-  background:var(--accent);
-  color:white;
-  border:none;
+/* 左サイド（最小化） */
+.left-panel{
+  width:220px;
+  background:#1f2937;
   padding:10px;
+  border-radius:10px;
+  font-size:13px;
+}
+
+/* 中央（最重要） */
+.center-panel{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+/* 右メモ */
+.right-panel{
+  width:320px;
+  background:#1f2937;
+  padding:10px;
+  border-radius:10px;
+}
+
+/* ===== 問題パネル ===== */
+
+.question-panel{
+  flex:1;
+  display:grid;
+  grid-template-rows: auto 1fr;
+  gap:10px;
+  background:#ffffff;
+  color:#111;
+  border-radius:10px;
+  padding:14px;
+}
+
+/* 上段 */
+.question-meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* 問題文 */
+.question-text{
+  font-size:22px;
+  line-height:2.1;
+  margin-bottom:10px;
+  font-family:
+    "Times New Roman",
+    "Hiragino Mincho ProN",
+    serif;
+}
+
+/* ===== 下段（コア） ===== */
+
+.options-box{
+  display:grid;
+  grid-template-columns: 60% 40%;
+  gap:10px;
+  height:100%;
+}
+
+/* 選択肢エリア */
+.options-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* ===== 選択肢 ===== */
+
+.option{
+  background:#fff;
+  color:#111;
+  border:1px solid #cbd5e1;
   border-radius:8px;
-  margin:5px 0;
+  padding:14px;
+  font-size:18px;
   cursor:pointer;
 }
 
-.timer{
-  font-size:20px;
-  margin-bottom:10px;
+.option:hover{
+  background:#f1f5f9;
 }
 
-.hidden{ display:none }
+.option.selected{
+  outline:2px solid #3b82f6;
+}
+
+/* 正解エフェクト（ゲーム感） */
+.option.correctFlash{
+  background:#d1fae5 !important;
+  border-color:#10b981 !important;
+}
+
+/* ===== タイマー ===== */
+
+.timer{
+  font-size:24px;
+  font-weight:bold;
+  color:#b45309;
+}
+
+/* ===== メモ（超重要修正） ===== */
+
+#memoCanvas{
+  width:100%;
+  height:100%;
+  background:#ffffff;   /* ✅ 白背景 */
+  border-radius:10px;
+  border:1px solid #cbd5e1;
+}
+
+/* ===== フィードバック ===== */
+
+.feedback{
+  padding:10px;
+  margin-top:5px;
+  border-radius:6px;
+  display:none;
+}
+
+.feedback.ok{
+  display:block;
+  background:#dcfce7;
+  color:#065f46;
+}
+
+.feedback.ng{
+  display:block;
+  background:#fee2e2;
+  color:#7f1d1d;
+}
+
+/* ===== ボタン（ゲーム感残す） ===== */
+
+button{
+  padding:8px 12px;
+  border-radius:6px;
+  border:none;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+.btn.primary{ background:#3b82f6; color:#fff; }
+.btn.success{ background:#10b981; color:#fff; }
+.btn.warning{ background:#f59e0b; color:#000; }
+.btn.secondary{ background:#374151; color:#fff; }
+
+/* ===== 不要要素カット ===== */
+
+.history-box,
+.panel-block:nth-child(n+3){
+  display:none;
+}
