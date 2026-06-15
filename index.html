@@ -4,18 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>共通テスト数学ⅠA</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <div class="app-shell">
 
-    <!-- 通常時ヘッダー -->
     <header class="topbar" id="topbar">
       <div class="brand">
         <div class="brand-sub">KYOTSU TEST</div>
         <h1>共通テスト数学ⅠA ガチ完全再現版</h1>
       </div>
-
       <div class="top-stats">
         <div class="stat-card">
           <div class="stat-label">総正答数</div>
@@ -37,7 +35,7 @@
     </header>
 
     <main class="main-layout">
-      <!-- 通常時左パネル -->
+
       <aside class="left-panel card" id="sidebar">
         <section class="panel-block">
           <h2>弱点トラッカー</h2>
@@ -87,7 +85,6 @@
       </aside>
 
       <section class="center-panel">
-        <!-- 通常時コントロール -->
         <div class="card control-panel" id="controlPanel">
           <div class="panel-heading">
             <div>
@@ -112,24 +109,27 @@
             <button class="btn success" id="startWrongOnlyReviewBtn">間違えた問題だけ再挑戦</button>
             <button class="btn success" id="startTipReviewBtn">TIPSだけ復習</button>
           </div>
+
+          <div class="day-guide" id="dayGuide">
+            目安：1日 10〜15問。10問解いたら一度区切るのがおすすめです。
+          </div>
         </div>
 
-        <!-- 試験中上部バー -->
         <div class="exam-topbar card" id="examTopbar" style="display:none;">
           <div class="exam-actions">
             <button class="btn secondary" id="goTopBtn">TOPへ戻る</button>
             <button class="btn secondary" id="toggleStrictTimeBtn">時間制限: 通常</button>
           </div>
           <div class="exam-meta-inline">
-            <span class="pill" id="qStageLabel">第1問</span>
+            <span class="pill" id="qStageLabel">第1問①</span>
             <span class="pill" id="qScoreLabel">配点 0点</span>
             <span class="pill" id="qWeakLabel">弱点軸</span>
             <span class="pill" id="qModeLabel">本番モード</span>
+            <span class="pill" id="progressLabel">1 / 21</span>
           </div>
           <div class="timer" id="timer">--</div>
         </div>
 
-        <!-- 問題 -->
         <div id="questionPanel" class="card question-panel" style="display:none;">
           <div class="question-text" id="questionText"></div>
           <div id="svgBox"></div>
@@ -137,13 +137,15 @@
           <div class="question-start-box" id="questionStartBox">
             <p class="start-text">
               準備ができたら「この問題を開始」を押してください。<br>
-              ここを押した瞬間に時間制限が始まります。
+              問題ごとに制限時間は変わります。
             </p>
             <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
           </div>
 
           <div id="optionsBox" class="options-list disabled"></div>
           <div id="feedback" class="feedback"></div>
+
+          <div class="stop-guide" id="stopGuide" style="display:none;"></div>
 
           <div class="toolbar q-toolbar">
             <button class="btn secondary" id="nextBtn" style="display:none;">次へ</button>
@@ -152,10 +154,9 @@
           </div>
         </div>
 
-        <!-- 結果 -->
         <div id="resultBox" class="card result-box" style="display:none;">
           <h2>結果</h2>
-          <div class="final-score" id="finalScore">0 / 100</div>
+          <div class="final-score" id="finalScore">0 / 0</div>
           <div id="resultSummary" class="result-summary"></div>
 
           <div class="toolbar q-toolbar">
@@ -167,7 +168,7 @@
     </main>
   </div>
 
-  <script src="questions.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="questions.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
