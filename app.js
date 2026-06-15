@@ -1,4 +1,4 @@
-const STORAGE_KEY = "kyotsu_math_ia_v3";
+const STORAGE_KEY = "kyotsu_math_ia_v5";
 
 let state = {
   i: 0,
@@ -10,8 +10,8 @@ let state = {
   solvedWrong: new Set(),
   timerId: null,
   remaining: 60,
-  uiMode: "normal",   // normal / exam
-  strictTime: false
+  strictTime: false,
+  startedCurrentQuestion: false
 };
 
 /* =========================
@@ -53,7 +53,6 @@ const el = {
   finalScore: document.getElementById("finalScore"),
   resultSummary: document.getElementById("resultSummary"),
 
-  progressInner: document.getElementById("progressInner"),
   historyBox: document.getElementById("historyBox"),
 
   startExamBtn: document.getElementById("startExamBtn"),
@@ -67,17 +66,16 @@ const el = {
 
   nextBtn: document.getElementById("nextBtn"),
   skipQuestionBtn: document.getElementById("skipQuestionBtn"),
-
-  toggleExamUiBtn: document.getElementById("toggleExamUiBtn"),
   toggleStrictTimeBtn: document.getElementById("toggleStrictTimeBtn"),
-  toggleMemoBtn: document.getElementById("toggleMemoBtn"),
-  clearMemoBtn: document.getElementById("clearMemoBtn"),
 
   resetStatsBtn: document.getElementById("resetStatsBtn"),
   clearSavedDataBtn: document.getElementById("clearSavedDataBtn"),
 
-  memoCanvas: document.getElementById("memoCanvas"),
-  saveStatus: document.getElementById("saveStatus")
+  saveStatus: document.getElementById("saveStatus"),
+
+  examTopbar: document.getElementById("examTopbar"),
+  questionStartBox: document.getElementById("questionStartBox"),
+  startQuestionBtn: document.getElementById("startQuestionBtn")
 };
 
 /* =========================
@@ -151,7 +149,7 @@ function load() {
 }
 
 /* =========================
-   iPad / touch 対応
+   touch / click 共通
 ========================= */
 function bindPress(element, handler) {
   if (!element) return;
@@ -164,7 +162,7 @@ function bindPress(element, handler) {
     handler(e);
     setTimeout(() => {
       touched = false;
-    }, 300);
+    }, 250);
   }, { passive: false });
 
   element.addEventListener("click", (e) => {
@@ -182,6 +180,11 @@ function getCurrentList() {
 
 function getCurrentQuestion() {
   return getCurrentList()[state.i];
+}
+
+function getBaseTime() {
+  if (state.strictTime) return 30;
+  return state.review ? 40 : 60;
 }
 
 function updateTopWeak() {
@@ -220,24 +223,10 @@ function addHistory(text) {
     time: new Date().toLocaleString("ja-JP"),
     text
   });
-
   if (stats.history.length > 50) {
     stats.history = stats.history.slice(0, 50);
   }
   updateHistory();
-}
-
-function updateProgress() {
-  const list = getCurrentList();
-  if (!el.progressInner) return;
-
-  if (!list.length) {
-    el.progressInner.style.width = "0%";
-    return;
-  }
-
-  const pct = Math.round((state.i / list.length) * 100);
-  el.progressInner.style.width = `${pct}%`;
 }
 
 function updateDashboard() {
@@ -247,7 +236,6 @@ function updateDashboard() {
     el.rateCnt.textContent =
       state.total === 0 ? "0%" : `${Math.round((state.correct / state.total) * 100)}%`;
   }
-
   if (el.avgCnt) {
     el.avgCnt.textContent =
       stats.times.length === 0
@@ -258,7 +246,6 @@ function updateDashboard() {
   if (el.wCalc) el.wCalc.textContent = stats.weakness["計算精度"];
   if (el.wSwitch) el.wSwitch.textContent = stats.weakness["方針切替"];
   if (el.wTime) el.wTime.textContent = stats.weakness["時間不足"];
-
   updateTopWeak();
   updateStageRates();
 
@@ -269,50 +256,53 @@ function updateDashboard() {
   }
   if (el.clearedCount) el.clearedCount.textContent = stats.solvedWrongCount;
 
-  if (el.toggleExamUiBtn) {
-    el.toggleExamUiBtn.textContent =
-      state.uiMode === "normal" ? "本番UIに切り替え" : "通常UIに戻す";
-  }
-
   if (el.toggleStrictTimeBtn) {
     el.toggleStrictTimeBtn.textContent =
-      state.strictTime ? "制限時間: 厳格" : "制限時間: 通常";
-  }
-
-  if (el.toggleMemoBtn && el.memoCanvas) {
-    el.toggleMemoBtn.textContent =
-      el.memoCanvas.style.display === "none" ? "手書きメモを表示" : "手書きメモを非表示";
+      state.strictTime ? "時間制限: 厳格" : "時間制限: 通常";
   }
 }
 
-/* =========================
-   UI切り替え
-========================= */
-function applyUiMode() {
-  document.body.classList.toggle("real-exam-ui", state.uiMode === "exam");
-}
-
-function goTop() {
-  clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
-  if (el.questionPanel) el.questionPanel.style.display = "none";
-  if (el.resultBox) el.resultBox.style.display = "none";
-}
-
-/* =========================
-   問題表示
-========================= */
 function resetFeedback() {
   el.feedback.className = "feedback";
   el.feedback.style.display = "none";
   el.feedback.innerHTML = "";
 }
 
-function show() {
+function setQuestionInteractive(enabled) {
+  if (!el.optionsBox) return;
+  if (enabled) {
+    el.optionsBox.classList.remove("disabled");
+  } else {
+    el.optionsBox.classList.add("disabled");
+  }
+
+  document.querySelectorAll(".option").forEach(btn => {
+    btn.disabled = !enabled;
+  });
+}
+
+function showExamLayout() {
+  document.body.classList.add("exam-mode");
+  if (el.examTopbar) el.examTopbar.style.display = "flex";
+}
+
+function hideExamLayout() {
+  document.body.classList.remove("exam-mode");
+  if (el.examTopbar) el.examTopbar.style.display = "none";
+  if (el.questionPanel) el.questionPanel.style.display = "none";
+  if (el.resultBox) el.resultBox.style.display = "none";
+}
+
+/* =========================
+   画面表示
+========================= */
+function showQuestion() {
   const q = getCurrentQuestion();
   if (!q) return;
 
-  el.questionPanel.style.display = "block";
+  showExamLayout();
+
+  el.questionPanel.style.display = "flex";
   el.resultBox.style.display = "none";
 
   el.qStageLabel.textContent = q.stage;
@@ -336,28 +326,33 @@ function show() {
   resetFeedback();
   el.nextBtn.style.display = "none";
 
-  startTimer();
-  updateProgress();
+  state.startedCurrentQuestion = false;
+  state.remaining = getBaseTime();
+  el.timer.className = "timer";
+  el.timer.textContent = `${state.remaining}s`;
+
+  if (el.questionStartBox) el.questionStartBox.style.display = "block";
+  setQuestionInteractive(false);
+
   updateDashboard();
   save();
+}
 
-  if (!state.review) {
-    document.body.classList.add("exam-mode");
-  }
+function startCurrentQuestion() {
+  if (state.startedCurrentQuestion) return;
+  state.startedCurrentQuestion = true;
+
+  if (el.questionStartBox) el.questionStartBox.style.display = "none";
+  setQuestionInteractive(true);
+  startTimer();
 }
 
 /* =========================
    タイマー
 ========================= */
-function getBaseTime() {
-  if (state.strictTime) return 30;
-  return state.review ? 40 : 60;
-}
-
 function startTimer() {
   clearInterval(state.timerId);
 
-  state.remaining = getBaseTime();
   el.timer.className = "timer";
   el.timer.textContent = `${state.remaining}s`;
 
@@ -384,8 +379,9 @@ function startTimer() {
    回答
 ========================= */
 function answer(index, buttonEl) {
-  clearInterval(state.timerId);
+  if (!state.startedCurrentQuestion) return;
 
+  clearInterval(state.timerId);
   const q = getCurrentQuestion();
   if (!q) return;
 
@@ -473,14 +469,15 @@ function timeoutQuestion() {
 
 function skipQuestion() {
   clearInterval(state.timerId);
-
   const q = getCurrentQuestion();
   if (!q) return;
 
   state.total++;
   stats.weakness["時間不足"]++;
   stats.stage[q.stage].total++;
-  stats.times.push(getBaseTime() - state.remaining > 0 ? getBaseTime() - state.remaining : 1);
+
+  const elapsed = state.startedCurrentQuestion ? (getBaseTime() - state.remaining) : 1;
+  stats.times.push(elapsed > 0 ? elapsed : 1);
 
   if (!state.review && !state.wrongSet.has(q.id)) {
     state.wrong.push(q);
@@ -494,6 +491,7 @@ function skipQuestion() {
   document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
   el.nextBtn.style.display = "inline-block";
 
+  if (el.questionStartBox) el.questionStartBox.style.display = "none";
   addHistory(`${q.stage} / スキップ / 弱点軸: 時間不足`);
   updateDashboard();
   save();
@@ -514,23 +512,23 @@ function nextQuestion() {
     }
   }
 
-  show();
+  showQuestion();
 }
 
 /* =========================
-   開始 / 終了
+   開始 / 再開 / 終了
 ========================= */
 function startExam() {
   state.review = false;
   state.i = 0;
-  show();
+  showQuestion();
 }
 
 function resumeExam() {
   if (state.i >= getCurrentList().length) {
     state.i = 0;
   }
-  show();
+  showQuestion();
 }
 
 function startWrongOnlyReview() {
@@ -542,14 +540,13 @@ function startWrongOnlyReview() {
   state.review = true;
   state.i = 0;
   stats.todayReviewCount += state.wrong.length;
-  show();
+  showQuestion();
 }
 
 function finishExam() {
   clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
+  hideExamLayout();
 
-  el.questionPanel.style.display = "none";
   el.resultBox.style.display = "block";
   el.finalScore.textContent = `${state.correct} / ${questions.length}`;
   el.resultSummary.innerHTML = `
@@ -562,9 +559,8 @@ function finishExam() {
 
 function finishReview() {
   clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
+  hideExamLayout();
 
-  el.questionPanel.style.display = "none";
   el.resultBox.style.display = "block";
   el.finalScore.textContent = "復習完了";
   el.resultSummary.innerHTML = `
@@ -573,71 +569,6 @@ function finishReview() {
   `;
   addHistory(`復習終了 / 正答率 ${stats.reviewTotal === 0 ? 0 : Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%`);
   save();
-}
-
-/* =========================
-   メモ
-========================= */
-const canvas = el.memoCanvas;
-const ctx = canvas.getContext("2d");
-
-ctx.strokeStyle = "#000";
-ctx.lineWidth = 3;
-ctx.lineCap = "round";
-
-let drawing = false;
-
-function getTouchPos(e) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: e.touches[0].clientX - rect.left,
-    y: e.touches[0].clientY - rect.top
-  };
-}
-
-canvas.addEventListener("mousedown", (e) => {
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(e.offsetX, e.offsetY);
-});
-
-canvas.addEventListener("mousemove", (e) => {
-  if (!drawing) return;
-  ctx.lineTo(e.offsetX, e.offsetY);
-  ctx.stroke();
-});
-
-window.addEventListener("mouseup", () => {
-  drawing = false;
-});
-
-canvas.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  const pos = getTouchPos(e);
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(pos.x, pos.y);
-}, { passive: false });
-
-canvas.addEventListener("touchmove", (e) => {
-  e.preventDefault();
-  if (!drawing) return;
-  const pos = getTouchPos(e);
-  ctx.lineTo(pos.x, pos.y);
-  ctx.stroke();
-}, { passive: false });
-
-window.addEventListener("touchend", () => {
-  drawing = false;
-});
-
-function clearMemo() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function toggleMemo() {
-  canvas.style.display = canvas.style.display === "none" ? "block" : "none";
-  updateDashboard();
 }
 
 /* =========================
@@ -661,29 +592,16 @@ bindPress(el.resumeExamBtn, resumeExam);
 bindPress(el.startWrongOnlyReviewBtn, startWrongOnlyReview);
 bindPress(el.startWrongOnlyReviewBtn2, startWrongOnlyReview);
 
+bindPress(el.startQuestionBtn, startCurrentQuestion);
 bindPress(el.nextBtn, nextQuestion);
 bindPress(el.skipQuestionBtn, skipQuestion);
 
-bindPress(el.goTopBtn, goTop);
-bindPress(el.goTopBtn2, goTop);
-bindPress(el.goTopBtn3, goTop);
-
-bindPress(el.clearMemoBtn, clearMemo);
-bindPress(el.toggleMemoBtn, toggleMemo);
+bindPress(el.goTopBtn, hideExamLayout);
+bindPress(el.goTopBtn2, hideExamLayout);
+bindPress(el.goTopBtn3, hideExamLayout);
 
 bindPress(el.resetStatsBtn, resetStats);
 bindPress(el.clearSavedDataBtn, clearSavedData);
-
-bindPress(el.toggleExamUiBtn, () => {
-  if (state.uiMode === "normal") {
-    state.uiMode = "exam";
-  } else {
-    state.uiMode = "normal";
-  }
-  applyUiMode();
-  updateDashboard();
-  save();
-});
 
 bindPress(el.toggleStrictTimeBtn, () => {
   state.strictTime = !state.strictTime;
@@ -691,11 +609,8 @@ bindPress(el.toggleStrictTimeBtn, () => {
   save();
 });
 
-/* =========================
-   初期化
-========================= */
+/* 初期化 */
 load();
-applyUiMode();
 updateDashboard();
 updateHistory();
-goTop();
+hideExamLayout();
