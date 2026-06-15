@@ -140,6 +140,25 @@ function load() {
   }
 }
 
+function bindPress(element, handler) {
+  if (!element) return;
+
+  let touched = false;
+
+  element.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    touched = true;
+    handler(e);
+    setTimeout(() => {
+      touched = false;
+    }, 300);
+  }, { passive: false });
+
+  element.addEventListener("click", (e) => {
+    if (touched) return;
+    handler(e);
+  });
+}
 /* =========================
    補助
 ========================= */
@@ -248,161 +267,3 @@ function goTop() {
 /* =========================
    問題表示
 ========================= */
-function resetFeedback() {
-  el.feedback.className = "feedback";
-  el.feedback.style.display = "none";
-  el.feedback.innerHTML = "";
-}
-
-function show() {
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  el.questionPanel.style.display = "block";
-  el.resultBox.style.display = "none";
-
-  el.qStageLabel.textContent = q.stage;
-  el.qScoreLabel.textContent = `配点 ${q.score}点`;
-  el.qWeakLabel.textContent = `弱点軸: ${q.weakness}`;
-  el.qModeLabel.textContent = state.review ? "復習モード" : "本番モード";
-
-  el.questionText.innerHTML = q.q;
-  document.getElementById("svgBox").innerHTML = q.svg || "";
-
-  el.optionsBox.innerHTML = q.a.map((choice, idx) => `
-    <button class="option" data-index="${idx}">
-      ${String.fromCharCode(65 + idx)}. ${choice}
-    </button>
-  `).join("");
-
-  document.querySelectorAll(".option").forEach((btn, idx) => {
-    btn.addEventListener("click", () => answer(idx, btn));
-  });
-
-  resetFeedback();
-  el.nextBtn.style.display = "none";
-
-  startTimer();
-  updateProgress();
-  updateDashboard();
-  save();
-
-  if (!state.review) {
-    document.body.classList.add("exam-mode");
-  }
-}
-
-/* =========================
-   タイマー
-========================= */
-function getBaseTime() {
-  if (state.strictTime) return 30;
-  return state.review ? 40 : 60;
-}
-
-function startTimer() {
-  clearInterval(state.timerId);
-
-  state.remaining = getBaseTime();
-  el.timer.className = "timer";
-  el.timer.textContent = `${state.remaining}s`;
-
-  state.timerId = setInterval(() => {
-    state.remaining -= 1;
-    el.timer.textContent = `${state.remaining}s`;
-
-    if (state.remaining <= 10) {
-      el.timer.className = "timer danger";
-    } else if (state.remaining <= 20) {
-      el.timer.className = "timer warning";
-    } else {
-      el.timer.className = "timer";
-    }
-
-    if (state.remaining <= 0) {
-      clearInterval(state.timerId);
-      timeoutQuestion();
-    }
-  }, 1000);
-}
-
-/* =========================
-   回答
-========================= */
-function answer(index, buttonEl) {
-  clearInterval(state.timerId);
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  document.querySelectorAll(".option").forEach(btn => btn.classList.remove("selected"));
-  buttonEl.classList.add("selected");
-
-  state.total++;
-  stats.stage[q.stage].total++;
-
-  const elapsed = getBaseTime() - state.remaining;
-  stats.times.push(elapsed > 0 ? elapsed : 1);
-
-  const ok = index === q.correct;
-
-  if (state.review) {
-    stats.reviewTotal++;
-  }
-
-  if (ok) {
-    state.correct++;
-    stats.stage[q.stage].correct++;
-
-    if (state.review) {
-      stats.reviewCorrect++;
-      if (!state.solvedWrong.has(q.id)) {
-        state.solvedWrong.add(q.id);
-        stats.solvedWrongCount++;
-      }
-      state.wrong = state.wrong.filter(item => item.id !== q.id);
-    }
-
-    buttonEl.classList.add("correctFlash");
-    el.feedback.className = "feedback ok";
-    el.feedback.style.display = "block";
-    el.feedback.innerHTML = `<strong>正解です。</strong><br>${q.explain}`;
-    addHistory(`${q.stage} / 正解 / 加点: ${q.score}`);
-  } else {
-    stats.weakness[q.weakness]++;
-
-    if (!state.review && !state.wrongSet.has(q.id)) {
-      state.wrong.push(q);
-      state.wrongSet.add(q.id);
-    }
-
-    el.feedback.className = "feedback ng";
-    el.feedback.style.display = "block";
-    el.feedback.innerHTML = `<strong>不正解です。</strong><br>${q.explain}`;
-    addHistory(`${q.stage} / 不正解 / 弱点軸: ${q.weakness}`);
-  }
-
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
-
-  updateDashboard();
-  save();
-}
-
-function timeoutQuestion() {
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  state.total++;
-  stats.weakness["時間不足"]++;
-  stats.stage[q.stage].total++;
-  stats.times.push(getBaseTime());
-
-  if (state.review) {
-    stats.reviewTotal++;
-  } else if (!state.wrongSet.has(q.id)) {
-    state.wrong.push(q);
-    state.wrongSet.add(q.id);
-  }
-
-  el.feedback.className = "feedback ng";
-  el.feedback.style.display = "block";
