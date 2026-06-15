@@ -376,3 +376,54 @@ body.exam-mode .main-layout{
   font-size:13px;
   line-height:1.6;
 }
+/* =========================
+   問題ヘッダー（横1列UI）
+========================= */
+
+.exam-meta-inline{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  font-size:14px;
+}
+
+/* 問題番号 */
+#qStageLabel{
+  font-weight:700;
+  font-size:16px;
+  color:#111827;
+}
+
+/* 配点 */
+#qScoreLabel{
+  color:#2563eb;
+  font-weight:600;
+}
+
+/* 弱点 */
+#qWeakLabel{
+  color:#dc2626;
+  font-weight:600;
+}
+
+/* 進捗（右に飛ばす） */
+#progressLabel{
+  margin-left:auto;
+  color:#374151;
+  font-weight:600;
+}
+
+/* タイマー */
+#timer{
+  margin-left:12px;
+  font-weight:700;
+  font-size:16px;
+}
+
+/* 残り時間カラー */
+.timer.warning{
+  color:#f59e0b;
+}
+.timer.danger{
+  color:#ef4444;
+}
