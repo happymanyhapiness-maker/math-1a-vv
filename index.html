@@ -44,8 +44,8 @@
           <ul class="metric-list">
             <li>計算精度: <strong id="wCalc">0</strong></li>
             <li>方針切替: <strong id="wSwitch">0</strong></li>
-            <li>時間判断: <strong id="wJudge">0</strong></li><!-- ← 追加 -->
             <li>時間不足: <strong id="wTime">0</strong></li>
+            <li>時間判断: <strong id="wJudge">0</strong></li>
           </ul>
           <div class="pill">最重要課題: <span id="topWeak">未判定</span></div>
         </section>
@@ -111,6 +111,7 @@
             <button class="btn primary" id="startExamBtn">試験開始</button>
             <button class="btn warning" id="resumeExamBtn">途中から再開</button>
             <button class="btn success" id="startWrongOnlyReviewBtn">間違えた問題だけ再挑戦</button>
+            <button class="btn success" id="startTipReviewBtn">TIPSだけ復習</button>
           </div>
         </div>
 
@@ -118,7 +119,7 @@
         <div class="exam-topbar card" id="examTopbar" style="display:none;">
           <div class="exam-actions">
             <button class="btn secondary" id="goTopBtn">TOPへ戻る</button>
-            <button class="btn secondary" id="toggleStrictTimeBtn">⏱ 通常モード（60s）</button>
+            <button class="btn secondary" id="toggleStrictTimeBtn">時間制限: 通常</button>
           </div>
           <div class="exam-meta-inline">
             <span class="pill" id="qStageLabel">第1問</span>
@@ -167,7 +168,7 @@
     </main>
   </div>
 
-  <script src="questions.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="questions.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
