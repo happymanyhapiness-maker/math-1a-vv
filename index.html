@@ -1,96 +1,72 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>共通テスト数学ⅠA</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>共通テスト数学ⅠA</title>
 
-  <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-<div class="app-shell">
 
-  <!-- ===== 上部 ===== -->
-  <header class="topbar">
+<div class="app">
+
+  <!-- 上バー -->
+  <div class="topbar">
+    <div>共通テスト数学ⅠA</div>
     <div>
-      <div class="brand-sub">KYOTSU TEST</div>
-      <h1>共通テスト数学ⅠA</h1>
+      正答 <span id="correctCnt">0</span> /
+      解答 <span id="totalCnt">0</span>
     </div>
+  </div>
 
-    <div>
-      正答:<span id="correctCnt">0</span> /
-      解答:<span id="totalCnt">0</span>
-      （<span id="rateCnt">0%</span>）
-    </div>
-  </header>
-
-  <!-- ===== 本体 ===== -->
-  <main class="main-layout">
+  <!-- メイン -->
+  <div class="main">
 
     <!-- 左（最小情報） -->
-    <aside class="left-panel">
+    <div class="side">
       <div>計算:<span id="wCalc">0</span></div>
       <div>方針:<span id="wSwitch">0</span></div>
       <div>時間:<span id="wTime">0</span></div>
 
-      <hr>
-
       <button onclick="startExam()">開始</button>
-      <button onclick="startWrongOnlyReview()">復習</button>
-      <button onclick="toggleMemo()">メモ</button>
-    </aside>
+      <button onclick="startReview()">復習</button>
+    </div>
 
-    <!-- 中央（最重要） -->
-    <section class="center-panel">
+    <!-- 中央 -->
+    <div class="center">
 
       <!-- 問題 -->
-      <div id="questionPanel" class="question-panel">
+      <div class="question-box">
 
-        <!-- 上段 -->
-        <div class="question-meta">
-          <div>
-            <span id="qStageLabel">第1問</span>
-            <span id="qScoreLabel">10点</span>
-          </div>
-
-          <div id="timer" class="timer">--</div>
+        <div class="meta">
+          <div id="qStageLabel">第1問</div>
+          <div id="timer">--</div>
         </div>
 
-        <!-- 問題文 -->
-        <div>
-          <div id="questionText" class="question-text"></div>
-          <div id="svgBox"></div>
-        </div>
+        <div id="questionText" class="question"></div>
 
-        <!-- 下段 -->
-        <div class="options-box">
+        <div class="bottom">
 
           <!-- 選択肢 -->
-          <div class="options-list" id="optionsBox">
-            <!-- JSで生成 -->
-          </div>
+          <div id="options" class="options"></div>
 
-          <!-- メモ（ここ重要：同一画面内） -->
-          <div>
-            <canvas id="memoCanvas"></canvas>
-          </div>
+          <!-- メモ -->
+          <canvas id="memo"></canvas>
 
         </div>
 
-        <!-- フィードバック -->
-        <div id="feedback" class="feedback"></div>
+        <div id="feedback"></div>
 
-        <!-- 操作 -->
-        <div>
-          <button onclick="nextQuestion()">次へ</button>
-          <button onclick="skipQuestion()">飛ばす</button>
-        </div>
+        <button onclick="next()">次へ</button>
 
       </div>
-    </section>
 
-  </main>
+    </div>
+
+  </div>
+
 </div>
 
 <script src="questions.js"></script>
