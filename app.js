@@ -7,7 +7,7 @@ let state = {
   total: 0,
   wrong: [],
   tipList: [],
-  mode: "normal", // normal / review / tips
+  mode: "normal",
   strict: false,
   timer: null,
   remaining: 0,
@@ -33,32 +33,6 @@ const stats = {
 const el = (id) => document.getElementById(id);
 
 /* =========================
-   保存 / 読み込み
-========================= */
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, stats }));
-  if (el("saveStatus")) {
-    const now = new Date().toLocaleTimeString("ja-JP");
-    el("saveStatus").innerText = `保存状態: 保存済み（${now}）`;
-  }
-}
-
-function load() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-  try {
-    const obj = JSON.parse(raw);
-    if (obj.state) Object.assign(state, obj.state);
-    if (obj.stats) Object.assign(stats, obj.stats);
-    if (!Array.isArray(state.history)) state.history = [];
-    if (!Array.isArray(state.wrong)) state.wrong = [];
-    if (!Array.isArray(state.tipList)) state.tipList = [];
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-/* =========================
    問題取得
 ========================= */
 function currentList() {
@@ -72,499 +46,162 @@ function currentQuestion() {
 }
 
 /* =========================
-   UIモード
+   表示（修正版）
 ========================= */
-function enterExamMode() {
-  if (el("examTopbar")) el("examTopbar").style.display = "flex";
-  if (el("controlPanel")) el("controlPanel").style.display = "none";
-  if (el("questionPanel")) el("questionPanel").style.display = "flex";
-  if (el("resultBox")) el("resultBox").style.display = "none";
-  document.body.classList.add("exam-mode");
+function formatQuestionNumber(num) {
+  const marks = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
+  return marks[num-1] || `(${num})`;
 }
 
-function exitExamMode() {
-  clearInterval(state.timer);
-  if (el("examTopbar")) el("examTopbar").style.display = "none";
-  if (el("controlPanel")) el("controlPanel").style.display = "block";
-  if (el("questionPanel")) el("questionPanel").style.display = "none";
-  if (el("resultBox")) el("resultBox").style.display = "none";
-  if (el("stopGuide")) el("stopGuide").style.display = "none";
-  document.body.classList.remove("exam-mode");
-}
-
-/* =========================
-   統計
-========================= */
-function rate() {
-  return state.total ? Math.round((state.correct / state.total) * 100) : 0;
-}
-
-function topWeak() {
-  const entries = Object.entries(stats.weakness).filter(([, v]) => v > 0);
-  if (!entries.length) return "未判定";
-  return entries.sort((a, b) => b[1] - a[1])[0][0];
-}
-
-function update() {
-  if (el("correctCnt")) el("correctCnt").innerText = state.correct;
-  if (el("totalCnt")) el("totalCnt").innerText = state.total;
-  if (el("rateCnt")) el("rateCnt").innerText = rate() + "%";
-  if (el("avgCnt")) el("avgCnt").innerText = "0";
-
-  if (el("wCalc")) el("wCalc").innerText = stats.weakness["計算精度"] || 0;
-  if (el("wSwitch")) el("wSwitch").innerText = stats.weakness["方針切替"] || 0;
-  if (el("wTime")) el("wTime").innerText = stats.weakness["時間不足"] || 0;
-  if (el("wJudge")) el("wJudge").innerText = stats.weakness["時間判断"] || 0;
-  if (el("topWeak")) el("topWeak").innerText = topWeak();
-
-  ["第1問", "第2問", "第3問", "第4問"].forEach((stage, i) => {
-    const s = stats.stage[stage];
-    const r = s.t ? Math.round((s.c / s.t) * 100) : 0;
-    if (el("stageRate" + i)) el("stageRate" + i).innerText = r + "%";
-  });
-
-  if (el("todayReviewCount")) el("todayReviewCount").innerText = state.wrong.length;
-  if (el("reviewRate")) el("reviewRate").innerText = "0%";
-  if (el("clearedCount")) el("clearedCount").innerText = "0";
-}
-
-/* =========================
-   履歴
-========================= */
-function addHistory() {
-  if (state.total === 0) return;
-
-  state.history.unshift({
-    date: new Date().toLocaleString("ja-JP", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    }),
-    correct: state.correct,
-    total: state.total,
-    rate: rate(),
-    topWeak: topWeak(),
-    mode:
-      state.mode === "review"
-        ? "復習"
-        : state.mode === "tips"
-        ? "TIPS"
-        : "本番"
-  });
-
-  // 5件まで保存
-  state.history = state.history.slice(0, HISTORY_VISIBLE);
-  renderHistory();
-}
-
-function renderHistory() {
-  if (!el("historyBox")) return;
-
-  if (!state.history.length) {
-    el("historyBox").innerHTML = `<div class="history-item">まだ履歴がありません。</div>`;
-    return;
+/* ✅ここ完全修正版 */
+function updateProgressUI(q) {
+  if (el("qStageLabel")) {
+    el("qStageLabel").innerText =
+      `${q.stage}${formatQuestionNumber(q.num || 1)}`;
   }
 
-  el("historyBox").innerHTML = state.history
-    .map(
-      (e) => `
-      <div class="history-item">
-        <strong>${e.date}（${e.mode}）</strong><br>
-        ${e.correct}/${e.total}（${e.rate}%） / ⚠ ${e.topWeak}
-      </div>
-    `
-    )
-    .join("");
+  if (el("qScoreLabel")) {
+    el("qScoreLabel").innerText = `配点:${q.score}点`;
+  }
+
+  if (el("qWeakLabel")) {
+    el("qWeakLabel").innerText = `弱点:${q.weakness}`;
+  }
+
+  if (el("progressLabel")) {
+    el("progressLabel").innerText =
+      `${state.index + 1} / ${currentList().length}`;
+  }
 }
 
 /* =========================
    タイマー
 ========================= */
-function defaultTimeByStage(stage) {
-  if (stage === "第1問") return 35;
-  if (stage === "第2問") return 55;
-  if (stage === "第3問") return 60;
-  if (stage === "第4問") return 45;
-  return 60;
+function timeLimit(q){
+  return q.time || 40;
 }
 
-function timeLimit(question) {
-  if (!question) return state.strict ? 30 : 60;
-  const base = question.time || defaultTimeByStage(question.stage);
-  return state.strict ? Math.max(20, Math.floor(base * 0.7)) : base;
-}
-
-function resetTimer() {
+function resetTimer(){
   clearInterval(state.timer);
   const q = currentQuestion();
   state.remaining = timeLimit(q);
 
-  if (el("timer")) {
+  if(el("timer")){
     el("timer").innerText = state.remaining + "s";
     el("timer").className = "timer";
   }
 }
 
-function startQuestionTimer() {
-  if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-  if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
+function startQuestionTimer(){
+  if(el("questionStartBox")) el("questionStartBox").style.display = "none";
 
-  document.querySelectorAll(".option").forEach((b) => {
+  document.querySelectorAll(".option").forEach(b=>{
     b.disabled = false;
   });
 
   clearInterval(state.timer);
-  state.timer = setInterval(() => {
+
+  state.timer = setInterval(()=>{
     state.remaining--;
 
-    if (el("timer")) {
+    if(el("timer")){
       el("timer").innerText = state.remaining + "s";
 
-      if (state.remaining <= 10) {
+      if(state.remaining<=10){
         el("timer").className = "timer danger";
-      } else if (state.remaining <= 20) {
+      } else if(state.remaining<=20){
         el("timer").className = "timer warning";
       } else {
         el("timer").className = "timer";
       }
     }
 
-    if (state.remaining <= 0) {
+    if(state.remaining<=0){
       clearInterval(state.timer);
       timeoutQuestion();
     }
-  }, 1000);
-}
-
-/* =========================
-   説明表示
-========================= */
-function explainHTML(q, ok) {
-  if (state.mode === "tips") {
-    return `
-      <div style="font-weight:bold; font-size:18px; color:#1d4ed8;">🧠 TIPSだけ復習</div>
-      <div style="margin-top:10px;"><strong>◆ コツ</strong><br>${q.explain.tip}</div>
-    `;
-  }
-
-  return `
-    <div style="font-weight:bold; font-size:18px; color:${ok ? "#166534" : "#991b1b"};">
-      ${ok ? "正解！" : "不正解"}
-    </div>
-    <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-    <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-    <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
-  `;
-}
-
-/* =========================
-   表示補助
-========================= */
-function formatQuestionNumber(num) {
-  const marks = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
-  return marks[num - 1] || `(${num})`;
-}
-
-function updateProgressUI(q) {
-  if (el("qStageLabel")) {
-    el("qStageLabel").innerText = `${q.stage}${formatQuestionNumber(q.num || 1)}`;
-  }
-  if (el("qScoreLabel")) el("qScoreLabel").innerText = `配点 ${q.score}点`;
-  if (el("qWeakLabel")) el("qWeakLabel").innerText = `弱点軸: ${q.weakness}`;
-//   if (el("qModeLabel")) {
-//     el("qModeLabel").innerText =
-//       state.mode === "review" ? "復習モード" :
-//       state.mode === "tips" ? "TIPS復習" :
-      "本番モード";
-  }
-  if (el("progressLabel")) {
-    el("progressLabel").innerText = `${state.index + 1} / ${currentList().length}`;
-  }
-}
-
-function maybeShowStopGuide() {
-  if (state.total >= 10 && !state.stopHintShown && el("stopGuide")) {
-    state.stopHintShown = true;
-    el("stopGuide").style.display = "block";
-    el("stopGuide").innerHTML = "ここで一度休憩がおすすめです。今日は10問到達しました。";
-  }
+  },1000);
 }
 
 /* =========================
    問題表示
 ========================= */
-function show() {
+function show(){
   const q = currentQuestion();
-  if (!q) {
-    finish();
-    return;
-  }
+  if(!q) return;
 
-  enterExamMode();
   updateProgressUI(q);
 
-  if (el("questionText")) {
-    el("questionText").innerHTML = `
-      <div style="font-weight:bold; margin-bottom:6px;">
-        ${state.mode === "tips" ? "TIPSだけ復習" : `${q.stage}${formatQuestionNumber(q.num || 1)}`}
-      </div>
-      <div>${q.q}</div>
-    `;
+  if(el("questionText")){
+    el("questionText").innerHTML =
+      `<div>${q.q}</div>`;
   }
 
-  if (el("svgBox")) el("svgBox").innerHTML = q.svg || "";
+  const box = el("optionsBox");
+  box.innerHTML = "";
 
-  if (el("optionsBox")) {
-    el("optionsBox").innerHTML = "";
-    el("optionsBox").classList.add("disabled");
-
-    if (state.mode !== "tips") {
-      q.a.forEach((c, i) => {
-        const b = document.createElement("button");
-        b.className = "option";
-        b.innerText = String.fromCharCode(65 + i) + ". " + c;
-        b.onclick = () => answer(i);
-        b.disabled = true;
-        el("optionsBox").appendChild(b);
-      });
-    }
-  }
-
-  if (el("feedback")) {
-    el("feedback").style.display = "none";
-    el("feedback").innerHTML = "";
-  }
-
-  if (el("nextBtn")) el("nextBtn").style.display = "none";
-  if (el("skipQuestionBtn")) {
-    el("skipQuestionBtn").style.display = state.mode === "tips" ? "none" : "inline-block";
-  }
-  if (el("questionStartBox")) {
-    el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
-  }
-  if (el("stopGuide") && !state.stopHintShown) {
-    el("stopGuide").style.display = "none";
-  }
+  q.a.forEach((c,i)=>{
+    const b = document.createElement("button");
+    b.className = "option";
+    b.innerText = c;
+    b.onclick = ()=>answer(i);
+    b.disabled = true;
+    box.appendChild(b);
+  });
 
   resetTimer();
-  update();
-
-  if (state.mode === "tips") {
-    if (el("feedback")) {
-      el("feedback").style.display = "block";
-      el("feedback").innerHTML = explainHTML(q, true);
-    }
-    if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
-  }
 }
 
 /* =========================
    回答
 ========================= */
-function answer(i) {
+function answer(i){
   const q = currentQuestion();
   clearInterval(state.timer);
 
-  const ok = i === q.correct;
-
   state.total++;
-  stats.stage[q.stage].t++;
 
-  if (ok) {
+  if(i === q.correct){
     state.correct++;
-    stats.stage[q.stage].c++;
-  } else {
-    stats.weakness[q.weakness] = (stats.weakness[q.weakness] || 0) + 1;
-
-    if (!state.wrong.find((qq) => qq.id === q.id)) {
-      state.wrong.push(q);
-    }
-    if (!state.tipList.find((qq) => qq.id === q.id)) {
-      state.tipList.push(q);
-    }
   }
 
-  document.querySelectorAll(".option").forEach((b, idx) => {
+  document.querySelectorAll(".option").forEach((b,idx)=>{
     b.disabled = true;
-    if (idx === q.correct) b.classList.add("correct");
-    if (idx === i && idx !== q.correct) b.classList.add("wrong");
+    if(idx===q.correct) b.classList.add("correct");
+    if(idx===i && idx!==q.correct) b.classList.add("wrong");
   });
-
-  if (el("feedback")) {
-    el("feedback").style.display = "block";
-    el("feedback").innerHTML = explainHTML(q, ok);
-  }
-
-  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
-  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
-
-  maybeShowStopGuide();
-  update();
-  save();
 }
 
 /* =========================
-   時間切れ / スキップ
+   次
 ========================= */
-function timeoutQuestion() {
-  const q = currentQuestion();
-
-  state.total++;
-  stats.stage[q.stage].t++;
-  stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
-
-  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
-  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
-
-  document.querySelectorAll(".option").forEach((b, idx) => {
-    b.disabled = true;
-    if (idx === q.correct) b.classList.add("correct");
-  });
-
-  if (el("feedback")) {
-    el("feedback").style.display = "block";
-    el("feedback").innerHTML = `
-      <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
-      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
-    `;
-  }
-
-  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
-  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
-
-  maybeShowStopGuide();
-  update();
-  save();
-}
-
-function skipQuestion() {
-  const q = currentQuestion();
-  clearInterval(state.timer);
-
-  state.total++;
-  stats.stage[q.stage].t++;
-  stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
-
-  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
-  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
-
-  if (el("feedback")) {
-    el("feedback").style.display = "block";
-    el("feedback").innerHTML = `
-      <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
-      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
-    `;
-  }
-
-  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
-  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
-
-  maybeShowStopGuide();
-  update();
-  save();
-}
-
-/* =========================
-   次 / 終了
-========================= */
-function nextQuestion() {
+function nextQuestion(){
   state.index++;
   show();
 }
 
-function finish() {
-  clearInterval(state.timer);
+/* =========================
+   タイムアウト
+========================= */
+function timeoutQuestion(){
+  const q = currentQuestion();
 
-  if (el("questionPanel")) el("questionPanel").style.display = "none";
-  if (el("examTopbar")) el("examTopbar").style.display = "none";
-  if (el("resultBox")) el("resultBox").style.display = "block";
-
-  if (el("finalScore")) el("finalScore").innerText = `${state.correct}/${state.total}`;
-  if (el("resultSummary")) {
-    el("resultSummary").innerHTML = `正答率 ${rate()}%<br>最重要課題：${topWeak()}`;
-  }
-
-  addHistory();
-  state.mode = "normal";
-  save();
+  document.querySelectorAll(".option").forEach((b,idx)=>{
+    b.disabled = true;
+    if(idx===q.correct) b.classList.add("correct");
+  });
 }
 
 /* =========================
-   モード
+   ボタン
 ========================= */
-function startExam() {
-  state.index = 0;
-  state.correct = 0;
-  state.total = 0;
-  state.wrong = [];
-  state.tipList = [];
-  state.mode = "normal";
-  state.stopHintShown = false;
-  if (el("stopGuide")) el("stopGuide").style.display = "none";
+if(el("startExamBtn")) el("startExamBtn").onclick = ()=>{
+  state.index=0;
+  state.correct=0;
+  state.total=0;
   show();
-}
+};
 
-function resumeExam() {
-  state.mode = "normal";
-  show();
-}
-
-function startWrongOnlyReview() {
-  if (!state.wrong.length) {
-    alert("復習問題がありません");
-    return;
-  }
-  state.mode = "review";
-  state.index = 0;
-  state.stopHintShown = false;
-  if (el("stopGuide")) el("stopGuide").style.display = "none";
-  show();
-}
-
-function startTipReview() {
-  if (!state.tipList.length) {
-    alert("復習するTIPSがありません");
-    return;
-  }
-  state.mode = "tips";
-  state.index = 0;
-  state.stopHintShown = false;
-  if (el("stopGuide")) el("stopGuide").style.display = "none";
-  show();
-}
-
-function toggleStrictTime() {
-  state.strict = !state.strict;
-  if (el("toggleStrictTimeBtn")) {
-    el("toggleStrictTimeBtn").innerText = state.strict ? "時間制限: 厳格" : "時間制限: 通常";
-  }
-  save();
-}
-
-/* ボタン */
-if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
-if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
-if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
-if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
-if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
-
-if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
-if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;
-if (el("skipQuestionBtn")) el("skipQuestionBtn").onclick = skipQuestion;
-
-if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
-if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
-if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
-
-if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
-
-/* 初期化 */
-load();
-update();
-renderHistory();
-exitExamMode();
+if(el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
+if(el("nextBtn")) el("nextBtn").onclick = nextQuestion;
+``
