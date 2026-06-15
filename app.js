@@ -204,4 +204,3 @@ if(el("startExamBtn")) el("startExamBtn").onclick = ()=>{
 
 if(el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
 if(el("nextBtn")) el("nextBtn").onclick = nextQuestion;
-``
