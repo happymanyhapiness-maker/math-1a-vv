@@ -272,10 +272,10 @@ function updateProgressUI(q) {
   }
   if (el("qScoreLabel")) el("qScoreLabel").innerText = `配点 ${q.score}点`;
   if (el("qWeakLabel")) el("qWeakLabel").innerText = `弱点軸: ${q.weakness}`;
-  if (el("qModeLabel")) {
-    el("qModeLabel").innerText =
-      state.mode === "review" ? "復習モード" :
-      state.mode === "tips" ? "TIPS復習" :
+//   if (el("qModeLabel")) {
+//     el("qModeLabel").innerText =
+//       state.mode === "review" ? "復習モード" :
+//       state.mode === "tips" ? "TIPS復習" :
       "本番モード";
   }
   if (el("progressLabel")) {
