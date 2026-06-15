@@ -1,294 +1,516 @@
-const STORAGE_KEY = "kyotsu_app_v8";
+const STORAGE_KEY = "kyotsu_app_v11";
+const HISTORY_VISIBLE = 5;
 
 let state = {
   index: 0,
   correct: 0,
   total: 0,
   wrong: [],
-  mode: "normal",
+  tipList: [],
+  mode: "normal", // normal / review / tips
   strict: false,
   timer: null,
-  remaining: 0
+  remaining: 0,
+  history: []
 };
 
 const stats = {
-  weakness: { "計算精度":0, "方針切替":0, "時間判断":0, "時間不足":0 },
+  weakness: {
+    "計算精度": 0,
+    "方針切替": 0,
+    "時間判断": 0,
+    "時間不足": 0
+  },
   stage: {
-    "第1問":{t:0,c:0},
-    "第2問":{t:0,c:0},
-    "第3問":{t:0,c:0},
-    "第4問":{t:0,c:0}
+    "第1問": { t: 0, c: 0 },
+    "第2問": { t: 0, c: 0 },
+    "第3問": { t: 0, c: 0 },
+    "第4問": { t: 0, c: 0 }
   }
 };
 
-const el = id => document.getElementById(id);
+const el = (id) => document.getElementById(id);
 
-/* ===== 保存 ===== */
-function save(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({state,stats}));
-  el("saveStatus").innerText = "保存状態: 保存済み（" + new Date().toLocaleTimeString("ja-JP") + "）";
-}
-function load(){
-  const d = localStorage.getItem(STORAGE_KEY);
-  if(!d) return;
-  try{
-    const obj = JSON.parse(d);
-    Object.assign(state, obj.state);
-    Object.assign(stats, obj.stats);
-    el("saveStatus").innerText = "保存状態: 前回データ読み込み済み";
-  }catch{}
+/* =========================
+   保存 / 読み込み
+========================= */
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, stats }));
+  const saveStatus = el("saveStatus");
+  if (saveStatus) {
+    const now = new Date().toLocaleTimeString("ja-JP");
+    saveStatus.innerText = `保存状態: 保存済み（${now}）`;
+  }
 }
 
-/* ===== 問題取得 ===== */
-function list(){
-  return state.mode === "review" ? state.wrong : questions;
-}
-function q(){
-  return list()[state.index];
-}
+function load() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const obj = JSON.parse(raw);
+    if (obj.state) Object.assign(state, obj.state);
+    if (obj.stats) Object.assign(stats, obj.stats);
 
-/* ===== 試験UI切替 ===== */
-function enterExamMode(){
-  el("examTopbar").style.display = "flex";
-  el("controlPanel").style.display = "none";
-}
-function exitExamMode(){
-  el("examTopbar").style.display = "none";
-  el("controlPanel").style.display = "block";
-  el("questionPanel").style.display = "none";
-  el("resultBox").style.display = "none";
+    if (!Array.isArray(state.history)) state.history = [];
+    if (!Array.isArray(state.wrong)) state.wrong = [];
+    if (!Array.isArray(state.tipList)) state.tipList = [];
+  } catch (e) {
+    console.error(e);
+  }
 }
 
-/* ===== 表示 ===== */
-function show(){
-  const x = q();
-  if(!x){ finish(); return; }
+/* =========================
+   問題取得
+========================= */
+function currentList() {
+  if (state.mode === "review") return state.wrong;
+  if (state.mode === "tips") return state.tipList;
+  return questions;
+}
 
-  enterExamMode();
+function currentQuestion() {
+  return currentList()[state.index];
+}
 
-  el("questionPanel").style.display = "flex";
-  el("resultBox").style.display = "none";
+/* =========================
+   UIモード
+========================= */
+function enterExamMode() {
+  if (el("examTopbar")) el("examTopbar").style.display = "flex";
+  if (el("controlPanel")) el("controlPanel").style.display = "none";
+  if (el("questionPanel")) el("questionPanel").style.display = "flex";
+  if (el("resultBox")) el("resultBox").style.display = "none";
+  document.body.classList.add("exam-mode");
+}
 
-  el("questionText").innerHTML = `<b>${x.stage}</b><br>${x.q}`;
-  el("qStageLabel").innerText = x.stage;
-  el("qScoreLabel").innerText = "配点 " + x.score + "点";
-  el("qWeakLabel").innerText = x.weakness;
-  el("qModeLabel").innerText = state.mode === "review" ? "復習モード" : "本番モード";
+function exitExamMode() {
+  clearInterval(state.timer);
+  if (el("examTopbar")) el("examTopbar").style.display = "none";
+  if (el("controlPanel")) el("controlPanel").style.display = "block";
+  if (el("questionPanel")) el("questionPanel").style.display = "none";
+  if (el("resultBox")) el("resultBox").style.display = "none";
+  document.body.classList.remove("exam-mode");
+}
 
-  el("optionsBox").innerHTML = "";
-  el("optionsBox").classList.add("disabled");
+/* =========================
+   統計
+========================= */
+function rate() {
+  return state.total ? Math.round((state.correct / state.total) * 100) : 0;
+}
 
-  x.a.forEach((c, i) => {
-    const b = document.createElement("button");
-    b.className = "option";
-    b.innerText = String.fromCharCode(65+i) + ". " + c;
-    b.onclick = () => answer(i);
-    b.disabled = true;
-    el("optionsBox").appendChild(b);
+function topWeak() {
+  const entries = Object.entries(stats.weakness).filter(([, v]) => v > 0);
+  if (!entries.length) return "未判定";
+  return entries.sort((a, b) => b[1] - a[1])[0][0];
+}
+
+function update() {
+  if (el("correctCnt")) el("correctCnt").innerText = state.correct;
+  if (el("totalCnt")) el("totalCnt").innerText = state.total;
+  if (el("rateCnt")) el("rateCnt").innerText = rate() + "%";
+  if (el("avgCnt")) el("avgCnt").innerText = "0";
+
+  if (el("wCalc")) el("wCalc").innerText = stats.weakness["計算精度"] || 0;
+  if (el("wSwitch")) el("wSwitch").innerText = stats.weakness["方針切替"] || 0;
+  if (el("wJudge")) el("wJudge").innerText = stats.weakness["時間判断"] || 0;
+  if (el("wTime")) el("wTime").innerText = stats.weakness["時間不足"] || 0;
+  if (el("topWeak")) el("topWeak").innerText = topWeak();
+
+  ["第1問", "第2問", "第3問", "第4問"].forEach((stage, i) => {
+    const s = stats.stage[stage];
+    const r = s.t ? Math.round((s.c / s.t) * 100) : 0;
+    const target = el("stageRate" + i);
+    if (target) target.innerText = r + "%";
   });
 
-  el("feedback").style.display = "none";
-  el("nextBtn").style.display = "none";
-  el("questionStartBox").style.display = "block";
-
-  resetTimer();
-  update();
+  if (el("todayReviewCount")) el("todayReviewCount").innerText = state.wrong.length;
+  if (el("reviewRate")) el("reviewRate").innerText = "0%";
+  if (el("clearedCount")) el("clearedCount").innerText = "0";
 }
 
-/* ===== タイマー ===== */
-function timeLimit(){ return state.strict ? 30 : 60; }
+/* =========================
+   履歴
+========================= */
+function addHistory() {
+  if (state.total === 0) return;
 
-function resetTimer(){
+  state.history.unshift({
+    date: new Date().toLocaleString("ja-JP", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }),
+    correct: state.correct,
+    total: state.total,
+    rate: rate(),
+    topWeak: topWeak(),
+    mode:
+      state.mode === "review"
+        ? "復習"
+        : state.mode === "tips"
+        ? "TIPS"
+        : "本番"
+  });
+
+  // 5件まで保存
+  state.history = state.history.slice(0, HISTORY_VISIBLE);
+  renderHistory();
+}
+
+function renderHistory() {
+  const box = el("historyBox");
+  if (!box) return;
+
+  if (!state.history.length) {
+    box.innerHTML = `<div class="history-item">まだ履歴がありません。</div>`;
+    return;
+  }
+
+  box.innerHTML = state.history
+    .map(
+      (e) => `
+      <div class="history-item">
+        <strong>${e.date}（${e.mode}）</strong><br>
+        ${e.correct}/${e.total}（${e.rate}%） / ⚠ ${e.topWeak}
+      </div>
+    `
+    )
+    .join("");
+}
+
+/* =========================
+   タイマー
+========================= */
+function timeLimit() {
+  return state.strict ? 30 : 60;
+}
+
+function resetTimer() {
   clearInterval(state.timer);
   state.remaining = timeLimit();
-  el("timer").innerText = state.remaining + "s";
-  el("timer").className = "timer";
+  if (el("timer")) {
+    el("timer").innerText = state.remaining + "s";
+    el("timer").className = "timer";
+  }
 }
 
-function startQ(){
-  el("questionStartBox").style.display = "none";
-  el("optionsBox").classList.remove("disabled");
+function startQuestionTimer() {
+  if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+  if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
-  [...document.querySelectorAll(".option")].forEach(b => b.disabled = false);
+  document.querySelectorAll(".option").forEach((b) => {
+    b.disabled = false;
+  });
 
   clearInterval(state.timer);
   state.timer = setInterval(() => {
     state.remaining--;
-    el("timer").innerText = state.remaining + "s";
+    if (el("timer")) el("timer").innerText = state.remaining + "s";
 
-    if(state.remaining <= 10) el("timer").className = "timer danger";
-    else if(state.remaining <= 20) el("timer").className = "timer warning";
+    if (el("timer")) {
+      if (state.remaining <= 10) el("timer").className = "timer danger";
+      else if (state.remaining <= 20) el("timer").className = "timer warning";
+      else el("timer").className = "timer";
+    }
 
-    if(state.remaining <= 0){
+    if (state.remaining <= 0) {
       clearInterval(state.timer);
-      timeout();
+      timeoutQuestion();
     }
   }, 1000);
 }
 
-/* ===== 回答 ===== */
-function answer(i){
-  const x = q();
-  clearInterval(state.timer);
-
-  const ok = i === x.correct;
-
-  state.total++;
-  stats.stage[x.stage].t++;
-
-  if(ok){
-    state.correct++;
-    stats.stage[x.stage].c++;
-  }else{
-    stats.weakness[x.weakness]++;
-    if(!state.wrong.find(q => q.id === x.id)) state.wrong.push(x);
+/* =========================
+   説明表示
+========================= */
+function explainHTML(q, ok) {
+  if (state.mode === "tips") {
+    return `
+      <div style="font-weight:bold; font-size:18px; color:#1d4ed8;">🧠 TIPSだけ復習</div>
+      <div style="margin-top:10px;"><strong>◆ コツ</strong><br>${q.explain.tip}</div>
+    `;
   }
 
-  [...document.querySelectorAll(".option")].forEach((b, idx) => {
-    b.disabled = true;
-    if(idx === x.correct) b.classList.add("correct");
-    if(idx === i && idx !== x.correct) b.classList.add("wrong");
-  });
-
-  el("feedback").style.display = "block";
-  el("feedback").innerHTML = explain(x, ok);
-
-  el("nextBtn").style.display = "inline-block";
-
-  update();
-  save();
-}
-
-/* ===== 解説 ===== */
-function explain(q, ok){
   return `
-  <b style="color:${ok ? "green" : "red"}">${ok ? "✅ 正解" : "❌ 不正解"}</b><br><br>
-  <b>◆ 解き方</b><br>${q.explain.why}<br><br>
-  <b>◆ ミス</b><br>${q.explain.mistake}<br><br>
-  <b>◆ コツ</b><br>${q.explain.tip}
+    <div style="font-weight:bold; font-size:18px; color:${ok ? "#166534" : "#991b1b"};">
+      ${ok ? "正解！" : "不正解"}
+    </div>
+    <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
+    <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
+    <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
   `;
 }
 
-/* ===== タイムアウト ===== */
-function timeout(){
-  const x = q();
+/* =========================
+   問題表示
+========================= */
+function show() {
+  const q = currentQuestion();
+  if (!q) {
+    finish();
+    return;
+  }
+
+  enterExamMode();
+
+  if (el("questionText")) {
+    el("questionText").innerHTML = `
+      <div style="font-weight:bold; margin-bottom:6px;">${state.mode === "tips" ? "TIPSだけ復習" : q.stage}</div>
+      <div>${q.q}</div>
+    `;
+  }
+
+  if (el("qStageLabel")) el("qStageLabel").innerText = q.stage;
+  if (el("qScoreLabel")) el("qScoreLabel").innerText = `配点 ${q.score}点`;
+  if (el("qWeakLabel")) el("qWeakLabel").innerText = `弱点軸: ${q.weakness}`;
+  if (el("qModeLabel")) {
+    el("qModeLabel").innerText =
+      state.mode === "review" ? "復習モード" :
+      state.mode === "tips" ? "TIPS復習" :
+      "本番モード";
+  }
+
+  if (el("svgBox")) el("svgBox").innerHTML = q.svg || "";
+
+  if (el("optionsBox")) {
+    el("optionsBox").innerHTML = "";
+    el("optionsBox").classList.add("disabled");
+
+    if (state.mode !== "tips") {
+      q.a.forEach((c, i) => {
+        const b = document.createElement("button");
+        b.className = "option";
+        b.innerText = String.fromCharCode(65 + i) + ". " + c;
+        b.onclick = () => answer(i);
+        b.disabled = true;
+        el("optionsBox").appendChild(b);
+      });
+    }
+  }
+
+  if (el("feedback")) {
+    el("feedback").style.display = "none";
+    el("feedback").innerHTML = "";
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "none";
+  if (el("skipQuestionBtn")) {
+    el("skipQuestionBtn").style.display = state.mode === "tips" ? "none" : "inline-block";
+  }
+  if (el("questionStartBox")) {
+    el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
+  }
+
+  resetTimer();
+  update();
+
+  if (state.mode === "tips") {
+    if (el("feedback")) {
+      el("feedback").style.display = "block";
+      el("feedback").innerHTML = explainHTML(q, true);
+    }
+    if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  }
+}
+
+/* =========================
+   回答
+========================= */
+function answer(i) {
+  const q = currentQuestion();
+  clearInterval(state.timer);
+
+  const ok = i === q.correct;
+
   state.total++;
-  stats.stage[x.stage].t++;
-  stats.weakness["時間不足"]++;
+  stats.stage[q.stage].t++;
 
-  if(!state.wrong.find(q => q.id === x.id)) state.wrong.push(x);
+  if (ok) {
+    state.correct++;
+    stats.stage[q.stage].c++;
+  } else {
+    stats.weakness[q.weakness] = (stats.weakness[q.weakness] || 0) + 1;
 
-  el("feedback").style.display = "block";
-  el("feedback").innerHTML = `<b style="color:#d97706">⏰ 時間切れ</b><br><br>` + explain(x, false).replace(/<b[^>]*>.*?<\/b><br><br>/, "");
-  el("nextBtn").style.display = "inline-block";
+    if (!state.wrong.find((qq) => qq.id === q.id)) {
+      state.wrong.push(q);
+    }
+    if (!state.tipList.find((qq) => qq.id === q.id)) {
+      state.tipList.push(q);
+    }
+  }
 
-  // 正解選択肢を表示
-  [...document.querySelectorAll(".option")].forEach((b, idx) => {
+  document.querySelectorAll(".option").forEach((b, idx) => {
     b.disabled = true;
-    if(idx === x.correct) b.classList.add("correct");
+    if (idx === q.correct) b.classList.add("correct");
+    if (idx === i && idx !== q.correct) b.classList.add("wrong");
   });
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = explainHTML(q, ok);
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
 
   update();
   save();
 }
 
-/* ===== 次 ===== */
-function next(){
+/* =========================
+   時間切れ / スキップ
+========================= */
+function timeoutQuestion() {
+  const q = currentQuestion();
+
+  state.total++;
+  stats.stage[q.stage].t++;
+  stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
+
+  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
+  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
+
+  document.querySelectorAll(".option").forEach((b, idx) => {
+    b.disabled = true;
+    if (idx === q.correct) b.classList.add("correct");
+  });
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = `
+      <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
+    `;
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
+
+  update();
+  save();
+}
+
+function skipQuestion() {
+  const q = currentQuestion();
+  clearInterval(state.timer);
+
+  state.total++;
+  stats.stage[q.stage].t++;
+  stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
+
+  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
+  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = `
+      <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
+    `;
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
+
+  update();
+  save();
+}
+
+/* =========================
+   終了 / モード
+========================= */
+function nextQuestion() {
   state.index++;
   show();
 }
 
-/* ===== 終了 ===== */
-function finish(){
-  el("questionPanel").style.display = "none";
-  el("examTopbar").style.display = "none";
-  el("controlPanel").style.display = "none";
-  el("resultBox").style.display = "block";
-  el("finalScore").innerText = `${state.correct} / ${state.total}`;
-  el("resultSummary").innerHTML = `正答率 ${rate()}%<br>最重要課題：${topWeak()}`;
+function finish() {
+  clearInterval(state.timer);
+
+  if (el("questionPanel")) el("questionPanel").style.display = "none";
+  if (el("examTopbar")) el("examTopbar").style.display = "none";
+  if (el("resultBox")) el("resultBox").style.display = "block";
+
+  if (el("finalScore")) el("finalScore").innerText = `${state.correct}/${state.total}`;
+  if (el("resultSummary")) {
+    el("resultSummary").innerHTML = `正答率 ${rate()}%<br>最重要課題：${topWeak()}`;
+  }
+
+  addHistory();
+  state.mode = "normal";
   save();
 }
 
-/* ===== 統計 ===== */
-function rate(){
-  return state.total ? Math.round(state.correct / state.total * 100) : 0;
-}
-
-function topWeak(){
-  const entries = Object.entries(stats.weakness).filter(([,v]) => v > 0);
-  if(!entries.length) return "未判定";
-  return entries.sort((a,b) => b[1]-a[1])[0][0];
-}
-
-function update(){
-  el("correctCnt").innerText = state.correct;
-  el("totalCnt").innerText = state.total;
-  el("rateCnt").innerText = rate() + "%";
-
-  el("wCalc").innerText = stats.weakness["計算精度"];
-  el("wSwitch").innerText = stats.weakness["方針切替"];
-  el("wJudge").innerText = stats.weakness["時間判断"];   // ← 追加
-  el("wTime").innerText = stats.weakness["時間不足"];
-
-  el("topWeak").innerText = topWeak();
-
-  ["第1問","第2問","第3問","第4問"].forEach((s, i) => {
-    const d = stats.stage[s];
-    const r = d.t ? Math.round(d.c / d.t * 100) : 0;
-    el("stageRate"+i).innerText = r + "%";
-  });
-}
-
-/* ===== モード ===== */
-function start(){
+function startExam() {
   state.index = 0;
   state.correct = 0;
   state.total = 0;
   state.wrong = [];
+  state.tipList = [];
   state.mode = "normal";
   show();
 }
 
-function review(){
-  if(!state.wrong.length){ alert("復習問題がありません"); return; }
+function resumeExam() {
+  state.mode = "normal";
+  show();
+}
+
+function startWrongOnlyReview() {
+  if (!state.wrong.length) {
+    alert("復習問題がありません");
+    return;
+  }
   state.mode = "review";
   state.index = 0;
   show();
 }
 
-function toggle(){
-  state.strict = !state.strict;
-  el("toggleStrictTimeBtn").innerText = state.strict ? "⏱ 厳格モード（30s）" : "⏱ 通常モード（60s）";
+function startTipReview() {
+  if (!state.tipList.length) {
+    alert("復習するTIPSがありません");
+    return;
+  }
+  state.mode = "tips";
+  state.index = 0;
+  show();
 }
 
-/* ===== ボタン ===== */
-el("startExamBtn").onclick = start;
-el("resumeExamBtn").onclick = show;
-el("startWrongOnlyReviewBtn").onclick = review;
-el("startWrongOnlyReviewBtn2").onclick = review;
-el("startQuestionBtn").onclick = startQ;
-el("nextBtn").onclick = next;
-el("skipQuestionBtn").onclick = next;
-
-el("goTopBtn").onclick   = () => { exitExamMode(); };
-el("goTopBtn2").onclick  = () => { exitExamMode(); };
-el("goTopBtn3").onclick  = () => { exitExamMode(); };
-
-el("toggleStrictTimeBtn").onclick = toggle;
-
-el("resetStatsBtn").onclick = () => {
-  if(confirm("学習ログをリセットしますか？")) {
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
+function toggleStrictTime() {
+  state.strict = !state.strict;
+  if (el("toggleStrictTimeBtn")) {
+    el("toggleStrictTimeBtn").innerText = state.strict ? "時間制限: 厳格" : "時間制限: 通常";
   }
-};
-el("clearSavedDataBtn").onclick = () => {
-  if(confirm("保存データをすべて削除しますか？")) {
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
-  }
-};
+  save();
+}
 
-/* ===== 初期 ===== */
+/* =========================
+   ボタン接続
+========================= */
+if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
+if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
+if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
+if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
+if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
+
+if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
+if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;
+if (el("skipQuestionBtn")) el("skipQuestionBtn").onclick = skipQuestion;
+
+if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
+if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
+if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
+
+if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
+
+/* 初期化 */
 load();
 update();
+renderHistory();
+exitExamMode();
