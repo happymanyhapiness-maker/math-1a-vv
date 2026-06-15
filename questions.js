@@ -1,6 +1,6 @@
 const questions = [
   {
-    id: "q1",
+    id: "q1-1",
     stage: "第1問",
     score: 10,
     weakness: "計算精度",
@@ -10,7 +10,7 @@ const questions = [
     explain: "(sinθ+cosθ)^2 = 1 + 2sinθcosθ = (1/2)^2 = 1/4"
   },
   {
-    id: "q2",
+    id: "q1-2",
     stage: "第1問",
     score: 10,
     weakness: "方針切替",
@@ -25,7 +25,7 @@ const questions = [
     explain: "文字種をそろえるのが基本。"
   },
   {
-    id: "q3",
+    id: "q2-1",
     stage: "第2問",
     score: 10,
     weakness: "計算精度",
@@ -40,7 +40,7 @@ const questions = [
     explain: "(8-x)^2=64-16x+x^2 より 36-(8-x)^2=-28+16x-x^2"
   },
   {
-    id: "q4",
+    id: "q2-2",
     stage: "第2問",
     score: 10,
     weakness: "方針切替",
@@ -55,7 +55,7 @@ const questions = [
     explain: "高さ→面積→半径 の流れが自然。"
   },
   {
-    id: "q5",
+    id: "q3-1",
     stage: "第3問",
     score: 10,
     weakness: "計算精度",
@@ -70,7 +70,7 @@ const questions = [
     explain: "CP=CQ=2, BR=BP=4, AQ=AR=3 より BC=6, CA=5, AB=7"
   },
   {
-    id: "q6",
+    id: "q4-1",
     stage: "第4問",
     score: 10,
     weakness: "時間不足",
