@@ -1,196 +1,99 @@
 <!DOCTYPE html>
-<html <meta charset="UTF-8"><html lang="ja">
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>共通テスト数学ⅠA</title>
 
   <link rel="stylesheet" href="style.css">
-
-  <!-- ✅ PC安定用 -->
-  <style>
-    body{
-      max-width:1400px;
-      margin:auto;
-    }
-  </style>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 
 <body>
-  <div class="app-shell">
+<div class="app-shell">
 
-    <!-- ここから下はそのままでOK -->
+  <!-- ===== 上部 ===== -->
+  <header class="topbar">
+    <div>
+      <div class="brand-sub">KYOTSU TEST</div>
+      <h1>共通テスト数学ⅠA</h1>
+    </div>
 
-<head>
+    <div>
+      正答:<span id="correctCnt">0</span> /
+      解答:<span id="totalCnt">0</span>
+      （<span id="rateCnt">0%</span>）
+    </div>
+  </header>
 
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-sub">KYOTSU TEST / iPad Edition</div>
-        <h1>共通テスト数学ⅠA ガチ完全再現版</h1>
-      </div>
+  <!-- ===== 本体 ===== -->
+  <main class="main-layout">
 
-      <div class="top-stats">
-        <div class="stat-card">
-          <div class="stat-label">総正答数</div>
-          <div class="stat-value" id="correctCnt">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">総解答数</div>
-          <div class="stat-value" id="totalCnt">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">正答率</div>
-          <div class="stat-value" id="rateCnt">0%</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">平均秒数</div>
-          <div class="stat-value" id="avgCnt">0</div>
-        </div>
-      </div>
-    </header>
+    <!-- 左（最小情報） -->
+    <aside class="left-panel">
+      <div>計算:<span id="wCalc">0</span></div>
+      <div>方針:<span id="wSwitch">0</span></div>
+      <div>時間:<span id="wTime">0</span></div>
 
-    <main class="main-layout">
-      <aside class="left-panel card" id="sidebar">
-        <section class="panel-block">
-          <h2>弱点トラッカー</h2>
-          <ul class="metric-list">
-            <li>計算精度: <strong id="wCalc">0</strong></li>
-            <li>方針切替: <strong id="wSwitch">0</strong></li>
-            <li>時間不足: <strong id="wTime">0</strong></li>
-          </ul>
-          <div class="pill">最重要課題: <span id="topWeak">未判定</span></div>
-        </section>
+      <hr>
 
-        <section class="panel-block">
-          <h2>ステージ別成績</h2>
-          <ul class="metric-list">
-            <li>第1問: <strong id="stageRate0">0%</strong></li>
-            <li>第2問: <strong id="stageRate1">0%</strong></li>
-            <li>第3問: <strong id="stageRate2">0%</strong></li>
-            <li>第4問: <strong id="stageRate3">0%</strong></li>
-          </ul>
-        </section>
+      <button onclick="startExam()">開始</button>
+      <button onclick="startWrongOnlyReview()">復習</button>
+      <button onclick="toggleMemo()">メモ</button>
+    </aside>
 
-        <section class="panel-block">
-          <h2>復習</h2>
-          <ul class="metric-list">
-            <li>今日の復習件数: <strong id="todayReviewCount">0</strong></li>
-            <li>復習モード正答率: <strong id="reviewRate">0%</strong></li>
-            <li>完全に直した問題数: <strong id="clearedCount">0</strong></li>
-          </ul>
-        </section>
+    <!-- 中央（最重要） -->
+    <section class="center-panel">
 
-        <section class="panel-block">
-          <h2>保存</h2>
-          <div class="small-text" id="saveStatus">保存状態: 未保存</div>
-          <div class="stack-buttons">
-            <button class="btn secondary" id="resetStatsBtn">学習ログだけリセット</button>
-            <button class="btn danger" id="clearSavedDataBtn">保存データ削除</button>
-          </div>
-        </section>
+      <!-- 問題 -->
+      <div id="questionPanel" class="question-panel">
 
-        <section class="panel-block">
-          <h2>履歴</h2>
-          <div id="historyBox" class="history-box">
-            <div class="history-item">まだ履歴がありません。</div>
-          </div>
-        </section>
-      </aside>
-
-      <section class="center-panel">
-        <div class="card control-panel">
-          <div class="panel-heading">
-            <div>
-              <h2>本番モード</h2>
-              <div class="panel-note">
-                練習UI / 本番UIの切り替え、手書きメモ、復習モードに対応
-              </div>
-            </div>
-            <div class="badge">4題・全問必答</div>
+        <!-- 上段 -->
+        <div class="question-meta">
+          <div>
+            <span id="qStageLabel">第1問</span>
+            <span id="qScoreLabel">10点</span>
           </div>
 
-          <div class="mission-box">
-            <strong>今回の狙い</strong><br>
-            第1問：三角比・式変形での計算精度<br>
-            第2問：図形と計量での高さ・面積・方針切替<br>
-            第3問：内接円・接線の長さ・半径<br>
-            第4問：誘導の読み方・時間配分
-          </div>
-
-          <div class="toolbar">
-            <button class="btn primary" id="startExamBtn">試験開始</button>
-            <button class="btn warning" id="resumeExamBtn">途中から再開</button>
-            <button class="btn success" id="startWrongOnlyReviewBtn">間違えた問題だけ再挑戦</button>
-            <button class="btn secondary" id="toggleExamUiBtn">本番UIに切り替え</button>
-            <button class="btn secondary" id="goTopBtn">TOPへ戻る</button>
-          </div>
-
-          <div class="toolbar">
-            <button class="btn secondary" id="toggleStrictTimeBtn">制限時間: 通常</button>
-            <button class="btn secondary" id="toggleMemoBtn">手書きメモを非表示</button>
-            <button class="btn secondary" id="clearMemoBtn">メモを消す</button>
-          </div>
-
-          <div class="progress-wrap">
-            <div class="progress-bar">
-              <div id="progressInner" class="progress-inner"></div>
-            </div>
-            <div class="stage-grid">
-              <div id="stageCard0" class="stage-card">第1問<br><span>30点</span></div>
-              <div id="stageCard1" class="stage-card">第2問<br><span>30点</span></div>
-              <div id="stageCard2" class="stage-card">第3問<br><span>20点</span></div>
-              <div id="stageCard3" class="stage-card">第4問<br><span>20点</span></div>
-            </div>
-          </div>
+          <div id="timer" class="timer">--</div>
         </div>
 
-        <div id="questionPanel" class="card question-panel" style="display:none;">
-          <div class="question-meta">
-            <div class="meta-left">
-              <span class="pill" id="qStageLabel">第1問</span>
-              <span class="pill" id="qScoreLabel">配点 0点</span>
-              <span class="pill" id="qWeakLabel">弱点軸</span>
-              <span class="pill" id="qModeLabel">本番モード</span>
-            </div>
-            <div class="timer" id="timer">--</div>
-          </div>
-
-          <div class="question-text" id="questionText"></div>
+        <!-- 問題文 -->
+        <div>
+          <div id="questionText" class="question-text"></div>
           <div id="svgBox"></div>
-          <div id="optionsBox" class="options-box"></div>
-          <div id="feedback" class="feedback"></div>
+        </div>
 
-          <div class="toolbar q-toolbar">
-            <button class="btn secondary" id="nextBtn" style="display:none;">次へ</button>
-            <button class="btn secondary" id="skipQuestionBtn">この設問を飛ばす</button>
-            <button class="btn secondary" id="goTopBtn2">TOPへ戻る</button>
+        <!-- 下段 -->
+        <div class="options-box">
+
+          <!-- 選択肢 -->
+          <div class="options-list" id="optionsBox">
+            <!-- JSで生成 -->
           </div>
-        </div>
 
-        <div id="resultBox" class="card result-box" style="display:none;">
-          <h2>結果</h2>
-          <div class="final-score" id="finalScore">0 / 100</div>
-          <div id="resultSummary" class="result-summary"></div>
-
-          <div class="toolbar q-toolbar">
-            <button class="btn success" id="startWrongOnlyReviewBtn2">間違えた問題だけ再挑戦</button>
-            <button class="btn secondary" id="goTopBtn3">TOPへ戻る</button>
+          <!-- メモ（ここ重要：同一画面内） -->
+          <div>
+            <canvas id="memoCanvas"></canvas>
           </div>
-        </div>
-      </section>
 
-      <aside class="right-panel card" id="memoPanel">
-        <div class="panel-block">
-          <h2>✍️ 手書きメモ</h2>
-          <div class="small-text">iPad + Pencil想定。途中式・図・補助線メモ用。</div>
-          <canvas id="memoCanvas" width="520" height="900"></canvas>
         </div>
-      </aside>
-    </main>
-  </div>
 
-  <script src="questions.js"></script>
-  <script src="app.js"></script>
+        <!-- フィードバック -->
+        <div id="feedback" class="feedback"></div>
+
+        <!-- 操作 -->
+        <div>
+          <button onclick="nextQuestion()">次へ</button>
+          <button onclick="skipQuestion()">飛ばす</button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="questions.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
