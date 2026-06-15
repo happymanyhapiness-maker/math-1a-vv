@@ -1,150 +1,119 @@
-const STORAGE_KEY = "kyotsu_app_v12";
-const HISTORY_VISIBLE = 5;
-
-let state = {
-  index: 0,
-  correct: 0,
-  total: 0,
-  wrong: [],
-  tipList: [],
-  mode: "normal",
-  strict: false,
-  timer: null,
-  remaining: 0,
-  history: [],
-  stopHintShown: false
-};
-
-const stats = {
-  weakness: {
-    "計算精度": 0,
-    "方針切替": 0,
-    "時間判断": 0,
-    "時間不足": 0
-  },
-  stage: {
-    "第1問": { t: 0, c: 0 },
-    "第2問": { t: 0, c: 0 },
-    "第3問": { t: 0, c: 0 },
-    "第4問": { t: 0, c: 0 }
-  }
-};
-
 const el = (id) => document.getElementById(id);
+
+let index = 0;
+let correct = 0;
+let total = 0;
+
+let timer = null;
+let remaining = 0;
 
 /* =========================
    問題取得
 ========================= */
-function currentList() {
-  if (state.mode === "review") return state.wrong;
-  if (state.mode === "tips") return state.tipList;
-  return questions;
-}
-
-function currentQuestion() {
-  return currentList()[state.index];
+function getQuestion(){
+  return questions[index];
 }
 
 /* =========================
-   表示（修正版）
+   表示
 ========================= */
-function formatQuestionNumber(num) {
-  const marks = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
-  return marks[num-1] || `(${num})`;
+function formatNum(n){
+  return ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"][n-1] || n;
 }
 
-/* ✅ここ完全修正版 */
-function updateProgressUI(q) {
-  if (el("qStageLabel")) {
-    el("qStageLabel").innerText =
-      `${q.stage}${formatQuestionNumber(q.num || 1)}`;
+function updateUI(q){
+  if(el("qStageLabel")){
+    el("qStageLabel").innerText = q.stage + formatNum(q.num);
   }
 
-  if (el("qScoreLabel")) {
-    el("qScoreLabel").innerText = `配点:${q.score}点`;
+  if(el("qScoreLabel")){
+    el("qScoreLabel").innerText = "配点:" + q.score + "点";
   }
 
-  if (el("qWeakLabel")) {
-    el("qWeakLabel").innerText = `弱点:${q.weakness}`;
+  if(el("qWeakLabel")){
+    el("qWeakLabel").innerText = "弱点:" + q.weakness;
   }
 
-  if (el("progressLabel")) {
-    el("progressLabel").innerText =
-      `${state.index + 1} / ${currentList().length}`;
+  if(el("progressLabel")){
+    el("progressLabel").innerText = (index+1) + " / " + questions.length;
   }
 }
 
 /* =========================
    タイマー
 ========================= */
-function timeLimit(q){
-  return q.time || 40;
-}
-
 function resetTimer(){
-  clearInterval(state.timer);
-  const q = currentQuestion();
-  state.remaining = timeLimit(q);
+  clearInterval(timer);
+  remaining = getQuestion().time || 40;
 
   if(el("timer")){
-    el("timer").innerText = state.remaining + "s";
+    el("timer").innerText = remaining + "s";
     el("timer").className = "timer";
   }
 }
 
-function startQuestionTimer(){
-  if(el("questionStartBox")) el("questionStartBox").style.display = "none";
+function startTimer(){
+
+  const box = el("questionStartBox");
+  if(box) box.style.display = "none";
 
   document.querySelectorAll(".option").forEach(b=>{
     b.disabled = false;
   });
 
-  clearInterval(state.timer);
+  clearInterval(timer);
 
-  state.timer = setInterval(()=>{
-    state.remaining--;
+  timer = setInterval(()=>{
+    remaining--;
 
     if(el("timer")){
-      el("timer").innerText = state.remaining + "s";
+      el("timer").innerText = remaining + "s";
 
-      if(state.remaining<=10){
+      if(remaining <= 10){
         el("timer").className = "timer danger";
-      } else if(state.remaining<=20){
+      } else if(remaining <= 20){
         el("timer").className = "timer warning";
       } else {
         el("timer").className = "timer";
       }
     }
 
-    if(state.remaining<=0){
-      clearInterval(state.timer);
-      timeoutQuestion();
+    if(remaining <= 0){
+      clearInterval(timer);
+      timeout();
     }
+
   },1000);
 }
 
 /* =========================
-   問題表示
+   問題描画
 ========================= */
-function show(){
-  const q = currentQuestion();
+function render(){
+  const q = getQuestion();
   if(!q) return;
 
-  updateProgressUI(q);
+  updateUI(q);
 
   if(el("questionText")){
-    el("questionText").innerHTML =
-      `<div>${q.q}</div>`;
+    el("questionText").innerHTML = q.q;
   }
 
   const box = el("optionsBox");
+  if(!box) return;
+
   box.innerHTML = "";
+  box.classList.add("disabled");
 
   q.a.forEach((c,i)=>{
     const b = document.createElement("button");
     b.className = "option";
     b.innerText = c;
-    b.onclick = ()=>answer(i);
+
+    b.onclick = ()=>{
+      answer(i);
+    };
+
     b.disabled = true;
     box.appendChild(b);
   });
@@ -156,51 +125,79 @@ function show(){
    回答
 ========================= */
 function answer(i){
-  const q = currentQuestion();
-  clearInterval(state.timer);
+  clearInterval(timer);
 
-  state.total++;
+  total++;
+
+  const q = getQuestion();
 
   if(i === q.correct){
-    state.correct++;
+    correct++;
   }
 
   document.querySelectorAll(".option").forEach((b,idx)=>{
     b.disabled = true;
-    if(idx===q.correct) b.classList.add("correct");
-    if(idx===i && idx!==q.correct) b.classList.add("wrong");
+
+    if(idx === q.correct){
+      b.classList.add("correct");
+    }
+
+    if(idx === i && idx !== q.correct){
+      b.classList.add("wrong");
+    }
   });
+
+  if(el("nextBtn")){
+    el("nextBtn").style.display = "inline-block";
+  }
 }
 
 /* =========================
-   次
+   次へ
 ========================= */
-function nextQuestion(){
-  state.index++;
-  show();
+function next(){
+  index++;
+  render();
 }
 
 /* =========================
-   タイムアウト
+   時間切れ
 ========================= */
-function timeoutQuestion(){
-  const q = currentQuestion();
+function timeout(){
+  const q = getQuestion();
 
   document.querySelectorAll(".option").forEach((b,idx)=>{
     b.disabled = true;
-    if(idx===q.correct) b.classList.add("correct");
+    if(idx === q.correct){
+      b.classList.add("correct");
+    }
   });
+
+  if(el("nextBtn")){
+    el("nextBtn").style.display = "inline-block";
+  }
+}
+
+/* =========================
+   スタート
+========================= */
+function start(){
+
+  index = 0;
+  correct = 0;
+  total = 0;
+
+  if(el("controlPanel")) el("controlPanel").style.display = "none";
+  if(el("questionPanel")) el("questionPanel").style.display = "block";
+  if(el("examTopbar")) el("examTopbar").style.display = "flex";
+
+  render();
 }
 
 /* =========================
    ボタン
 ========================= */
-if(el("startExamBtn")) el("startExamBtn").onclick = ()=>{
-  state.index=0;
-  state.correct=0;
-  state.total=0;
-  show();
-};
-
-if(el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
-if(el("nextBtn")) el("nextBtn").onclick = nextQuestion;
+if(el("startExamBtn")) el("startExamBtn").onclick = start;
+if(el("startQuestionBtn")) el("startQuestionBtn").onclick = startTimer;
+if(el("nextBtn")) el("nextBtn").onclick = next;
+if(el("skipQuestionBtn")) el("skipQuestionBtn").onclick = next;
