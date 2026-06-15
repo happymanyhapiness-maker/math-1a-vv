@@ -1,4 +1,4 @@
-const STORAGE_KEY = "kyotsu_app_v11";
+const STORAGE_KEY = "kyotsu_app_v12";
 const HISTORY_VISIBLE = 5;
 
 let state = {
@@ -11,7 +11,8 @@ let state = {
   strict: false,
   timer: null,
   remaining: 0,
-  history: []
+  history: [],
+  stopHintShown: false
 };
 
 const stats = {
@@ -36,10 +37,9 @@ const el = (id) => document.getElementById(id);
 ========================= */
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, stats }));
-  const saveStatus = el("saveStatus");
-  if (saveStatus) {
+  if (el("saveStatus")) {
     const now = new Date().toLocaleTimeString("ja-JP");
-    saveStatus.innerText = `保存状態: 保存済み（${now}）`;
+    el("saveStatus").innerText = `保存状態: 保存済み（${now}）`;
   }
 }
 
@@ -50,7 +50,6 @@ function load() {
     const obj = JSON.parse(raw);
     if (obj.state) Object.assign(state, obj.state);
     if (obj.stats) Object.assign(stats, obj.stats);
-
     if (!Array.isArray(state.history)) state.history = [];
     if (!Array.isArray(state.wrong)) state.wrong = [];
     if (!Array.isArray(state.tipList)) state.tipList = [];
@@ -89,6 +88,7 @@ function exitExamMode() {
   if (el("controlPanel")) el("controlPanel").style.display = "block";
   if (el("questionPanel")) el("questionPanel").style.display = "none";
   if (el("resultBox")) el("resultBox").style.display = "none";
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
   document.body.classList.remove("exam-mode");
 }
 
@@ -113,15 +113,14 @@ function update() {
 
   if (el("wCalc")) el("wCalc").innerText = stats.weakness["計算精度"] || 0;
   if (el("wSwitch")) el("wSwitch").innerText = stats.weakness["方針切替"] || 0;
-  if (el("wJudge")) el("wJudge").innerText = stats.weakness["時間判断"] || 0;
   if (el("wTime")) el("wTime").innerText = stats.weakness["時間不足"] || 0;
+  if (el("wJudge")) el("wJudge").innerText = stats.weakness["時間判断"] || 0;
   if (el("topWeak")) el("topWeak").innerText = topWeak();
 
   ["第1問", "第2問", "第3問", "第4問"].forEach((stage, i) => {
     const s = stats.stage[stage];
     const r = s.t ? Math.round((s.c / s.t) * 100) : 0;
-    const target = el("stageRate" + i);
-    if (target) target.innerText = r + "%";
+    if (el("stageRate" + i)) el("stageRate" + i).innerText = r + "%";
   });
 
   if (el("todayReviewCount")) el("todayReviewCount").innerText = state.wrong.length;
@@ -160,15 +159,14 @@ function addHistory() {
 }
 
 function renderHistory() {
-  const box = el("historyBox");
-  if (!box) return;
+  if (!el("historyBox")) return;
 
   if (!state.history.length) {
-    box.innerHTML = `<div class="history-item">まだ履歴がありません。</div>`;
+    el("historyBox").innerHTML = `<div class="history-item">まだ履歴がありません。</div>`;
     return;
   }
 
-  box.innerHTML = state.history
+  el("historyBox").innerHTML = state.history
     .map(
       (e) => `
       <div class="history-item">
@@ -183,13 +181,25 @@ function renderHistory() {
 /* =========================
    タイマー
 ========================= */
-function timeLimit() {
-  return state.strict ? 30 : 60;
+function defaultTimeByStage(stage) {
+  if (stage === "第1問") return 35;
+  if (stage === "第2問") return 55;
+  if (stage === "第3問") return 60;
+  if (stage === "第4問") return 45;
+  return 60;
+}
+
+function timeLimit(question) {
+  if (!question) return state.strict ? 30 : 60;
+  const base = question.time || defaultTimeByStage(question.stage);
+  return state.strict ? Math.max(20, Math.floor(base * 0.7)) : base;
 }
 
 function resetTimer() {
   clearInterval(state.timer);
-  state.remaining = timeLimit();
+  const q = currentQuestion();
+  state.remaining = timeLimit(q);
+
   if (el("timer")) {
     el("timer").innerText = state.remaining + "s";
     el("timer").className = "timer";
@@ -207,12 +217,17 @@ function startQuestionTimer() {
   clearInterval(state.timer);
   state.timer = setInterval(() => {
     state.remaining--;
-    if (el("timer")) el("timer").innerText = state.remaining + "s";
 
     if (el("timer")) {
-      if (state.remaining <= 10) el("timer").className = "timer danger";
-      else if (state.remaining <= 20) el("timer").className = "timer warning";
-      else el("timer").className = "timer";
+      el("timer").innerText = state.remaining + "s";
+
+      if (state.remaining <= 10) {
+        el("timer").className = "timer danger";
+      } else if (state.remaining <= 20) {
+        el("timer").className = "timer warning";
+      } else {
+        el("timer").className = "timer";
+      }
     }
 
     if (state.remaining <= 0) {
@@ -244,6 +259,39 @@ function explainHTML(q, ok) {
 }
 
 /* =========================
+   表示補助
+========================= */
+function formatQuestionNumber(num) {
+  const marks = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+  return marks[num - 1] || `(${num})`;
+}
+
+function updateProgressUI(q) {
+  if (el("qStageLabel")) {
+    el("qStageLabel").innerText = `${q.stage}${formatQuestionNumber(q.num || 1)}`;
+  }
+  if (el("qScoreLabel")) el("qScoreLabel").innerText = `配点 ${q.score}点`;
+  if (el("qWeakLabel")) el("qWeakLabel").innerText = `弱点軸: ${q.weakness}`;
+  if (el("qModeLabel")) {
+    el("qModeLabel").innerText =
+      state.mode === "review" ? "復習モード" :
+      state.mode === "tips" ? "TIPS復習" :
+      "本番モード";
+  }
+  if (el("progressLabel")) {
+    el("progressLabel").innerText = `${state.index + 1} / ${currentList().length}`;
+  }
+}
+
+function maybeShowStopGuide() {
+  if (state.total >= 10 && !state.stopHintShown && el("stopGuide")) {
+    state.stopHintShown = true;
+    el("stopGuide").style.display = "block";
+    el("stopGuide").innerHTML = "ここで一度休憩がおすすめです。今日は10問到達しました。";
+  }
+}
+
+/* =========================
    問題表示
 ========================= */
 function show() {
@@ -254,22 +302,15 @@ function show() {
   }
 
   enterExamMode();
+  updateProgressUI(q);
 
   if (el("questionText")) {
     el("questionText").innerHTML = `
-      <div style="font-weight:bold; margin-bottom:6px;">${state.mode === "tips" ? "TIPSだけ復習" : q.stage}</div>
+      <div style="font-weight:bold; margin-bottom:6px;">
+        ${state.mode === "tips" ? "TIPSだけ復習" : `${q.stage}${formatQuestionNumber(q.num || 1)}`}
+      </div>
       <div>${q.q}</div>
     `;
-  }
-
-  if (el("qStageLabel")) el("qStageLabel").innerText = q.stage;
-  if (el("qScoreLabel")) el("qScoreLabel").innerText = `配点 ${q.score}点`;
-  if (el("qWeakLabel")) el("qWeakLabel").innerText = `弱点軸: ${q.weakness}`;
-  if (el("qModeLabel")) {
-    el("qModeLabel").innerText =
-      state.mode === "review" ? "復習モード" :
-      state.mode === "tips" ? "TIPS復習" :
-      "本番モード";
   }
 
   if (el("svgBox")) el("svgBox").innerHTML = q.svg || "";
@@ -301,6 +342,9 @@ function show() {
   }
   if (el("questionStartBox")) {
     el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
+  }
+  if (el("stopGuide") && !state.stopHintShown) {
+    el("stopGuide").style.display = "none";
   }
 
   resetTimer();
@@ -355,6 +399,7 @@ function answer(i) {
   if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
   if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
 
+  maybeShowStopGuide();
   update();
   save();
 }
@@ -390,6 +435,7 @@ function timeoutQuestion() {
   if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
   if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
 
+  maybeShowStopGuide();
   update();
   save();
 }
@@ -418,12 +464,13 @@ function skipQuestion() {
   if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
   if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
 
+  maybeShowStopGuide();
   update();
   save();
 }
 
 /* =========================
-   終了 / モード
+   次 / 終了
 ========================= */
 function nextQuestion() {
   state.index++;
@@ -447,6 +494,9 @@ function finish() {
   save();
 }
 
+/* =========================
+   モード
+========================= */
 function startExam() {
   state.index = 0;
   state.correct = 0;
@@ -454,6 +504,8 @@ function startExam() {
   state.wrong = [];
   state.tipList = [];
   state.mode = "normal";
+  state.stopHintShown = false;
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
   show();
 }
 
@@ -469,6 +521,8 @@ function startWrongOnlyReview() {
   }
   state.mode = "review";
   state.index = 0;
+  state.stopHintShown = false;
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
   show();
 }
 
@@ -479,6 +533,8 @@ function startTipReview() {
   }
   state.mode = "tips";
   state.index = 0;
+  state.stopHintShown = false;
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
   show();
 }
 
@@ -490,9 +546,7 @@ function toggleStrictTime() {
   save();
 }
 
-/* =========================
-   ボタン接続
-========================= */
+/* ボタン */
 if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
 if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
 if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
