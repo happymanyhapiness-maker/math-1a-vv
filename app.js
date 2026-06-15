@@ -1,3 +1,5 @@
+const STORAGE_KEY = "kyotsu_math_ia_v3";
+
 let state = {
   i: 0,
   total: 0,
@@ -5,14 +7,15 @@ let state = {
   review: false,
   wrong: [],
   wrongSet: new Set(),
-  finishedWrong: new Set(),
+  solvedWrong: new Set(),
   timerId: null,
-  remaining: 60
+  remaining: 60,
+  uiMode: "normal",   // normal / exam
+  strictTime: false
 };
-let uiMode = "normal"; // normal / exam
-let strictTime = false;
+
 /* =========================
-   要素取得
+   要素
 ========================= */
 const el = {
   correctCnt: document.getElementById("correctCnt"),
@@ -72,10 +75,9 @@ const el = {
   resetStatsBtn: document.getElementById("resetStatsBtn"),
   clearSavedDataBtn: document.getElementById("clearSavedDataBtn"),
 
-  memoCanvas: document.getElementById("memoCanvas")
+  memoCanvas: document.getElementById("memoCanvas"),
+  saveStatus: document.getElementById("saveStatus")
 };
-
-const STORAGE_KEY = "kyotsu_math_ia_v2";
 
 /* =========================
    統計
@@ -101,20 +103,19 @@ const stats = {
 };
 
 /* =========================
-   保存
+   保存 / 読込
 ========================= */
 function save() {
   const data = {
     state: {
       ...state,
       wrongSet: [...state.wrongSet],
-      finishedWrong: [...state.finishedWrong]
+      solvedWrong: [...state.solvedWrong]
     },
     stats
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  const saveStatus = document.getElementById("saveStatus");
-  if (saveStatus) saveStatus.textContent = "保存状態: 自動保存済み";
+  if (el.saveStatus) el.saveStatus.textContent = "保存状態: 自動保存済み";
 }
 
 function load() {
@@ -123,16 +124,14 @@ function load() {
 
   try {
     const data = JSON.parse(raw);
-
     if (data.state) {
       state = {
         ...state,
         ...data.state,
         wrongSet: new Set(data.state.wrongSet || []),
-        finishedWrong: new Set(data.state.finishedWrong || [])
+        solvedWrong: new Set(data.state.solvedWrong || [])
       };
     }
-
     if (data.stats) {
       Object.assign(stats, data.stats);
     }
@@ -158,8 +157,8 @@ function updateTopWeak() {
 }
 
 function updateStageRates() {
-  const map = ["第1問", "第2問", "第3問", "第4問"];
-  map.forEach((stageName, idx) => {
+  const stageNames = ["第1問", "第2問", "第3問", "第4問"];
+  stageNames.forEach((stageName, idx) => {
     const s = stats.stage[stageName];
     const rate = s.total === 0 ? 0 : Math.round((s.correct / s.total) * 100);
     el[`stageRate${idx}`].textContent = `${rate}%`;
@@ -185,10 +184,21 @@ function addHistory(text) {
     time: new Date().toLocaleString("ja-JP"),
     text
   });
+
   if (stats.history.length > 50) {
     stats.history = stats.history.slice(0, 50);
   }
   updateHistory();
+}
+
+function updateProgress() {
+  const list = getCurrentList();
+  if (!list.length) {
+    el.progressInner.style.width = "0%";
+    return;
+  }
+  const pct = Math.round((state.i / list.length) * 100);
+  el.progressInner.style.width = `${pct}%`;
 }
 
 function updateDashboard() {
@@ -205,35 +215,45 @@ function updateDashboard() {
   el.wCalc.textContent = stats.weakness["計算精度"];
   el.wSwitch.textContent = stats.weakness["方針切替"];
   el.wTime.textContent = stats.weakness["時間不足"];
-
   updateTopWeak();
+
   updateStageRates();
 
   el.todayReviewCount.textContent = stats.todayReviewCount;
   el.reviewRate.textContent =
     stats.reviewTotal === 0 ? "0%" : `${Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%`;
   el.clearedCount.textContent = stats.solvedWrongCount;
+
+  el.toggleExamUiBtn.textContent =
+    state.uiMode === "normal" ? "本番UIに切り替え" : "通常UIに戻す";
+
+  el.toggleStrictTimeBtn.textContent =
+    state.strictTime ? "制限時間: 厳格" : "制限時間: 通常";
 }
 
-function updateProgress() {
-  const list = getCurrentList();
-  if (!list.length) {
-    el.progressInner.style.width = "0%";
-    return;
-  }
-  const pct = Math.round(((state.i) / list.length) * 100);
-  el.progressInner.style.width = `${pct}%`;
+/* =========================
+   UI切り替え
+========================= */
+function applyUiMode() {
+  document.body.classList.toggle("real-exam-ui", state.uiMode === "exam");
 }
 
+function goTop() {
+  clearInterval(state.timerId);
+  document.body.classList.remove("exam-mode");
+  el.questionPanel.style.display = "none";
+  el.resultBox.style.display = "none";
+}
+
+/* =========================
+   問題表示
+========================= */
 function resetFeedback() {
   el.feedback.className = "feedback";
   el.feedback.style.display = "none";
   el.feedback.innerHTML = "";
 }
 
-/* =========================
-   表示
-========================= */
 function show() {
   const q = getCurrentQuestion();
   if (!q) return;
@@ -247,6 +267,7 @@ function show() {
   el.qModeLabel.textContent = state.review ? "復習モード" : "本番モード";
 
   el.questionText.innerHTML = q.q;
+  document.getElementById("svgBox").innerHTML = q.svg || "";
 
   el.optionsBox.innerHTML = q.a.map((choice, idx) => `
     <button class="option" data-index="${idx}">
@@ -261,17 +282,48 @@ function show() {
   resetFeedback();
   el.nextBtn.style.display = "none";
 
-
-if(strictTime){
-  state.remaining = 30; // 厳しくする
-}else{
-  state.remaining = state.review ? 40 : 60;
-}
-
   startTimer();
   updateProgress();
   updateDashboard();
   save();
+
+  if (!state.review) {
+    document.body.classList.add("exam-mode");
+  }
+}
+
+/* =========================
+   タイマー
+========================= */
+function getBaseTime() {
+  if (state.strictTime) return 30;
+  return state.review ? 40 : 60;
+}
+
+function startTimer() {
+  clearInterval(state.timerId);
+
+  state.remaining = getBaseTime();
+  el.timer.className = "timer";
+  el.timer.textContent = `${state.remaining}s`;
+
+  state.timerId = setInterval(() => {
+    state.remaining -= 1;
+    el.timer.textContent = `${state.remaining}s`;
+
+    if (state.remaining <= 10) {
+      el.timer.className = "timer danger";
+    } else if (state.remaining <= 20) {
+      el.timer.className = "timer warning";
+    } else {
+      el.timer.className = "timer";
+    }
+
+    if (state.remaining <= 0) {
+      clearInterval(state.timerId);
+      timeoutQuestion();
+    }
+  }, 1000);
 }
 
 /* =========================
@@ -288,7 +340,7 @@ function answer(index, buttonEl) {
   state.total++;
   stats.stage[q.stage].total++;
 
-  const elapsed = 60 - state.remaining;
+  const elapsed = getBaseTime() - state.remaining;
   stats.times.push(elapsed > 0 ? elapsed : 1);
 
   const ok = index === q.correct;
@@ -303,8 +355,8 @@ function answer(index, buttonEl) {
 
     if (state.review) {
       stats.reviewCorrect++;
-      if (!state.finishedWrong.has(q.id)) {
-        state.finishedWrong.add(q.id);
+      if (!state.solvedWrong.has(q.id)) {
+        state.solvedWrong.add(q.id);
         stats.solvedWrongCount++;
       }
       state.wrong = state.wrong.filter(item => item.id !== q.id);
@@ -336,113 +388,6 @@ function answer(index, buttonEl) {
   save();
 }
 
-function nextQuestion() {
-  state.i++;
-
-  if (state.review) {
-    if (state.i >= state.wrong.length) {
-      finishReview();
-      return;
-    }
-  } else {
-    if (state.i >= questions.length) {
-      finishExam();
-      return;
-    }
-  }
-
-  show();
-}
-
-function skipQuestion() {
-  clearInterval(state.timerId);
-  const q = getCurrentQuestion();
-  if (!q) return;
-
-  state.total++;
-  stats.weakness["時間不足"]++;
-  stats.stage[q.stage].total++;
-  stats.times.push(60 - state.remaining > 0 ? 60 - state.remaining : 1);
-
-  if (!state.review && !state.wrongSet.has(q.id)) {
-    state.wrong.push(q);
-    state.wrongSet.add(q.id);
-  }
-
-  el.feedback.className = "feedback ng";
-  el.feedback.style.display = "block";
-  el.feedback.innerHTML = `<strong>この設問を飛ばしました。</strong><br>${q.explain}`;
-
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
-
-  addHistory(`${q.stage} / スキップ / 弱点軸: 時間不足`);
-  updateDashboard();
-  save();
-}
-
-/* =========================
-   終了
-========================= */
-function finishExam() {
-  clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
-
-  el.questionPanel.style.display = "none";
-  el.resultBox.style.display = "block";
-  el.finalScore.textContent = `${state.correct} / ${questions.length}`;
-  el.resultSummary.innerHTML = `
-    正答率は <strong>${state.total === 0 ? 0 : Math.round((state.correct / state.total) * 100)}%</strong> でした。<br>
-    最重要課題は <strong>${el.topWeak.textContent}</strong> です。
-  `;
-  addHistory(`試験終了 / 正答 ${state.correct} / ${questions.length}`);
-  save();
-}
-
-function finishReview() {
-  clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
-
-  el.questionPanel.style.display = "none";
-  el.resultBox.style.display = "block";
-  el.finalScore.textContent = "復習完了";
-  el.resultSummary.innerHTML = `
-    復習モード正答率は <strong>${stats.reviewTotal === 0 ? 0 : Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%</strong> でした。<br>
-    完全に直した問題数は <strong>${stats.solvedWrongCount}</strong> 件です。
-  `;
-  addHistory(`復習終了 / 正答率 ${stats.reviewTotal === 0 ? 0 : Math.round((stats.reviewCorrect / stats.reviewTotal) * 100)}%`);
-  save();
-}
-
-/* =========================
-   タイマー
-========================= */
-function startTimer() {
-  clearInterval(state.timerId);
-
-  const timer = el.timer;
-  timer.className = "timer";
-  timer.textContent = `${state.remaining}s`;
-
-  state.timerId = setInterval(() => {
-    state.remaining -= 1;
-    timer.textContent = `${state.remaining}s`;
-
-    if (state.remaining <= 10) {
-      timer.className = "timer danger";
-    } else if (state.remaining <= 20) {
-      timer.className = "timer warning";
-    } else {
-      timer.className = "timer";
-    }
-
-    if (state.remaining <= 0) {
-      clearInterval(state.timerId);
-      timeoutQuestion();
-    }
-  }, 1000);
-}
-
 function timeoutQuestion() {
   const q = getCurrentQuestion();
   if (!q) return;
@@ -450,7 +395,7 @@ function timeoutQuestion() {
   state.total++;
   stats.weakness["時間不足"]++;
   stats.stage[q.stage].total++;
-  stats.times.push(60);
+  stats.times.push(getBaseTime());
 
   if (state.review) {
     stats.reviewTotal++;
@@ -461,166 +406,3 @@ function timeoutQuestion() {
 
   el.feedback.className = "feedback ng";
   el.feedback.style.display = "block";
-  el.feedback.innerHTML = `<strong>時間切れです。</strong><br>${q.explain}`;
-
-  document.querySelectorAll(".option").forEach(btn => btn.disabled = true);
-  el.nextBtn.style.display = "inline-block";
-
-  addHistory(`${q.stage} / 時間切れ / 弱点軸: 時間不足`);
-  updateDashboard();
-  save();
-}
-
-/* =========================
-   メモ
-========================= */
-const canvas = el.memoCanvas;
-const ctx = canvas.getContext("2d");
-
-ctx.strokeStyle = "#000";
-ctx.lineWidth = 3;
-ctx.lineCap = "round";
-
-let drawing = false;
-
-canvas.addEventListener("mousedown", e => {
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(e.offsetX, e.offsetY);
-});
-
-canvas.addEventListener("mousemove", e => {
-  if (!drawing) return;
-  ctx.lineTo(e.offsetX, e.offsetY);
-  ctx.stroke();
-});
-
-window.addEventListener("mouseup", () => {
-  drawing = false;
-});
-
-/* touch */
-canvas.addEventListener("touchstart", e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const x = e.touches[0].clientX - rect.left;
-  const y = e.touches[0].clientY - rect.top;
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-}, { passive:false });
-
-canvas.addEventListener("touchmove", e => {
-  e.preventDefault();
-  if (!drawing) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = e.touches[0].clientX - rect.left;
-  const y = e.touches[0].clientY - rect.top;
-  ctx.lineTo(x, y);
-  ctx.stroke();
-}, { passive:false });
-
-window.addEventListener("touchend", () => {
-  drawing = false;
-});
-
-/* =========================
-   操作
-========================= */
-function startExam() {
-  state.review = false;
-  state.i = 0;
-  document.body.classList.add("exam-mode");
-  show();
-}
-
-function startWrongOnlyReview() {
-  if (state.wrong.length === 0) {
-    alert("再挑戦できる間違い問題がありません。");
-    return;
-  }
-
-  state.review = true;
-  state.i = 0;
-  stats.todayReviewCount += state.wrong.length;
-  document.body.classList.add("exam-mode");
-  show();
-}
-
-function resumeExam() {
-  document.body.classList.add("exam-mode");
-  show();
-}
-
-function goTop() {
-  clearInterval(state.timerId);
-  document.body.classList.remove("exam-mode");
-  el.questionPanel.style.display = "none";
-  el.resultBox.style.display = "none";
-}
-
-function clearMemo() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function toggleMemo() {
-  canvas.style.display = canvas.style.display === "none" ? "block" : "block";
-}
-
-function resetStats() {
-  localStorage.removeItem(STORAGE_KEY);
-  location.reload();
-}
-
-function clearSavedData() {
-  localStorage.removeItem(STORAGE_KEY);
-  location.reload();
-}
-
-/* =========================
-   イベント
-========================= */
-el.startExamBtn.addEventListener("click", startExam);
-el.resumeExamBtn.addEventListener("click", resumeExam);
-el.startWrongOnlyReviewBtn.addEventListener("click", startWrongOnlyReview);
-el.startWrongOnlyReviewBtn2.addEventListener("click", startWrongOnlyReview);
-
-el.nextBtn.addEventListener("click", nextQuestion);
-el.skipQuestionBtn.addEventListener("click", skipQuestion);
-
-el.goTopBtn.addEventListener("click", goTop);
-el.goTopBtn2.addEventListener("click", goTop);
-el.goTopBtn3.addEventListener("click", goTop);
-
-el.clearMemoBtn.addEventListener("click", clearMemo);
-el.toggleMemoBtn.addEventListener("click", toggleMemo);
-
-el.resetStatsBtn.addEventListener("click", resetStats);
-el.clearSavedDataBtn.addEventListener("click", clearSavedData);
-
-el.toggleExamUiBtn.addEventListener("click", () => {
-  if(uiMode === "normal"){
-    document.body.classList.add("real-exam-ui");
-    uiMode = "exam";
-  }else{
-    document.body.classList.remove("real-exam-ui");
-    uiMode = "normal";
-  }
-});
-
-el.toggleStrictTimeBtn.addEventListener("click", () => {
-  strictTime = !strictTime;
-
-  el.toggleStrictTimeBtn.textContent =
-    strictTime ? "制限時間: 厳格" : "制限時間: 通常";
-});
-
-/* 使わないけど落ちないように */
-el.toggleExamUiBtn.addEventListener("click", () => {});
-el.toggleStrictTimeBtn.addEventListener("click", () => {});
-
-/* 初期化 */
-load();
-updateDashboard();
-updateHistory();
-goTop();
