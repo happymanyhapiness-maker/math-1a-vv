@@ -356,3 +356,23 @@ body.exam-mode .main-layout{
 .timer.danger{
   color:#ef4444;
 }
+.day-guide{
+  margin-top:12px;
+  padding:10px 12px;
+  background:#f8fafc;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  font-size:12px;
+  color:#374151;
+}
+
+.stop-guide{
+  display:none;
+  padding:10px 12px;
+  background:#fff7ed;
+  border:1px solid #fdba74;
+  border-radius:10px;
+  color:#9a3412;
+  font-size:13px;
+  line-height:1.6;
+}
