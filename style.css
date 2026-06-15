@@ -596,3 +596,50 @@ body.real-exam-ui .pill{
     justify-content:flex-start;
   }
 }
+/* =========================
+   ✅ ヘッダー右上崩れ完全修正
+========================= */
+
+/* ヘッダー全体の余裕を作る */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+/* 左（タイトル）は伸縮OK */
+.brand{
+  flex:1;
+  min-width:0;
+}
+
+/* タイトルは1行に収める（重要） */
+.brand h1{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* 右側は絶対潰れないよう固定 */
+.top-stats{
+  flex-shrink:0;      /* ←最重要 */
+  width:180px;        /* 少しコンパクトに */
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+}
+
+/* カードを小さく */
+.stat-card{
+  padding:4px 6px;
+}
+
+.stat-label{
+  font-size:9px;
+}
+
+.stat-value{
+  font-size:15px;
+  font-weight:800;
+}
