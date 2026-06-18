@@ -12,6 +12,7 @@ let state = {
   timer: null,
   remaining: 0,
   history: [],
+lastShuffle: {},   // ✅ ここ追加
   stopHintShown: false
 };
 
@@ -51,6 +52,25 @@ function shuffleArray(array){
   }
 
   return arr;
+}
+function shuffleWithHistory(q){
+  let shuffled;
+
+  const prev = state.lastShuffle[q.id];
+
+  do {
+    shuffled = shuffleArray(q.a).map(x=>x.index);
+  } while (
+    prev && JSON.stringify(prev) === JSON.stringify(shuffled)
+  );
+
+  // 保存
+  state.lastShuffle[q.id] = shuffled;
+
+  return shuffled.map(i=>({
+    value: q.a[i],
+    index: i
+  }));
 }
 
 function load() {
@@ -332,7 +352,7 @@ if (box) {
   if (state.mode !== "tips") {
 
     // ✅ シャッフル
-    const shuffled = shuffleArray(q.a);
+    const shuffled = shuffleWithHistory(q);
 
     shuffled.forEach((item, i) => {
       const b = document.createElement("button");
