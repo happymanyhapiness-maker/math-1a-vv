@@ -354,18 +354,21 @@ if (box) {
     // ✅ シャッフル
     const shuffled = shuffleWithHistory(q);
 
-    shuffled.forEach((item, i) => {
-      const b = document.createElement("button");
-      b.className = "option";
-      b.innerText = item.value;
+shuffled.forEach((item, i) => {
+  const b = document.createElement("button");
+  b.className = "option";
+  b.innerText = item.value;
 
-      // ✅ 元の正解indexで判定
-      b.onclick = () => answer(item.index);
+  // ✅ 元の位置を保存
+  b.dataset.index = item.index;
 
-      b.disabled = true;
+  // ✅ 正解判定用
+  b.onclick = () => answer(item.index);
 
-      box.appendChild(b);
-    });
+  b.disabled = true;
+
+  box.appendChild(b);
+});
   }
 }  // ← ✅ ここでしっかり閉じる
 
@@ -419,21 +422,25 @@ function answer(i) {
     stats.stage[q.stage].c++;
   } else {
     stats.weakness[q.weakness] = (stats.weakness[q.weakness] || 0) + 1;
-
-    if (!state.wrong.find((qq) => qq.id === q.id)) {
-      state.wrong.push(q);
-    }
-    if (!state.tipList.find((qq) => qq.id === q.id)) {
-      state.tipList.push(q);
-    }
   }
 
-  document.querySelectorAll(".option").forEach((b, idx) => {
+  document.querySelectorAll(".option").forEach((b) => {
     b.disabled = true;
-    if (idx === q.correct) b.classList.add("correct");
-    if (idx === i && idx !== q.correct) b.classList.add("wrong");
+
+    const originalIndex = Number(b.dataset.index);
+
+    // ✅ 正解表示
+    if (originalIndex === q.correct) {
+      b.classList.add("correct");
+    }
+
+    // ✅ 間違い表示
+    if (originalIndex === i && originalIndex !== q.correct) {
+      b.classList.add("wrong");
+    }
   });
 
+  // ✅ ←これ全部中に戻す
   if (el("feedback")) {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = explainHTML(q, ok);
