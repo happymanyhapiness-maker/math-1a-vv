@@ -42,6 +42,16 @@ function save() {
     el("saveStatus").innerText = `保存状態: 保存済み（${now}）`;
   }
 }
+function shuffleArray(array){
+  const arr = array.map((v,i)=>({value:v, index:i}));
+
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+
+  return arr;
+}
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -314,22 +324,32 @@ function show() {
 
   if (el("svgBox")) el("svgBox").innerHTML = q.svg || "";
 
-  const box = el("optionsBox");
-  if (box) {
-    box.innerHTML = "";
-    box.classList.add("disabled");
+const box = el("optionsBox");
+if (box) {
+  box.innerHTML = "";
+  box.classList.add("disabled");
 
-    if (state.mode !== "tips") {
-      q.a.forEach((c, i) => {
-        const b = document.createElement("button");
-        b.className = "option";
-        b.innerText = c;
-        b.onclick = () => answer(i);
-        b.disabled = true;
-        box.appendChild(b);
-      });
-    }
+  if (state.mode !== "tips") {
+
+    // ✅ シャッフル
+    const shuffled = shuffleArray(q.a);
+
+    shuffled.forEach((item, i) => {
+      const b = document.createElement("button");
+      b.className = "option";
+      b.innerText = item.value;
+
+      // ✅ 元の正解indexで判定
+      b.onclick = () => answer(item.index);
+
+      b.disabled = true;
+
+      box.appendChild(b);
+    });
   }
+}  // ← ✅ ここでしっかり閉じる
+
+// 👇 ここからは外側
 
   if (el("feedback")) {
     el("feedback").style.display = "none";
