@@ -7,13 +7,15 @@ let state = {
   total: 0,
   wrong: [],
   tipList: [],
-  mode: "normal", // normal / review / tips
+  mode: "normal",
   strict: false,
   timer: null,
   remaining: 0,
   history: [],
-lastShuffle: {},   // ✅ ここ追加
-  stopHintShown: false
+  lastShuffle: {},
+  stopHintShown: false,
+  routeMiss: 0,
+  routeTry: 0,
 };
 
 const stats = {
@@ -258,36 +260,248 @@ function resetTimer() {
 }
 
 function startQuestionTimer() {
-  if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-  if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
+  const q = currentQuestion();
 
-  document.querySelectorAll(".option").forEach((b) => {
-    b.disabled = false;
-  });
+  const quizBox = el("routeQuizBox");
+  const routeOptions = el("routeOptions");
+  const routeFeedback = el("routeFeedback");
 
-  clearInterval(state.timer);
-  state.timer = setInterval(() => {
-    state.remaining--;
+  // route がない問題は、そのまま開始
+  if (!q.route || q.route.length === 0) {
+    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+    if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
-    if (el("timer")) {
-      el("timer").innerText = state.remaining + "s";
+    document.querySelectorAll(".option").forEach((b) => {
+      b.disabled = false;
+    });
 
-      if (state.remaining <= 10) {
-        el("timer").className = "timer danger";
-      } else if (state.remaining <= 20) {
-        el("timer").className = "timer warning";
-      } else {
-        el("timer").className = "timer";
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      state.remaining--;
+
+      if (el("timer")) {
+        el("timer").innerText = state.remaining + "s";
+        if (state.remaining <= 10) {
+          el("timer").className = "timer danger";
+        } else if (state.remaining <= 20) {
+          el("timer").className = "timer warning";
+        } else {
+          el("timer").className = "timer";
+        }
       }
-    }
 
-    if (state.remaining <= 0) {
-      clearInterval(state.timer);
-      timeoutQuestion();
-    }
-  }, 1000);
+      if (state.remaining <= 0) {
+        clearInterval(state.timer);
+        timeoutQuestion();
+      }
+    }, 1000);
+
+    return;
+  }
+
+  // route がある問題は、開始せずに方針選択UIだけ出す
+state.routeTry = 0;
+  if (quizBox) quizBox.style.display = "block";
+  if (routeOptions) routeOptions.innerHTML = "";
+  if (routeFeedback) {
+    routeFeedback.style.display = "none";
+    routeFeedback.innerHTML = "";
+  }
+if (routeOptions) routeOptions.style.display = "block";
+if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "inline-block";
+
+if (routeOptions) {
+  const guide = document.createElement("div");
+  guide.style.fontSize = "14px";
+  guide.style.color = "#555";
+  guide.style.marginBottom = "10px";
+  guide.innerText = `解き方を選んでください（${q.route.length}つ選択）`;
+  routeOptions.appendChild(guide);
+}
+const choices = [
+  "接線の長さ",
+  "角の二等分線",
+  "三平方",
+  "面積",
+  "面積→半径",
+  "方べき",
+  "平方完成",
+  "文字をそろえる",
+  "同じ量を2通りで表す"
+];
+
+choices.forEach((label) => {
+  const wrap = document.createElement("label");
+  wrap.style.display = "block";
+  wrap.style.margin = "6px 0";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.value = label;
+  checkbox.style.marginRight = "8px";
+
+  wrap.appendChild(checkbox);
+  wrap.appendChild(document.createTextNode(label));
+
+  if (routeOptions) routeOptions.appendChild(wrap);
+});
+
+if (el("submitRouteBtn")) {
+  el("submitRouteBtn").onclick = checkRouteAndStart;
 }
 
+function checkRouteAndStart() {
+  const checked = Array.from(
+    document.querySelectorAll('#routeOptions input[type="checkbox"]:checked')
+  ).map((x) => x.value);
+
+  const isCorrect =
+    checked.length === q.route.length &&
+    checked.every((x) => q.route.includes(x));
+
+  // 不正解
+  if (!isCorrect) {
+    state.routeMiss++;
+    state.routeTry++;
+
+    // 1回目ミス → チェックを外して再選択
+    if (state.routeTry === 1) {
+      document
+        .querySelectorAll('#routeOptions input[type="checkbox"]')
+        .forEach((x) => {
+          x.checked = false;
+        });
+
+      if (routeFeedback) {
+        routeFeedback.style.display = "block";
+        routeFeedback.innerHTML = `
+          <div style="color:#991b1b; font-weight:bold;">
+            方針ミス！
+          </div>
+          <div style="margin-top:8px;">
+            もう一度考えて選んでください。
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // 2回目ミス → 選択肢一覧と「方針を確定」だけ消す
+    if (routeOptions) routeOptions.style.display = "none";
+    if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
+
+    // 下の「方針を確認」ボックスも消す
+    if (el("questionStartBox")) {
+      el("questionStartBox").style.display = "none";
+    }
+
+    if (routeFeedback) {
+      routeFeedback.style.display = "block";
+      routeFeedback.innerHTML = `
+        <div style="color:#991b1b; font-weight:bold;">
+          方針ミス！
+        </div>
+        <div style="margin-top:8px;">
+          正解ルート：${q.route.join(" → ")}
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn primary" id="forceStartBtn">問題開始</button>
+        </div>
+      `;
+    }
+
+    const forceBtn = document.getElementById("forceStartBtn");
+    if (forceBtn) {
+      forceBtn.onclick = () => {
+        if (quizBox) quizBox.style.display = "none";
+        if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+        if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
+
+        document.querySelectorAll(".option").forEach((b) => {
+          b.disabled = false;
+        });
+
+        clearInterval(state.timer);
+        state.timer = setInterval(() => {
+          state.remaining--;
+
+          if (el("timer")) {
+            el("timer").innerText = state.remaining + "s";
+            if (state.remaining <= 10) {
+              el("timer").className = "timer danger";
+            } else if (state.remaining <= 20) {
+              el("timer").className = "timer warning";
+            } else {
+              el("timer").className = "timer";
+            }
+          }
+
+          if (state.remaining <= 0) {
+            clearInterval(state.timer);
+            timeoutQuestion();
+          }
+        }, 1000);
+      };
+    }
+
+    return;
+  }
+
+  // 正解
+if (routeFeedback) {
+  routeFeedback.style.display = "block";
+  routeFeedback.innerHTML = `
+    <div style="color:#166534; font-weight:bold;">
+      方針OK！
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn primary" id="forceStartBtn">問題開始</button>
+    </div>
+  `;
+}
+
+// ✅ 下の「方針確認ボックス」は消す
+if (el("questionStartBox")) {
+  el("questionStartBox").style.display = "none";
+}
+
+// ✅ ここではまだ開始しない
+
+const forceBtn = document.getElementById("forceStartBtn");
+if (forceBtn) {
+  forceBtn.onclick = () => {
+    if (quizBox) quizBox.style.display = "none";
+
+    if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
+
+    document.querySelectorAll(".option").forEach((b) => {
+      b.disabled = false;
+    });
+
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      state.remaining--;
+
+      if (el("timer")) {
+        el("timer").innerText = state.remaining + "s";
+        if (state.remaining <= 10) {
+          el("timer").className = "timer danger";
+        } else if (state.remaining <= 20) {
+          el("timer").className = "timer warning";
+        } else {
+          el("timer").className = "timer";
+        }
+      }
+
+      if (state.remaining <= 0) {
+        clearInterval(state.timer);
+        timeoutQuestion();
+      }
+    }, 1000);
+  };
+}
+}
+}
 /* =========================
    解説表示
 ========================= */
@@ -378,6 +592,13 @@ shuffled.forEach((item, i) => {
     el("feedback").style.display = "none";
     el("feedback").innerHTML = "";
   }
+if (el("routeFeedback")) {
+  el("routeFeedback").style.display = "none";
+  el("routeFeedback").innerHTML = "";
+}
+if (el("routeQuizBox")) {
+  el("routeQuizBox").style.display = "none";
+}
 
   if (el("nextBtn")) el("nextBtn").style.display = "none";
 
@@ -385,9 +606,31 @@ shuffled.forEach((item, i) => {
     el("skipQuestionBtn").style.display = state.mode === "tips" ? "none" : "inline-block";
   }
 
-  if (el("questionStartBox")) {
-    el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
+if (el("questionStartBox")) {
+  el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
+
+  if (q.route && q.route.length > 0) {
+    el("questionStartBox").innerHTML = `
+      <p class="start-text">
+        まずはこの問題の解き方（方針）を選んでください。<br>
+        方針が正しければ問題が開始されます。
+      </p>
+      <button class="btn primary" id="startQuestionBtn">方針を確認</button>
+    `;
+  } else {
+    el("questionStartBox").innerHTML = `
+      <p class="start-text">
+        準備ができたら「この問題を開始」を押してください。<br>
+        問題ごとに制限時間は変わります。
+      </p>
+      <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
+    `;
   }
+}
+
+if (el("startQuestionBtn")) {
+  el("startQuestionBtn").onclick = startQuestionTimer;
+}
 
   if (el("stopGuide") && !state.stopHintShown) {
     el("stopGuide").style.display = "none";
@@ -541,12 +784,14 @@ function finish() {
   if (el("resultBox")) el("resultBox").style.display = "block";
 
   if (el("finalScore")) el("finalScore").innerText = `${state.correct}/${state.total}`;
-  if (el("resultSummary")) {
-    el("resultSummary").innerHTML = `正答率 ${rate()}%<br>最重要課題：${topWeak()}`;
-  }
 
-  addHistory();
-  save();
+  if (el("resultSummary")) {
+    el("resultSummary").innerHTML = `
+      正答率 ${rate()}%<br>
+      最重要課題：${topWeak()}<br>
+      方針ミス回数：${state.routeMiss}
+    `;
+  }
 }
 
 /* =========================
