@@ -132,7 +132,17 @@
         <div id="questionPanel" class="card question-panel" style="display:none;">
           <div class="question-text" id="questionText"></div>
           <div id="svgBox"></div>
-
+<div id="routeQuizBox" class="route-quiz-box" style="display:none;">
+  <div class="route-title">この問題はどう解く？（先に方針を選ぶ）</div>
+  <div class="route-sub">
+    あてはまるものをすべて選んでから「方針を確定」を押してください。
+  </div>
+  <div id="routeOptions" class="route-options"></div>
+  <div class="toolbar q-toolbar">
+    <button class="btn warning" id="submitRouteBtn">方針を確定</button>
+  </div>
+  <div id="routeFeedback" class="feedback" style="display:none;"></div>
+</div>
           <div class="question-start-box" id="questionStartBox">
             <p class="start-text">
               準備ができたら「この問題を開始」を押してください。<br>
