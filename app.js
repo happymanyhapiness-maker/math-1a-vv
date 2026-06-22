@@ -341,7 +341,13 @@ function renderHistory() {
    タイマー
 ========================= */
 function timeLimit(q) {
-  return q.time || 40;
+  const base = q.time || 40;
+
+  // 厳格モード: 問題データの秒数そのまま
+  if (state.strict) return base;
+
+  // 通常モード: 図形が苦手な子向けに少し余裕を持たせる
+  return Math.ceil(base * 1.5);
 }
 
 function resetTimer() {
