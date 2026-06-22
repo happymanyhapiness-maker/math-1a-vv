@@ -318,19 +318,8 @@ if (routeOptions) {
   guide.innerText = `解き方を選んでください（${q.route.length}つ選択）`;
   routeOptions.appendChild(guide);
 }
-const choices = [
-  "接線の長さ",
-  "角の二等分線",
-  "三平方",
-  "面積",
-  "面積→半径",
-  "方べき",
-  "平方完成",
-  "文字をそろえる",
-  "同じ量を2通りで表す"
-];
-
-choices.forEach((label) => {
+// 解法カテゴリ一覧は questions.js の ROUTE_CHOICES を単一の参照元として使用
+ROUTE_CHOICES.forEach((label) => {
   const wrap = document.createElement("label");
   wrap.style.display = "block";
   wrap.style.margin = "6px 0";
