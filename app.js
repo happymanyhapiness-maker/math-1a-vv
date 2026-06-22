@@ -50,6 +50,7 @@ function defaultState(unit) {
     stopHintShown: false,
     routeMiss: 0,
     routeTry: 0,
+    finished: false,
   };
 }
 
@@ -149,6 +150,7 @@ function loadUnit(unit) {
   if (!Array.isArray(state.history)) state.history = [];
   if (!Array.isArray(state.wrong)) state.wrong = [];
   if (!Array.isArray(state.tipList)) state.tipList = [];
+  if (typeof state.finished !== "boolean") state.finished = false;
 }
 
 /* =========================
@@ -854,8 +856,11 @@ function nextQuestion() {
 function finish() {
   clearInterval(state.timer);
 
-  // 終了時に履歴へ追加
-  addHistory();
+  // すでに終了済みなら、履歴を二重追加しない
+  if (!state.finished) {
+    addHistory();
+    state.finished = true;
+  }
 
   if (el("questionPanel")) el("questionPanel").style.display = "none";
   if (el("examTopbar")) el("examTopbar").style.display = "none";
@@ -943,6 +948,9 @@ function showUnitSelect() {
 /* =========================
    モード開始
 ========================= */
+/* =========================
+   モード開始
+========================= */
 function startExam() {
   state.index = 0;
   state.correct = 0;
@@ -951,11 +959,24 @@ function startExam() {
   state.tipList = [];
   state.mode = "normal";
   state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
   if (el("stopGuide")) el("stopGuide").style.display = "none";
+
   show();
+  save();
 }
 
 function resumeExam() {
+  const list = UNIT_META[state.unit]?.questions || [];
+
+  if (state.finished || state.index >= list.length) {
+    alert("前回の試験は終了済みです。新しく始める場合は「試験開始」を押してください。");
+    return;
+  }
+
   state.mode = "normal";
   show();
 }
@@ -965,11 +986,20 @@ function startWrongOnlyReview() {
     alert("復習問題がありません");
     return;
   }
+
   state.mode = "review";
   state.index = 0;
+  state.correct = 0;
+  state.total = 0;
   state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
   if (el("stopGuide")) el("stopGuide").style.display = "none";
+
   show();
+  save();
 }
 
 function startTipReview() {
@@ -977,11 +1007,20 @@ function startTipReview() {
     alert("復習するTIPSがありません");
     return;
   }
+
   state.mode = "tips";
   state.index = 0;
+  state.correct = 0;
+  state.total = 0;
   state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
   if (el("stopGuide")) el("stopGuide").style.display = "none";
+
   show();
+  save();
 }
 
 function toggleStrictTime() {
