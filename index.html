@@ -12,9 +12,13 @@
     <header class="topbar" id="topbar">
       <div class="brand">
         <div class="brand-sub">KYOTSU TEST</div>
-        <h1>共通テスト数学ⅠA ガチ完全再現版</h1>
+        <h1 id="titleHomeBtn">共通テスト数学ⅠA ガチ完全再現版</h1>
       </div>
       <div class="top-stats">
+        <div class="stat-card">
+          <div class="stat-label">単元</div>
+          <div class="stat-value" id="currentUnitLabel" style="font-size:16px;">―</div>
+        </div>
         <div class="stat-card">
           <div class="stat-label">総正答数</div>
           <div class="stat-value" id="correctCnt">0</div>
@@ -85,10 +89,22 @@
       </aside>
 
       <section class="center-panel">
-        <div class="card control-panel" id="controlPanel">
+        <div class="card control-panel" id="unitSelectScreen">
           <div class="panel-heading">
             <div>
-              <div class="panel-note">
+              <div class="panel-note">単元を選んでください。成績・履歴は単元ごとに記録されます。</div>
+            </div>
+          </div>
+
+          <div class="toolbar" id="unitCardList">
+            <!-- app.js が UNIT_META からカードを生成します -->
+          </div>
+        </div>
+
+        <div class="card control-panel" id="controlPanel" style="display:none;">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-note" id="panelNote">
                 理解はできるのに点が取り切れない人向けのトレーニング版
               </div>
             </div>
@@ -97,10 +113,12 @@
 
           <div class="mission-box">
             <strong>今回の狙い</strong><br>
-            第1問：三角比・式変形での計算精度<br>
-            第2問：図形と計量での高さ・面積・方針切替<br>
-            第3問：内接円・接線の長さ・半径<br>
-            第4問：誘導の読み方・時間配分
+            <span id="missionBoxContent">
+              第1問：三角比・式変形での計算精度<br>
+              第2問：図形と計量での高さ・面積・方針切替<br>
+              第3問：内接円・接線の長さ・半径<br>
+              第4問：誘導の読み方・時間配分
+            </span>
           </div>
 
           <div class="toolbar">
@@ -177,7 +195,8 @@
     </main>
   </div>
 
-<script src="questions.js?v=7"></script>
-<script src="app.js?v=7"></script>
+  <script src="questions_keiryo.js?v=1"></script>
+  <script src="questions_seishitsu.js?v=1"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

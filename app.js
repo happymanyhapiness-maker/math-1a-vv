@@ -1,45 +1,89 @@
-const STORAGE_KEY = "kyotsu_app_v13";
+const STORAGE_PREFIX = "kyotsu_app_v14_";
+const LEGACY_STORAGE_KEY = "kyotsu_app_v13"; // 単元分離前の旧キー。図形と計量のデータとして1回だけ引き継ぐ
+const UNIT_KEY = "kyotsu_app_unit_v1";
 const HISTORY_VISIBLE = 5;
 
-let state = {
-  index: 0,
-  correct: 0,
-  total: 0,
-  wrong: [],
-  tipList: [],
-  mode: "normal",
-  strict: false,
-  timer: null,
-  remaining: 0,
-  history: [],
-  lastShuffle: {},
-  stopHintShown: false,
-  routeMiss: 0,
-  routeTry: 0,
-};
-
-const stats = {
-  weakness: {
-    "計算精度": 0,
-    "方針切替": 0,
-    "時間判断": 0,
-    "時間不足": 0
+const UNIT_META = {
+  keiryo: {
+    label: "図形と計量",
+    description: "三角比 / 三平方 / 面積",
+    note: "",
+    mission: `
+      第1問：三角比・式変形での計算精度
+      第2問：図形と計量での高さ・面積・方針切替
+      第3問：内接円・接線の長さ・半径
+      第4問：誘導の読み方・時間配分
+    `,
+    questions: questions_keiryo,
+    routeChoices: ROUTE_CHOICES_KEIRYO
   },
-  stage: {
-    "第1問": { t: 0, c: 0 },
-    "第2問": { t: 0, c: 0 },
-    "第3問": { t: 0, c: 0 },
-    "第4問": { t: 0, c: 0 }
+
+  seishitsu: {
+    label: "図形の性質",
+    description: "重心 / チェバ / 円周角 / 2円",
+    note: "",
+    mission: `
+      第1問：重心・外心・垂心の性質
+      第2問：チェバの定理・メネラウスの定理
+      第3問：円周角・接弦角・内接四角形
+      第4問：2円の位置関係・共通接線
+    `,
+    questions: questions_seishitsu,
+    routeChoices: ROUTE_CHOICES_SEISHITSU
   }
 };
+
+function defaultState(unit) {
+  return {
+    unit: unit,
+    index: 0,
+    correct: 0,
+    total: 0,
+    wrong: [],
+    tipList: [],
+    mode: "normal",
+    strict: false,
+    timer: null,
+    remaining: 0,
+    history: [],
+    lastShuffle: {},
+    stopHintShown: false,
+    routeMiss: 0,
+    routeTry: 0,
+  };
+}
+
+function defaultStats() {
+  return {
+    weakness: {
+      "計算精度": 0,
+      "方針切替": 0,
+      "時間判断": 0,
+      "時間不足": 0
+    },
+    stage: {
+      "第1問": { t: 0, c: 0 },
+      "第2問": { t: 0, c: 0 },
+      "第3問": { t: 0, c: 0 },
+      "第4問": { t: 0, c: 0 }
+    }
+  };
+}
+
+let state = defaultState(null);
+let stats = defaultStats();
 
 const el = (id) => document.getElementById(id);
 
 /* =========================
-   保存 / 読み込み
+   保存 / 読み込み（単元ごと）
 ========================= */
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, stats }));
+  if (!state.unit) return;
+
+  localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state, stats }));
+  localStorage.setItem(UNIT_KEY, state.unit);
+
   if (el("saveStatus")) {
     const now = new Date().toLocaleTimeString("ja-JP");
     el("saveStatus").innerText = `保存状態: 保存済み（${now}）`;
@@ -75,20 +119,36 @@ function shuffleWithHistory(q){
   }));
 }
 
-function load() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-  try {
-    const obj = JSON.parse(raw);
-    if (obj.state) Object.assign(state, obj.state);
-    if (obj.stats) Object.assign(stats, obj.stats);
+function loadUnit(unit) {
+  state = defaultState(unit);
+  stats = defaultStats();
 
-    if (!Array.isArray(state.history)) state.history = [];
-    if (!Array.isArray(state.wrong)) state.wrong = [];
-    if (!Array.isArray(state.tipList)) state.tipList = [];
-  } catch (e) {
-    console.error(e);
+  // 旧バージョン(単元分離前)のデータを、図形と計量のデータとして1回だけ引き継ぐ
+  if (unit === "keiryo" && !localStorage.getItem(STORAGE_PREFIX + unit)) {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) localStorage.setItem(STORAGE_PREFIX + unit, legacy);
   }
+
+  const raw = localStorage.getItem(STORAGE_PREFIX + unit);
+  if (raw) {
+    try {
+      const obj = JSON.parse(raw);
+      if (obj.state) Object.assign(state, obj.state);
+
+      // stats.weakness / stats.stage は丸ごと上書きせず、サブオブジェクト単位でマージする
+      // (古い/不完全な保存データに欠けているキーがあっても、デフォルト値で補える)
+      if (obj.stats && obj.stats.weakness) Object.assign(stats.weakness, obj.stats.weakness);
+      if (obj.stats && obj.stats.stage) Object.assign(stats.stage, obj.stats.stage);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  state.unit = unit; // 念のため固定
+
+  if (!Array.isArray(state.history)) state.history = [];
+  if (!Array.isArray(state.wrong)) state.wrong = [];
+  if (!Array.isArray(state.tipList)) state.tipList = [];
 }
 
 /* =========================
@@ -97,7 +157,7 @@ function load() {
 function currentList() {
   if (state.mode === "review") return state.wrong;
   if (state.mode === "tips") return state.tipList;
-  return questions;
+  return UNIT_META[state.unit].questions;
 }
 
 function currentQuestion() {
@@ -318,8 +378,9 @@ if (routeOptions) {
   guide.innerText = `解き方を選んでください（${q.route.length}つ選択）`;
   routeOptions.appendChild(guide);
 }
-// 解法カテゴリ一覧は questions.js の ROUTE_CHOICES を単一の参照元として使用
-ROUTE_CHOICES.forEach((label) => {
+const choices = UNIT_META[state.unit].routeChoices;
+
+choices.forEach((label) => {
   const wrap = document.createElement("label");
   wrap.style.display = "block";
   wrap.style.margin = "6px 0";
@@ -344,15 +405,123 @@ function checkRouteAndStart() {
     document.querySelectorAll('#routeOptions input[type="checkbox"]:checked')
   ).map((x) => x.value);
 
-  const matched = checked.filter((x) => q.route.includes(x));
-
   const isCorrect =
     checked.length === q.route.length &&
     checked.every((x) => q.route.includes(x));
 
-  function startMainQuestion() {
+  // 不正解
+  if (!isCorrect) {
+    state.routeMiss++;
+    state.routeTry++;
+
+    // 1回目ミス → チェックを外して再選択
+    if (state.routeTry === 1) {
+      document
+        .querySelectorAll('#routeOptions input[type="checkbox"]')
+        .forEach((x) => {
+          x.checked = false;
+        });
+
+      if (routeFeedback) {
+        routeFeedback.style.display = "block";
+        routeFeedback.innerHTML = `
+          <div style="color:#991b1b; font-weight:bold;">
+            方針ミス！
+          </div>
+          <div style="margin-top:8px;">
+            もう一度考えて選んでください。
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // 2回目ミス → 選択肢一覧と「方針を確定」だけ消す
+    if (routeOptions) routeOptions.style.display = "none";
+    if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
+
+    // 下の「方針を確認」ボックスも消す
+    if (el("questionStartBox")) {
+      el("questionStartBox").style.display = "none";
+    }
+
+    if (routeFeedback) {
+      routeFeedback.style.display = "block";
+      routeFeedback.innerHTML = `
+        <div style="color:#991b1b; font-weight:bold;">
+          方針ミス！
+        </div>
+        <div style="margin-top:8px;">
+          正解ルート：${q.route.join(" → ")}
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn primary" id="forceStartBtn">問題開始</button>
+        </div>
+      `;
+    }
+
+    const forceBtn = document.getElementById("forceStartBtn");
+    if (forceBtn) {
+      forceBtn.onclick = () => {
+        if (quizBox) quizBox.style.display = "none";
+        if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+        if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
+
+        document.querySelectorAll(".option").forEach((b) => {
+          b.disabled = false;
+        });
+
+        clearInterval(state.timer);
+        state.timer = setInterval(() => {
+          state.remaining--;
+
+          if (el("timer")) {
+            el("timer").innerText = state.remaining + "s";
+            if (state.remaining <= 10) {
+              el("timer").className = "timer danger";
+            } else if (state.remaining <= 20) {
+              el("timer").className = "timer warning";
+            } else {
+              el("timer").className = "timer";
+            }
+          }
+
+          if (state.remaining <= 0) {
+            clearInterval(state.timer);
+            timeoutQuestion();
+          }
+        }, 1000);
+      };
+    }
+
+    return;
+  }
+
+  // 正解
+if (routeFeedback) {
+  routeFeedback.style.display = "block";
+  routeFeedback.innerHTML = `
+    <div style="color:#166534; font-weight:bold;">
+      方針OK！
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn primary" id="forceStartBtn">問題開始</button>
+    </div>
+  `;
+}
+
+// ✅ 下の「方針確認ボックス」は消す
+if (el("questionStartBox")) {
+  el("questionStartBox").style.display = "none";
+}
+
+// ✅ ここではまだ開始しない
+
+const forceBtn = document.getElementById("forceStartBtn");
+if (forceBtn) {
+  forceBtn.onclick = () => {
     if (quizBox) quizBox.style.display = "none";
-    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+
     if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
     document.querySelectorAll(".option").forEach((b) => {
@@ -365,6 +534,13 @@ function checkRouteAndStart() {
 
       if (el("timer")) {
         el("timer").innerText = state.remaining + "s";
+        if (state.remaining <= 10) {
+          el("timer").className = "timer danger";
+        } else if (state.remaining <= 20) {
+          el("timer").className = "timer warning";
+        } else {
+          el("timer").className = "timer";
+        }
       }
 
       if (state.remaining <= 0) {
@@ -372,92 +548,10 @@ function checkRouteAndStart() {
         timeoutQuestion();
       }
     }, 1000);
-  }
-
-  // ✅ 正解
-  if (isCorrect) {
-    routeFeedback.style.display = "block";
-    routeFeedback.innerHTML = `
-      <div style="color:#166534; font-weight:bold;">
-        方針OK！
-      </div>
-      <div style="margin-top:12px;">
-        <button class="btn primary" id="forceStartBtn">問題開始</button>
-      </div>
-    `;
-
-    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-
-    document.getElementById("forceStartBtn").onclick = startMainQuestion;
-    return;
-  }
-
-  // ✅ 部分正解（1つだけ合ってる）
-  if (q.route.length > 1 && matched.length >= 1 && matched.length < q.route.length) {
-    routeFeedback.style.display = "block";
-    routeFeedback.innerHTML = `
-      <div style="color:#92400e; font-weight:bold;">
-        その考え方はよいです
-      </div>
-      <div style="margin-top:8px;">
-        この問題はもう一段、発想の転換が必要です。
-      </div>
-      <div style="margin-top:8px;">
-        もう一つの方針は解説で確認してください。
-      </div>
-      <div style="margin-top:12px;">
-        <button class="btn primary" id="forceStartBtn">問題開始</button>
-      </div>
-    `;
-
-    if (routeOptions) routeOptions.style.display = "none";
-    if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
-    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-
-    document.getElementById("forceStartBtn").onclick = startMainQuestion;
-    return;
-  }
-
-  // ✅ 完全ミス
-  state.routeTry++;
-
-  if (state.routeTry === 1) {
-    document.querySelectorAll('#routeOptions input').forEach(x => x.checked = false);
-
-    routeFeedback.style.display = "block";
-    routeFeedback.innerHTML = `
-      <div style="color:#991b1b; font-weight:bold;">
-        方針ミス！
-      </div>
-      <div style="margin-top:8px;">
-        もう一度考えて選んでください。
-      </div>
-    `;
-    return;
-  }
-
-  // ✅ 2回目ミス
-  routeFeedback.style.display = "block";
-  routeFeedback.innerHTML = `
-    <div style="color:#991b1b; font-weight:bold;">
-      方針ミス！
-    </div>
-    <div style="margin-top:8px;">
-      正解ルート：${q.route.join(" → ")}
-    </div>
-    <div style="margin-top:12px;">
-      <button class="btn primary" id="forceStartBtn">問題開始</button>
-    </div>
-  `;
-
-  if (routeOptions) routeOptions.style.display = "none";
-  if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
-  if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-
-  document.getElementById("forceStartBtn").onclick = startMainQuestion;
+  };
 }
 }
-
+}
 /* =========================
    解説表示
 ========================= */
@@ -751,6 +845,66 @@ function finish() {
 }
 
 /* =========================
+   単元選択
+========================= */
+function buildUnitSelectCards() {
+  const box = el("unitCardList");
+  if (!box) return;
+
+  box.innerHTML = "";
+
+  Object.keys(UNIT_META).forEach((key) => {
+    const meta = UNIT_META[key];
+
+    const card = document.createElement("div");
+    card.className = "unit-card";
+
+    card.innerHTML = `
+      <h3>${meta.label}</h3>
+      <p>${meta.description || meta.note || ""}</p>
+      <button class="btn primary">開始</button>
+    `;
+
+    const startBtn = card.querySelector("button");
+    if (startBtn) {
+      startBtn.onclick = () => selectUnit(key);
+    }
+
+    box.appendChild(card);
+  });
+}
+
+function applyUnitUI(unit) {
+  const meta = UNIT_META[unit];
+  if (el("currentUnitLabel")) el("currentUnitLabel").innerText = meta.label;
+  if (el("panelNote")) el("panelNote").innerText = meta.note;
+  if (el("missionBoxContent")) el("missionBoxContent").innerHTML = meta.mission;
+}
+
+function selectUnit(unit) {
+  if (!UNIT_META[unit]) return;
+
+  loadUnit(unit);
+  applyUnitUI(unit);
+
+  if (el("unitSelectScreen")) el("unitSelectScreen").style.display = "none";
+  exitExamMode(); // controlPanelを表示し、他の画面を隠す
+
+  update();
+  renderHistory();
+}
+
+function showUnitSelect() {
+  clearInterval(state.timer);
+
+  if (el("unitSelectScreen")) el("unitSelectScreen").style.display = "block";
+  if (el("controlPanel")) el("controlPanel").style.display = "none";
+  if (el("examTopbar")) el("examTopbar").style.display = "none";
+  if (el("questionPanel")) el("questionPanel").style.display = "none";
+  if (el("resultBox")) el("resultBox").style.display = "none";
+}
+
+/* =========================
    モード開始
 ========================= */
 function startExam() {
@@ -820,9 +974,20 @@ if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
+if (el("changeUnitBtn")) el("changeUnitBtn").onclick = showUnitSelect;
+if (el("titleHomeBtn")) {
+  el("titleHomeBtn").onclick = showUnitSelect;
+if (el("titleHomeBtn")) {
+  el("titleHomeBtn").onclick = showUnitSelect;
+}
+}
 
 /* 初期化 */
-load();
-update();
-renderHistory();
-exitExamMode();
+buildUnitSelectCards();
+
+const savedUnit = localStorage.getItem(UNIT_KEY);
+if (savedUnit && UNIT_META[savedUnit]) {
+  selectUnit(savedUnit);
+} else {
+  showUnitSelect();
+}

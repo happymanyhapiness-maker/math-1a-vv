@@ -299,3 +299,304 @@ body.exam-mode .main-layout{
     grid-template-columns:1fr;
   }
 }
+
+/* 以下全部そのまま貼る（省略せず全部） */
+/* =========================
+   追加: center panel / control panel
+========================= */
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.control-panel {
+  padding: 14px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-note {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 12px;
+  border: 1px solid #bfdbfe;
+}
+
+.mission-box {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+/* =========================
+   追加: toolbar / buttons layout
+========================= */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.q-toolbar {
+  margin-top: 4px;
+}
+
+/* =========================
+   追加: 単元カード
+========================= */
+#unitCardList,
+.unitCardList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.unit-card {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.unit-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+
+.unit-card h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.unit-card p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.unit-card .btn {
+  margin-top: auto;
+  width: 100%;
+}
+
+/* =========================
+   追加: exam topbar
+========================= */
+.exam-topbar {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exam-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* =========================
+   追加: small UI blocks
+========================= */
+.panel-block {
+  margin-bottom: 16px;
+}
+
+.panel-block h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.metric-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+  font-size: 13px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  background: #f3f4f6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stack-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.small-text {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.history-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  padding: 10px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* =========================
+   追加: route quiz
+========================= */
+.route-quiz-box {
+  padding: 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+}
+
+.route-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.route-sub {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.route-options {
+  display: grid;
+  gap: 8px;
+}
+
+.route-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+}
+
+/* =========================
+   追加: question text / result
+========================= */
+.question-text {
+  font-size: 18px;
+  line-height: 1.8;
+}
+
+.result-box {
+  padding: 16px;
+}
+
+.final-score {
+  font-size: 28px;
+  font-weight: 800;
+  color: #2563eb;
+  margin: 8px 0 12px;
+}
+
+.result-summary {
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+/* =========================
+   モバイル追加調整
+========================= */
+@media (max-width: 900px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .left-panel {
+    order: 2;
+  }
+
+  .center-panel {
+    order: 1;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #unitCardList,
+  .unitCardList {
+    grid-template-columns: 1fr;
+  }
+}
+#titleHomeBtn {
+  cursor: pointer;
+}
+
+#titleHomeBtn:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+#titleHomeBtn {
+  cursor: pointer;
+}
+
+#titleHomeBtn:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+#titleHomeBtn {
+  cursor: pointer;
+}
+
+#titleHomeBtn:hover {
+  color: #2563eb;
+}
