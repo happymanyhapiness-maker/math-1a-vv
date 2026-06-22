@@ -204,7 +204,41 @@ function topWeak() {
   if (!entries.length) return "未判定";
   return entries.sort((a, b) => b[1] - a[1])[0][0];
 }
+function addReviewTarget(q) {
+  if (!q) return;
 
+  if (!state.wrong.find((qq) => qq.id === q.id)) {
+    state.wrong.push(q);
+  }
+
+  if (!state.tipList.find((qq) => qq.id === q.id)) {
+    state.tipList.push(q);
+  }
+}
+
+function lockOptionsAndMark(correctIndex, selectedIndex = null) {
+  document.querySelectorAll(".option").forEach((b) => {
+    b.disabled = true;
+
+    const originalIndex = Number(b.dataset.index);
+
+    if (originalIndex === correctIndex) {
+      b.classList.add("correct");
+    }
+
+    if (
+      selectedIndex !== null &&
+      originalIndex === selectedIndex &&
+      originalIndex !== correctIndex
+    ) {
+      b.classList.add("wrong");
+    }
+  });
+
+  if (el("optionsBox")) {
+    el("optionsBox").classList.add("disabled");
+  }
+}
 /* =========================
    ヘッダー表示
 ========================= */
@@ -703,6 +737,8 @@ if (el("startQuestionBtn")) {
 ========================= */
 function answer(i) {
   const q = currentQuestion();
+  if (!q) return;
+
   clearInterval(state.timer);
 
   const ok = i === q.correct;
@@ -715,25 +751,13 @@ function answer(i) {
     stats.stage[q.stage].c++;
   } else {
     stats.weakness[q.weakness] = (stats.weakness[q.weakness] || 0) + 1;
+
+    // 通常の不正解も復習/TIPS対象に入れる
+    addReviewTarget(q);
   }
 
-  document.querySelectorAll(".option").forEach((b) => {
-    b.disabled = true;
+  lockOptionsAndMark(q.correct, i);
 
-    const originalIndex = Number(b.dataset.index);
-
-    // ✅ 正解表示
-    if (originalIndex === q.correct) {
-      b.classList.add("correct");
-    }
-
-    // ✅ 間違い表示
-    if (originalIndex === i && originalIndex !== q.correct) {
-      b.classList.add("wrong");
-    }
-  });
-
-  // ✅ ←これ全部中に戻す
   if (el("feedback")) {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = explainHTML(q, ok);
@@ -746,24 +770,23 @@ function answer(i) {
   update();
   save();
 }
-
 /* =========================
    時間切れ
 ========================= */
 function timeoutQuestion() {
   const q = currentQuestion();
+  if (!q) return;
+
+  clearInterval(state.timer);
 
   state.total++;
   stats.stage[q.stage].t++;
   stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
 
-  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
-  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
+  addReviewTarget(q);
 
-  document.querySelectorAll(".option").forEach((b, idx) => {
-    b.disabled = true;
-    if (idx === q.correct) b.classList.add("correct");
-  });
+  // シャッフル後も正しい選択肢を緑にする
+  lockOptionsAndMark(q.correct);
 
   if (el("feedback")) {
     el("feedback").style.display = "block";
@@ -782,20 +805,23 @@ function timeoutQuestion() {
   update();
   save();
 }
-
 /* =========================
    スキップ
 ========================= */
 function skipQuestion() {
   const q = currentQuestion();
+  if (!q) return;
+
   clearInterval(state.timer);
 
   state.total++;
   stats.stage[q.stage].t++;
   stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
 
-  if (!state.wrong.find((qq) => qq.id === q.id)) state.wrong.push(q);
-  if (!state.tipList.find((qq) => qq.id === q.id)) state.tipList.push(q);
+  addReviewTarget(q);
+
+  // スキップ後に選択肢を押せないようにする
+  lockOptionsAndMark(q.correct);
 
   if (el("feedback")) {
     el("feedback").style.display = "block";
@@ -814,7 +840,6 @@ function skipQuestion() {
   update();
   save();
 }
-
 /* =========================
    次へ
 ========================= */
@@ -829,11 +854,16 @@ function nextQuestion() {
 function finish() {
   clearInterval(state.timer);
 
+  // 終了時に履歴へ追加
+  addHistory();
+
   if (el("questionPanel")) el("questionPanel").style.display = "none";
   if (el("examTopbar")) el("examTopbar").style.display = "none";
   if (el("resultBox")) el("resultBox").style.display = "block";
 
-  if (el("finalScore")) el("finalScore").innerText = `${state.correct}/${state.total}`;
+  if (el("finalScore")) {
+    el("finalScore").innerText = `${state.correct}/${state.total}`;
+  }
 
   if (el("resultSummary")) {
     el("resultSummary").innerHTML = `
@@ -842,6 +872,9 @@ function finish() {
       方針ミス回数：${state.routeMiss}
     `;
   }
+
+  update();
+  save();
 }
 
 /* =========================
@@ -958,7 +991,52 @@ function toggleStrictTime() {
       state.strict ? "時間制限: 厳格" : "時間制限: 通常";
   }
 }
+function resetStatsOnly() {
+  if (!state.unit) return;
 
+  const ok = confirm("この単元の学習ログをリセットしますか？");
+  if (!ok) return;
+
+  const unit = state.unit;
+
+  state = defaultState(unit);
+  stats = defaultStats();
+
+  applyUnitUI(unit);
+  update();
+  renderHistory();
+  save();
+
+  alert("学習ログをリセットしました");
+}
+
+function clearSavedData() {
+  if (!state.unit) return;
+
+  const ok = confirm("この単元の保存データを削除しますか？");
+  if (!ok) return;
+
+  const unit = state.unit;
+
+  localStorage.removeItem(STORAGE_PREFIX + unit);
+
+  if (localStorage.getItem(UNIT_KEY) === unit) {
+    localStorage.removeItem(UNIT_KEY);
+  }
+
+  state = defaultState(unit);
+  stats = defaultStats();
+
+  applyUnitUI(unit);
+  update();
+  renderHistory();
+
+  if (el("saveStatus")) {
+    el("saveStatus").innerText = "保存状態: 保存データ削除済み";
+  }
+
+  alert("保存データを削除しました");
+}
 /* =========================
    ボタン
 ========================= */
@@ -974,7 +1052,8 @@ if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
 if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
-
+if (el("resetStatsBtn")) el("resetStatsBtn").onclick = resetStatsOnly;
+if (el("clearSavedDataBtn")) el("clearSavedDataBtn").onclick = clearSavedData;
 function openUnitModal() {
   const current = state.unit
     ? UNIT_META[state.unit].label
