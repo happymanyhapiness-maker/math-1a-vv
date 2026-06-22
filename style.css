@@ -667,3 +667,6 @@ body.exam-mode .main-layout{
 #unitSelectScreen .panel-heading {
   margin-bottom: 16px;
 }
+#missionBoxContent {
+  white-space: pre-line;
+}

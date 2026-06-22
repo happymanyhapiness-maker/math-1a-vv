@@ -1039,49 +1039,38 @@ function toggleStrictTime() {
 function resetStatsOnly() {
   if (!state.unit) return;
 
-  const ok = confirm("この単元の学習ログをリセットしますか？");
-  if (!ok) return;
-
   const unit = state.unit;
+  const strict = state.strict;
+
+  const ok = confirm(
+    "この単元の成績・履歴・復習リストをリセットします。\nよろしいですか？"
+  );
+
+  if (!ok) return;
 
   state = defaultState(unit);
   stats = defaultStats();
+
+  // 時間制限の設定は学習データではないので維持する
+  state.strict = strict;
 
   applyUnitUI(unit);
   update();
   renderHistory();
   save();
 
-  alert("学習ログをリセットしました");
-}
-
-function clearSavedData() {
-  if (!state.unit) return;
-
-  const ok = confirm("この単元の保存データを削除しますか？");
-  if (!ok) return;
-
-  const unit = state.unit;
-
-  localStorage.removeItem(STORAGE_PREFIX + unit);
-
-  if (localStorage.getItem(UNIT_KEY) === unit) {
-    localStorage.removeItem(UNIT_KEY);
+  if (el("toggleStrictTimeBtn")) {
+    el("toggleStrictTimeBtn").innerText =
+      state.strict ? "時間制限: 厳格" : "時間制限: 通常";
   }
-
-  state = defaultState(unit);
-  stats = defaultStats();
-
-  applyUnitUI(unit);
-  update();
-  renderHistory();
 
   if (el("saveStatus")) {
-    el("saveStatus").innerText = "保存状態: 保存データ削除済み";
+    el("saveStatus").innerText = "保存状態: 学習データをリセットしました";
   }
 
-  alert("保存データを削除しました");
+  alert("学習データをリセットしました");
 }
+
 /* =========================
    ボタン
 ========================= */
@@ -1098,7 +1087,6 @@ if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
 if (el("resetStatsBtn")) el("resetStatsBtn").onclick = resetStatsOnly;
-if (el("clearSavedDataBtn")) el("clearSavedDataBtn").onclick = clearSavedData;
 function openUnitModal() {
   const current = state.unit
     ? UNIT_META[state.unit].label
