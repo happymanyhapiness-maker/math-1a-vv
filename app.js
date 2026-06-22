@@ -861,7 +861,7 @@ function buildUnitSelectCards() {
 
     card.innerHTML = `
       <h3>${meta.label}</h3>
-      <p>${meta.description || meta.note || ""}</p>
+      <p>${meta.description || ""}</p>
       <button class="btn primary">開始</button>
     `;
 
@@ -902,6 +902,9 @@ function showUnitSelect() {
   if (el("examTopbar")) el("examTopbar").style.display = "none";
   if (el("questionPanel")) el("questionPanel").style.display = "none";
   if (el("resultBox")) el("resultBox").style.display = "none";
+
+  // 画面を先頭に戻す
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 /* =========================
@@ -964,24 +967,49 @@ if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
 if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
 if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
 if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
-
 if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
 if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;
 if (el("skipQuestionBtn")) el("skipQuestionBtn").onclick = skipQuestion;
-
 if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
 if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
-
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
-if (el("changeUnitBtn")) el("changeUnitBtn").onclick = showUnitSelect;
-if (el("titleHomeBtn")) {
-  el("titleHomeBtn").onclick = showUnitSelect;
-if (el("titleHomeBtn")) {
-  el("titleHomeBtn").onclick = showUnitSelect;
-}
+
+function openUnitModal() {
+  const current = state.unit
+    ? UNIT_META[state.unit].label
+    : "未選択";
+
+  if (el("modalText")) {
+    el("modalText").innerText =
+      `現在の単元：${current}\n単元選択画面に戻りますか？`;
+  }
+
+  if (el("unitModal")) {
+    el("unitModal").style.display = "flex";
+  }
 }
 
+if (el("titleHomeBtn")) {
+  el("titleHomeBtn").onclick = showUnitSelect;
+}
+
+if (el("unitCardClickable")) {
+  el("unitCardClickable").onclick = openUnitModal;
+}
+
+if (el("modalCancel")) {
+  el("modalCancel").onclick = () => {
+    if (el("unitModal")) el("unitModal").style.display = "none";
+  };
+}
+
+if (el("modalGo")) {
+  el("modalGo").onclick = () => {
+    if (el("unitModal")) el("unitModal").style.display = "none";
+    showUnitSelect();
+  };
+}
 /* 初期化 */
 buildUnitSelectCards();
 

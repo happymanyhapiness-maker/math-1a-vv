@@ -9,34 +9,39 @@
 <body>
   <div class="app-shell">
 
-    <header class="topbar" id="topbar">
-      <div class="brand">
-        <div class="brand-sub">KYOTSU TEST</div>
-        <h1 id="titleHomeBtn">共通テスト数学ⅠA ガチ完全再現版</h1>
-      </div>
-      <div class="top-stats">
-        <div class="stat-card">
-          <div class="stat-label">単元</div>
-          <div class="stat-value" id="currentUnitLabel" style="font-size:16px;">―</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">総正答数</div>
-          <div class="stat-value" id="correctCnt">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">総解答数</div>
-          <div class="stat-value" id="totalCnt">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">正答率</div>
-          <div class="stat-value" id="rateCnt">0%</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">平均秒数</div>
-          <div class="stat-value" id="avgCnt">0</div>
-        </div>
-      </div>
-    </header>
+<header class="topbar" id="topbar">
+  <div class="brand">
+    <div class="brand-sub">KYOTSU TEST</div>
+    <h1 id="titleHomeBtn">共通テスト数学ⅠA ガチ完全再現版</h1>
+  </div>
+
+  <div class="top-stats">
+    <div class="stat-card" id="unitCardClickable">
+      <div class="stat-label">単元</div>
+      <div class="stat-value" id="currentUnitLabel" style="font-size:16px;">―</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">総正答数</div>
+      <div class="stat-value" id="correctCnt">0</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">総解答数</div>
+      <div class="stat-value" id="totalCnt">0</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">正答率</div>
+      <div class="stat-value" id="rateCnt">0%</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">平均秒数</div>
+      <div class="stat-value" id="avgCnt">0</div>
+    </div>
+  </div>
+</header>
 
     <main class="main-layout">
 
@@ -194,9 +199,20 @@
       </section>
     </main>
   </div>
+<div id="unitModal" class="modal" style="display:none;">
+  <div class="modal-box">
+    <h3>単元の切り替え</h3>
+    <p id="modalText"></p>
 
+    <div class="modal-actions">
+      <button class="btn secondary" id="modalCancel">キャンセル</button>
+      <button class="btn primary" id="modalGo">切り替える</button>
+    </div>
+  </div>
+</div>
   <script src="questions_keiryo.js?v=1"></script>
   <script src="questions_seishitsu.js?v=1"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
+
 </body>
 </html>
