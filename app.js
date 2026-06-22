@@ -355,123 +355,15 @@ function checkRouteAndStart() {
     document.querySelectorAll('#routeOptions input[type="checkbox"]:checked')
   ).map((x) => x.value);
 
+  const matched = checked.filter((x) => q.route.includes(x));
+
   const isCorrect =
     checked.length === q.route.length &&
     checked.every((x) => q.route.includes(x));
 
-  // 不正解
-  if (!isCorrect) {
-    state.routeMiss++;
-    state.routeTry++;
-
-    // 1回目ミス → チェックを外して再選択
-    if (state.routeTry === 1) {
-      document
-        .querySelectorAll('#routeOptions input[type="checkbox"]')
-        .forEach((x) => {
-          x.checked = false;
-        });
-
-      if (routeFeedback) {
-        routeFeedback.style.display = "block";
-        routeFeedback.innerHTML = `
-          <div style="color:#991b1b; font-weight:bold;">
-            方針ミス！
-          </div>
-          <div style="margin-top:8px;">
-            もう一度考えて選んでください。
-          </div>
-        `;
-      }
-      return;
-    }
-
-    // 2回目ミス → 選択肢一覧と「方針を確定」だけ消す
-    if (routeOptions) routeOptions.style.display = "none";
-    if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
-
-    // 下の「方針を確認」ボックスも消す
-    if (el("questionStartBox")) {
-      el("questionStartBox").style.display = "none";
-    }
-
-    if (routeFeedback) {
-      routeFeedback.style.display = "block";
-      routeFeedback.innerHTML = `
-        <div style="color:#991b1b; font-weight:bold;">
-          方針ミス！
-        </div>
-        <div style="margin-top:8px;">
-          正解ルート：${q.route.join(" → ")}
-        </div>
-        <div style="margin-top:12px;">
-          <button class="btn primary" id="forceStartBtn">問題開始</button>
-        </div>
-      `;
-    }
-
-    const forceBtn = document.getElementById("forceStartBtn");
-    if (forceBtn) {
-      forceBtn.onclick = () => {
-        if (quizBox) quizBox.style.display = "none";
-        if (el("questionStartBox")) el("questionStartBox").style.display = "none";
-        if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
-
-        document.querySelectorAll(".option").forEach((b) => {
-          b.disabled = false;
-        });
-
-        clearInterval(state.timer);
-        state.timer = setInterval(() => {
-          state.remaining--;
-
-          if (el("timer")) {
-            el("timer").innerText = state.remaining + "s";
-            if (state.remaining <= 10) {
-              el("timer").className = "timer danger";
-            } else if (state.remaining <= 20) {
-              el("timer").className = "timer warning";
-            } else {
-              el("timer").className = "timer";
-            }
-          }
-
-          if (state.remaining <= 0) {
-            clearInterval(state.timer);
-            timeoutQuestion();
-          }
-        }, 1000);
-      };
-    }
-
-    return;
-  }
-
-  // 正解
-if (routeFeedback) {
-  routeFeedback.style.display = "block";
-  routeFeedback.innerHTML = `
-    <div style="color:#166534; font-weight:bold;">
-      方針OK！
-    </div>
-    <div style="margin-top:12px;">
-      <button class="btn primary" id="forceStartBtn">問題開始</button>
-    </div>
-  `;
-}
-
-// ✅ 下の「方針確認ボックス」は消す
-if (el("questionStartBox")) {
-  el("questionStartBox").style.display = "none";
-}
-
-// ✅ ここではまだ開始しない
-
-const forceBtn = document.getElementById("forceStartBtn");
-if (forceBtn) {
-  forceBtn.onclick = () => {
+  function startMainQuestion() {
     if (quizBox) quizBox.style.display = "none";
-
+    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
     if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
     document.querySelectorAll(".option").forEach((b) => {
@@ -484,13 +376,6 @@ if (forceBtn) {
 
       if (el("timer")) {
         el("timer").innerText = state.remaining + "s";
-        if (state.remaining <= 10) {
-          el("timer").className = "timer danger";
-        } else if (state.remaining <= 20) {
-          el("timer").className = "timer warning";
-        } else {
-          el("timer").className = "timer";
-        }
       }
 
       if (state.remaining <= 0) {
@@ -498,10 +383,92 @@ if (forceBtn) {
         timeoutQuestion();
       }
     }, 1000);
-  };
+  }
+
+  // ✅ 正解
+  if (isCorrect) {
+    routeFeedback.style.display = "block";
+    routeFeedback.innerHTML = `
+      <div style="color:#166534; font-weight:bold;">
+        方針OK！
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn primary" id="forceStartBtn">問題開始</button>
+      </div>
+    `;
+
+    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+
+    document.getElementById("forceStartBtn").onclick = startMainQuestion;
+    return;
+  }
+
+  // ✅ 部分正解（1つだけ合ってる）
+  if (q.route.length > 1 && matched.length >= 1 && matched.length < q.route.length) {
+    routeFeedback.style.display = "block";
+    routeFeedback.innerHTML = `
+      <div style="color:#92400e; font-weight:bold;">
+        その考え方はよいです
+      </div>
+      <div style="margin-top:8px;">
+        この問題はもう一段、発想の転換が必要です。
+      </div>
+      <div style="margin-top:8px;">
+        もう一つの方針は解説で確認してください。
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn primary" id="forceStartBtn">問題開始</button>
+      </div>
+    `;
+
+    if (routeOptions) routeOptions.style.display = "none";
+    if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
+    if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+
+    document.getElementById("forceStartBtn").onclick = startMainQuestion;
+    return;
+  }
+
+  // ✅ 完全ミス
+  state.routeTry++;
+
+  if (state.routeTry === 1) {
+    document.querySelectorAll('#routeOptions input').forEach(x => x.checked = false);
+
+    routeFeedback.style.display = "block";
+    routeFeedback.innerHTML = `
+      <div style="color:#991b1b; font-weight:bold;">
+        方針ミス！
+      </div>
+      <div style="margin-top:8px;">
+        もう一度考えて選んでください。
+      </div>
+    `;
+    return;
+  }
+
+  // ✅ 2回目ミス
+  routeFeedback.style.display = "block";
+  routeFeedback.innerHTML = `
+    <div style="color:#991b1b; font-weight:bold;">
+      方針ミス！
+    </div>
+    <div style="margin-top:8px;">
+      正解ルート：${q.route.join(" → ")}
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn primary" id="forceStartBtn">問題開始</button>
+    </div>
+  `;
+
+  if (routeOptions) routeOptions.style.display = "none";
+  if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
+  if (el("questionStartBox")) el("questionStartBox").style.display = "none";
+
+  document.getElementById("forceStartBtn").onclick = startMainQuestion;
 }
 }
-}
+
 /* =========================
    解説表示
 ========================= */
