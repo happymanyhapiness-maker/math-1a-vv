@@ -30,6 +30,20 @@ const UNIT_META = {
     `,
     questions: questions_seishitsu,
     routeChoices: ROUTE_CHOICES_SEISHITSU
+  },
+
+  nijikansuu: {
+    label: "二次関数",
+    description: "グラフ / 判別式 / 最大最小",
+    note: "",
+    mission: `
+      第1問：グラフの基本(頂点・平行移動・対称移動・式の決定)
+      第2問：2次方程式・2次不等式・判別式
+      第3問：最大値・最小値の基礎(区間と軸の位置関係)
+      第4問：最大最小の応用+大問形式(具体値→一般化→振り返り)
+    `,
+    questions: questions_nijikansuu,
+    routeChoices: ROUTE_CHOICES_NIJIKANSUU
   }
 };
 
@@ -51,6 +65,7 @@ function defaultState(unit) {
     routeMiss: 0,
     routeTry: 0,
     finished: false,
+    stageFilter: null,
   };
 }
 
@@ -75,6 +90,24 @@ let state = defaultState(null);
 let stats = defaultStats();
 
 const el = (id) => document.getElementById(id);
+
+/* =========================
+   表示用ヘルパー
+   問題文・解説・recapなどに含まれる < > は、
+   そのまま innerHTML に入れるとHTMLタグの開始と誤認識されるため、
+   先にエスケープしてから \n を <br> に変換する。
+========================= */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatText(str) {
+  if (str === undefined || str === null) return "";
+  return escapeHtml(str).replace(/\n/g, "<br>");
+}
 
 /* =========================
    保存 / 読み込み（単元ごと）
@@ -159,6 +192,9 @@ function loadUnit(unit) {
 function currentList() {
   if (state.mode === "review") return state.wrong;
   if (state.mode === "tips") return state.tipList;
+  if (state.mode === "stage") {
+    return UNIT_META[state.unit].questions.filter((q) => q.stage === state.stageFilter);
+  }
   return UNIT_META[state.unit].questions;
 }
 
@@ -310,6 +346,8 @@ function addHistory() {
         ? "復習"
         : state.mode === "tips"
         ? "TIPS"
+        : state.mode === "stage"
+        ? `${state.stageFilter}のみ`
         : "通常"
   });
 
@@ -601,7 +639,7 @@ function explainHTML(q, ok) {
   if (state.mode === "tips") {
     return `
       <div style="font-weight:bold; font-size:18px; color:#1d4ed8;">🧠 TIPSだけ復習</div>
-      <div style="margin-top:10px;"><strong>◆ コツ</strong><br>${q.explain.tip}</div>
+      <div style="margin-top:10px;"><strong>◆ コツ</strong><br>${formatText(q.explain.tip)}</div>
     `;
   }
 
@@ -609,9 +647,9 @@ function explainHTML(q, ok) {
     <div style="font-weight:bold; font-size:18px; color:${ok ? "#166534" : "#991b1b"};">
       ${ok ? "正解！" : "不正解"}
     </div>
-    <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-    <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-    <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
+    <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
+    <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
+    <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
   `;
 }
 
@@ -640,10 +678,29 @@ function show() {
   enterExamMode();
   updateProgressUI(q);
 
+  // ✅ 大問の設定パネル(groupIntro / recap)
+  if (el("groupPanel")) {
+    const hasGroupInfo = !!(q.groupIntro || (q.recap && q.recap.length));
+    if (hasGroupInfo) {
+      let html = "";
+      if (q.groupIntro) html += `<div class="group-intro">${formatText(q.groupIntro)}</div>`;
+      if (q.recap && q.recap.length) {
+        html += `<div class="group-recap"><strong>これまでの結果</strong><ul>`;
+        html += q.recap.map((r) => `<li>${formatText(r)}</li>`).join("");
+        html += `</ul></div>`;
+      }
+      el("groupPanel").innerHTML = html;
+      el("groupPanel").style.display = "block";
+    } else {
+      el("groupPanel").innerHTML = "";
+      el("groupPanel").style.display = "none";
+    }
+  }
+
   if (el("questionText")) {
     el("questionText").innerHTML = `
       <div>
-        ${state.mode === "tips" ? q.q : q.q}
+        ${formatText(q.q)}
       </div>
     `;
   }
@@ -800,9 +857,9 @@ function timeoutQuestion() {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
-      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
     `;
   }
 
@@ -835,9 +892,9 @@ function skipQuestion() {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
-      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${q.explain.why}</div>
-      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${q.explain.mistake}</div>
-      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${q.explain.tip}</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
     `;
   }
 
@@ -923,6 +980,27 @@ function applyUnitUI(unit) {
   if (el("currentUnitLabel")) el("currentUnitLabel").innerText = meta.label;
   if (el("panelNote")) el("panelNote").innerText = meta.note;
   if (el("missionBoxContent")) el("missionBoxContent").innerHTML = meta.mission;
+  buildStageOnlyButtons(unit);
+}
+
+function buildStageOnlyButtons(unit) {
+  const box = el("stageOnlyButtons");
+  if (!box) return;
+  box.innerHTML = "";
+
+  // 問題データに登場する順番でステージ名を重複なく取り出す
+  const stages = [];
+  UNIT_META[unit].questions.forEach((q) => {
+    if (!stages.includes(q.stage)) stages.push(q.stage);
+  });
+
+  stages.forEach((stageName) => {
+    const btn = document.createElement("button");
+    btn.className = "btn secondary";
+    btn.innerText = `${stageName}だけ`;
+    btn.onclick = () => startStageOnly(stageName);
+    box.appendChild(btn);
+  });
 }
 
 function selectUnit(unit) {
@@ -985,6 +1063,29 @@ function resumeExam() {
 
   state.mode = "normal";
   show();
+}
+
+function startStageOnly(stageName) {
+  const list = UNIT_META[state.unit].questions.filter((q) => q.stage === stageName);
+  if (!list.length) {
+    alert("このステージには問題がありません");
+    return;
+  }
+
+  state.mode = "stage";
+  state.stageFilter = stageName;
+  state.index = 0;
+  state.correct = 0;
+  state.total = 0;
+  state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
+
+  show();
+  save();
 }
 
 function startWrongOnlyReview() {
