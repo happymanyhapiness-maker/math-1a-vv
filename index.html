@@ -79,9 +79,9 @@
         <section class="panel-block">
           <h2>保存</h2>
           <div class="small-text" id="saveStatus">保存状態: 未保存</div>
-          <div class="stack-buttons">
-            <button class="btn danger" id="resetStatsBtn">学習データをリセット</button>
-          </div>
+<div class="stack-buttons">
+  <button class="btn danger" id="resetStatsBtn">学習データをリセット</button>
+</div>
         </section>
 
         <section class="panel-block">
@@ -132,6 +132,11 @@
             <button class="btn success" id="startTipReviewBtn">TIPSだけ復習</button>
           </div>
 
+          <div class="small-text" style="margin-top:10px;">ステージを絞って練習</div>
+          <div class="toolbar" id="stageOnlyButtons">
+            <!-- app.js が問題データのstage一覧から自動生成します -->
+          </div>
+
           <div class="day-guide" id="dayGuide">
             目安：1日 10〜15問。10問解いたら一度区切るのがおすすめです。
           </div>
@@ -152,6 +157,7 @@
         </div>
 
         <div id="questionPanel" class="card question-panel" style="display:none;">
+          <div id="groupPanel" class="group-panel" style="display:none;"></div>
           <div class="question-text" id="questionText"></div>
           <div id="svgBox"></div>
 <div id="routeQuizBox" class="route-quiz-box" style="display:none;">
@@ -211,7 +217,8 @@
 </div>
   <script src="questions_keiryo.js?v=1"></script>
   <script src="questions_seishitsu.js?v=1"></script>
-  <script src="app.js?v=8"></script>
+  <script src="questions_nijikansuu.js?v=1"></script>
+  <script src="app.js?v=9"></script>
 
 </body>
 </html>
