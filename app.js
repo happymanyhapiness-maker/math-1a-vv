@@ -66,6 +66,8 @@ function defaultState(unit) {
     routeTry: 0,
     finished: false,
     stageFilter: null,
+    answerLog: [],
+    questionStartTs: null,
   };
 }
 
@@ -183,6 +185,7 @@ function loadUnit(unit) {
   if (!Array.isArray(state.history)) state.history = [];
   if (!Array.isArray(state.wrong)) state.wrong = [];
   if (!Array.isArray(state.tipList)) state.tipList = [];
+  if (!Array.isArray(state.answerLog)) state.answerLog = [];
   if (typeof state.finished !== "boolean") state.finished = false;
 }
 
@@ -242,6 +245,406 @@ function topWeak() {
   if (!entries.length) return "未判定";
   return entries.sort((a, b) => b[1] - a[1])[0][0];
 }
+
+/* =========================
+   ログ集計エンジン（第2段階）
+   state.answerLog を食べて、分析用の集計オブジェクトを返す。
+   ダッシュボードもAI診断も、この関数の出力を共通の入力に使う。
+========================= */
+
+// 誤答タグの日本語ラベル（表示・AI入力の両方で使う）
+const TAG_LABELS = {
+  correct: "正解",
+  calc_error: "計算ミス",
+  sign_error: "符号ミス",
+  condition_misread: "条件読み落とし",
+  formula_mismatch: "公式選択ミス",
+  diagram_reading: "図の読み違い",
+  ratio_reverse: "比の向き逆",
+  range_error: "範囲・場合分けミス",
+  concept_gap: "入口が見えていない",
+  near_miss: "方針は正しく詰めでミス",
+  time_pressure: "時間切れ",
+  skipped: "スキップ"
+};
+
+function tagLabel(tag) {
+  if (!tag) return "分類なし";
+  return TAG_LABELS[tag] || tag;
+}
+
+// 割り算の安全ラッパ（0件のとき NaN を返さず null に）
+function safeRate(correct, total) {
+  if (!total) return null;
+  return Math.round((correct / total) * 100);
+}
+
+function analyzeLog(log) {
+  log = Array.isArray(log) ? log : [];
+
+  const result = {
+    totalAnswered: log.length,
+    totalCorrect: 0,
+    overallRate: null,
+
+    tagCounts: {},          // 誤答タグ別の回数
+    tagRanking: [],         // [{tag, label, count}] 多い順
+
+    byWeakness: {},         // weakness別 {total, correct, rate}
+    byStage: {},            // stage別   {total, correct, rate}
+    byRoute: {},            // route別   {total, correct, rate}
+
+    time: {
+      avgAll: null,
+      avgCorrect: null,
+      avgWrong: null,
+      slowCorrect: [],      // 正解したが時間がかかった問題
+    },
+
+    repeatMistakes: [],     // 同じ問題で複数回ミス [{questionId, count}]
+    repeatTags: [],         // 繰り返している誤答タグ [{tag, label, count}]（2回以上）
+
+    unseen: true,           // まだ1問も解いていないか
+  };
+
+  if (!log.length) return result;
+  result.unseen = false;
+
+  let timeSum = 0, timeCount = 0;
+  let timeCorrectSum = 0, timeCorrectCount = 0;
+  let timeWrongSum = 0, timeWrongCount = 0;
+
+  const perQuestionWrong = {};   // questionId -> 誤答回数
+
+  log.forEach((r) => {
+    if (r.isCorrect) result.totalCorrect++;
+
+    // --- タグ集計（誤答タグのみカウント。correctは除外） ---
+    if (r.selectedTag && r.selectedTag !== "correct") {
+      result.tagCounts[r.selectedTag] = (result.tagCounts[r.selectedTag] || 0) + 1;
+    }
+
+    // --- weakness別 ---
+    if (r.weakness) {
+      const w = result.byWeakness[r.weakness] || { total: 0, correct: 0, rate: null };
+      w.total++; if (r.isCorrect) w.correct++;
+      result.byWeakness[r.weakness] = w;
+    }
+
+    // --- stage別 ---
+    if (r.stage) {
+      const s = result.byStage[r.stage] || { total: 0, correct: 0, rate: null };
+      s.total++; if (r.isCorrect) s.correct++;
+      result.byStage[r.stage] = s;
+    }
+
+    // --- route別（1問が複数routeを持つので、それぞれに加算） ---
+    (r.route && r.route.length ? r.route : ["(routeなし)"]).forEach((rt) => {
+      const o = result.byRoute[rt] || { total: 0, correct: 0, rate: null };
+      o.total++; if (r.isCorrect) o.correct++;
+      result.byRoute[rt] = o;
+    });
+
+    // --- 時間 ---
+    if (typeof r.elapsedTime === "number" && r.elapsedTime >= 0) {
+      timeSum += r.elapsedTime; timeCount++;
+      if (r.isCorrect) {
+        timeCorrectSum += r.elapsedTime; timeCorrectCount++;
+      } else {
+        timeWrongSum += r.elapsedTime; timeWrongCount++;
+      }
+    }
+
+    // --- 繰り返しミス（問題単位） ---
+    if (!r.isCorrect) {
+      perQuestionWrong[r.questionId] = (perQuestionWrong[r.questionId] || 0) + 1;
+    }
+  });
+
+  // 正答率
+  result.overallRate = safeRate(result.totalCorrect, result.totalAnswered);
+
+  // タグランキング
+  result.tagRanking = Object.entries(result.tagCounts)
+    .map(([tag, count]) => ({ tag, label: tagLabel(tag), count }))
+    .sort((a, b) => b.count - a.count);
+
+  // 各カテゴリの rate を埋める
+  [result.byWeakness, result.byStage, result.byRoute].forEach((obj) => {
+    Object.keys(obj).forEach((k) => {
+      obj[k].rate = safeRate(obj[k].correct, obj[k].total);
+    });
+  });
+
+  // 時間
+  result.time.avgAll = timeCount ? Math.round(timeSum / timeCount) : null;
+  result.time.avgCorrect = timeCorrectCount ? Math.round(timeCorrectSum / timeCorrectCount) : null;
+  result.time.avgWrong = timeWrongCount ? Math.round(timeWrongSum / timeWrongCount) : null;
+
+  // 正解したが時間がかかった問題（平均正解時間の1.5倍以上）
+  if (result.time.avgCorrect) {
+    const threshold = result.time.avgCorrect * 1.5;
+    result.time.slowCorrect = log
+      .filter((r) => r.isCorrect && typeof r.elapsedTime === "number" && r.elapsedTime >= threshold)
+      .map((r) => ({ questionId: r.questionId, stage: r.stage, num: r.num, elapsedTime: r.elapsedTime }));
+  }
+
+  // 繰り返しミス（2回以上）
+  result.repeatMistakes = Object.entries(perQuestionWrong)
+    .filter(([, c]) => c >= 2)
+    .map(([questionId, count]) => ({ questionId, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // 繰り返している誤答タグ（2回以上）
+  result.repeatTags = result.tagRanking.filter((t) => t.count >= 2);
+
+  return result;
+}
+
+// コンソールで人間が読める形に整形して出す（開発・確認用）
+function debugPrintAnalysis(log) {
+  const a = analyzeLog(log || state.answerLog);
+  if (a.unseen) {
+    console.log("%cまだ回答ログがありません。数問解くと集計されます。", "color:#888");
+    return a;
+  }
+  console.log("%c===== 学習ログ分析 =====", "font-weight:bold;font-size:14px;color:#2563eb");
+  console.log(`総回答 ${a.totalAnswered}問 / 正解 ${a.totalCorrect}問 / 正答率 ${a.overallRate}%`);
+
+  console.log("%c▼ ミス傾向トップ（誤答タグ）", "font-weight:bold");
+  if (a.tagRanking.length) {
+    console.table(a.tagRanking.map(t => ({ 傾向: t.label, 回数: t.count })));
+  } else {
+    console.log("  誤答なし（すばらしい）");
+  }
+
+  console.log("%c▼ weakness軸 別 正答率", "font-weight:bold");
+  console.table(Object.fromEntries(Object.entries(a.byWeakness).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
+
+  console.log("%c▼ ステージ別 正答率", "font-weight:bold");
+  console.table(Object.fromEntries(Object.entries(a.byStage).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
+
+  console.log("%c▼ 解法ルート別 正答率", "font-weight:bold");
+  console.table(Object.fromEntries(Object.entries(a.byRoute).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
+
+  console.log("%c▼ 時間プロファイル", "font-weight:bold");
+  console.log(`  平均 ${a.time.avgAll}秒 / 正解時 ${a.time.avgCorrect}秒 / 誤答時 ${a.time.avgWrong}秒`);
+  if (a.time.avgCorrect && a.time.avgWrong) {
+    if (a.time.avgWrong < a.time.avgCorrect) {
+      console.log("  → 誤答の方が速い＝『早とちり・見切り発車』の傾向");
+    } else {
+      console.log("  → 誤答の方が遅い＝『悩んだ末に外す』傾向");
+    }
+  }
+
+  if (a.repeatMistakes.length) {
+    console.log("%c▼ 繰り返しミスしている問題", "font-weight:bold;color:#b91c1c");
+    console.table(a.repeatMistakes.map(m => ({ 問題ID: m.questionId, ミス回数: m.count })));
+  }
+  if (a.repeatTags.length) {
+    console.log("%c▼ 繰り返している思考のクセ", "font-weight:bold;color:#b91c1c");
+    console.table(a.repeatTags.map(t => ({ クセ: t.label, 回数: t.count })));
+  }
+  console.log("%c========================", "color:#2563eb");
+  return a;
+}
+
+/* =========================
+   分析レポート生成（Claudeに貼り付ける用テキスト）
+   analyzeLog の結果を、人にもClaudeにも読みやすいプレーンテキストに整形する。
+   このテキストをコピーしてClaudeに渡すと、弱点診断・復習メニュー・
+   プリント作成などにそのまま使える。
+========================= */
+function buildAnalysisReport() {
+  const unit = state.unit;
+  const unitLabel = unit && UNIT_META[unit] ? UNIT_META[unit].label : "(単元未選択)";
+  const a = analyzeLog(state.answerLog);
+
+  const lines = [];
+  lines.push("==== 数学アプリ 学習ログ（Claude分析用） ====");
+  lines.push(`単元: ${unitLabel}`);
+  lines.push(`出力日時: ${new Date().toLocaleString("ja-JP")}`);
+  lines.push("");
+
+  if (a.unseen) {
+    lines.push("まだ回答ログがありません。数問解いてから再度コピーしてください。");
+    return lines.join("\n");
+  }
+
+  lines.push(`総回答 ${a.totalAnswered}問 / 正解 ${a.totalCorrect}問 / 正答率 ${a.overallRate}%`);
+  lines.push("");
+
+  // ミス傾向（誤答タグ）
+  lines.push("【ミス傾向（多い順）】");
+  if (a.tagRanking.length) {
+    a.tagRanking.forEach((t) => lines.push(`  ・${t.label}（${t.tag}）: ${t.count}回`));
+  } else {
+    lines.push("  誤答なし");
+  }
+  lines.push("");
+
+  // ステージ別
+  lines.push("【ステージ別 正答率】");
+  Object.entries(a.byStage).forEach(([k, v]) => {
+    lines.push(`  ${k}: ${v.correct}/${v.total}（${v.rate}%）`);
+  });
+  lines.push("");
+
+  // 解法ルート別
+  lines.push("【解法ルート別 正答率】");
+  Object.entries(a.byRoute)
+    .sort((x, y) => (x[1].rate ?? 999) - (y[1].rate ?? 999))
+    .forEach(([k, v]) => {
+      lines.push(`  ${k}: ${v.correct}/${v.total}（${v.rate}%）`);
+    });
+  lines.push("");
+
+  // weakness別
+  lines.push("【弱点軸別 正答率】");
+  Object.entries(a.byWeakness).forEach(([k, v]) => {
+    lines.push(`  ${k}: ${v.correct}/${v.total}（${v.rate}%）`);
+  });
+  lines.push("");
+
+  // 時間
+  lines.push("【時間プロファイル】");
+  lines.push(`  平均 ${a.time.avgAll}秒 / 正解時 ${a.time.avgCorrect}秒 / 誤答時 ${a.time.avgWrong}秒`);
+  if (a.time.avgCorrect && a.time.avgWrong) {
+    lines.push(a.time.avgWrong < a.time.avgCorrect
+      ? "  傾向: 誤答の方が速い→早とちり・見切り発車ぎみ"
+      : "  傾向: 誤答の方が遅い→悩んだ末に外している");
+  }
+  if (a.time.slowCorrect.length) {
+    lines.push("  正解したが時間がかかった問題: " + a.time.slowCorrect.map(s => `${s.stage}${s.num}(${s.elapsedTime}秒)`).join(", "));
+  }
+  lines.push("");
+
+  // 繰り返し
+  if (a.repeatTags.length) {
+    lines.push("【繰り返している思考のクセ（2回以上）】");
+    a.repeatTags.forEach((t) => lines.push(`  ・${t.label}: ${t.count}回`));
+    lines.push("");
+  }
+  if (a.repeatMistakes.length) {
+    lines.push("【同じ問題で複数回ミス】");
+    a.repeatMistakes.forEach((m) => lines.push(`  ・${m.questionId}: ${m.count}回`));
+    lines.push("");
+  }
+
+  // 誤答の具体リスト（Claudeが個別に見られるよう、直近の誤答を列挙）
+  lines.push("【誤答の詳細（直近20件）】");
+  const wrongs = state.answerLog.filter(r => !r.isCorrect).slice(-20);
+  if (wrongs.length) {
+    wrongs.forEach((r) => {
+      const sel = r.selectedText !== null ? `「${r.selectedText}」` : "(無回答)";
+      const tag = r.selectedTag ? tagLabel(r.selectedTag) : "分類なし";
+      lines.push(`  ${r.stage}${r.num}(${r.questionId}): 選択${sel} → 正解「${r.correctText}」 / ${tag} / ${r.elapsedTime ?? "?"}秒`);
+    });
+  } else {
+    lines.push("  なし");
+  }
+  lines.push("");
+  lines.push("==== ここまで ====");
+  lines.push("↑このログをもとに、弱点診断・優先して復習すべき単元・復習プリント案を出してください。");
+
+  return lines.join("\n");
+}
+
+/* クリップボードにコピー（フォールバック付き） */
+function copyAnalysisToClipboard() {
+  const text = buildAnalysisReport();
+  const statusEl = el("analysisCopyStatus");
+
+  const done = (msg, color) => {
+    if (statusEl) { statusEl.innerText = msg; statusEl.style.color = color || "#166534"; }
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => done("コピーしました！Claudeのチャットに貼り付けてください。"),
+      () => fallbackCopy(text, done)
+    );
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+
+function fallbackCopy(text, done) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    done("コピーしました！Claudeのチャットに貼り付けてください。");
+  } catch (e) {
+    done("コピーに失敗しました。プレビューから手動でコピーしてください。", "#991b1b");
+  }
+}
+
+function toggleAnalysisPreview() {
+  const pre = el("analysisPreview");
+  if (!pre) return;
+  if (pre.style.display === "none" || !pre.style.display) {
+    pre.innerText = buildAnalysisReport();
+    pre.style.display = "block";
+  } else {
+    pre.style.display = "none";
+  }
+}
+
+/* =========================
+   回答ログ記録（選択肢タグ）
+   1回の回答ごとに、選んだ選択肢の情報を state.answerLog に残す。
+   outcome: "answered" | "timeout" | "skip"
+========================= */
+function logAnswer(q, selectedIndex, outcome) {
+  if (!q) return;
+
+  // 経過秒（開始時刻が取れていれば実測、無ければ制限時間から逆算）
+  let elapsed = null;
+  if (state.questionStartTs) {
+    elapsed = Math.round((Date.now() - state.questionStartTs) / 1000);
+  } else if (typeof state.remaining === "number") {
+    elapsed = timeLimit(q) - state.remaining;
+  }
+
+  const hasSel = selectedIndex !== null && selectedIndex !== undefined;
+  const isCorrect = hasSel && selectedIndex === q.correct;
+
+  // 選択肢タグ（未タグの単元でも安全に動くよう ?? null）
+  let selectedTag = null;
+  if (outcome === "timeout") {
+    selectedTag = "time_pressure";
+  } else if (outcome === "skip") {
+    selectedTag = "skipped";
+  } else if (hasSel && Array.isArray(q.tags)) {
+    selectedTag = q.tags[selectedIndex] ?? null;
+  }
+
+  state.answerLog.push({
+    questionId: q.id,
+    stage: q.stage,
+    num: q.num,
+    weakness: q.weakness,
+    route: Array.isArray(q.route) ? q.route.slice() : [],
+    selectedIndex: hasSel ? selectedIndex : null,
+    selectedText: hasSel ? q.a[selectedIndex] : null,
+    selectedTag: selectedTag,
+    correctIndex: q.correct,
+    correctText: q.a[q.correct],
+    correctTag: Array.isArray(q.tags) ? (q.tags[q.correct] ?? null) : null,
+    isCorrect: isCorrect,
+    outcome: outcome,
+    mode: state.mode,
+    timestamp: Date.now(),
+    elapsedTime: elapsed
+  });
+}
+
 function addReviewTarget(q) {
   if (!q) return;
 
@@ -416,6 +819,7 @@ function startQuestionTimer() {
     });
 
     clearInterval(state.timer);
+    state.questionStartTs = Date.now();
     state.timer = setInterval(() => {
       state.remaining--;
 
@@ -552,6 +956,7 @@ function checkRouteAndStart() {
         });
 
         clearInterval(state.timer);
+        state.questionStartTs = Date.now();
         state.timer = setInterval(() => {
           state.remaining--;
 
@@ -609,6 +1014,7 @@ if (forceBtn) {
     });
 
     clearInterval(state.timer);
+    state.questionStartTs = Date.now();
     state.timer = setInterval(() => {
       state.remaining--;
 
@@ -808,6 +1214,8 @@ function answer(i) {
 
   const ok = i === q.correct;
 
+  logAnswer(q, i, "answered");
+
   state.total++;
   stats.stage[q.stage].t++;
 
@@ -844,6 +1252,8 @@ function timeoutQuestion() {
 
   clearInterval(state.timer);
 
+  logAnswer(q, null, "timeout");
+
   state.total++;
   stats.stage[q.stage].t++;
   stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
@@ -878,6 +1288,8 @@ function skipQuestion() {
   if (!q) return;
 
   clearInterval(state.timer);
+
+  logAnswer(q, null, "skip");
 
   state.total++;
   stats.stage[q.stage].t++;
@@ -1188,6 +1600,8 @@ if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
 if (el("resetStatsBtn")) el("resetStatsBtn").onclick = resetStatsOnly;
+if (el("copyAnalysisBtn")) el("copyAnalysisBtn").onclick = copyAnalysisToClipboard;
+if (el("previewAnalysisBtn")) el("previewAnalysisBtn").onclick = toggleAnalysisPreview;
 function openUnitModal() {
   const current = state.unit
     ? UNIT_META[state.unit].label

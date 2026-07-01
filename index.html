@@ -77,6 +77,17 @@
         </section>
 
         <section class="panel-block">
+          <h2>AI分析</h2>
+          <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。</div>
+          <div class="stack-buttons">
+            <button class="btn primary" id="copyAnalysisBtn">分析結果をコピー</button>
+            <button class="btn secondary" id="previewAnalysisBtn">中身をプレビュー</button>
+          </div>
+          <div class="small-text" id="analysisCopyStatus" style="margin-top:6px;"></div>
+          <pre id="analysisPreview" class="analysis-preview" style="display:none;"></pre>
+        </section>
+
+        <section class="panel-block">
           <h2>保存</h2>
           <div class="small-text" id="saveStatus">保存状態: 未保存</div>
 <div class="stack-buttons">
