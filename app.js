@@ -5,7 +5,7 @@ const HISTORY_VISIBLE = 5;
 
 const UNIT_META = {
   keiryo: {
-    label: "図形と計量",
+    label: "数ⅠA 図形と計量",
     description: "三角比 / 三平方 / 面積",
     note: "",
     mission: `
@@ -19,7 +19,7 @@ const UNIT_META = {
   },
 
   seishitsu: {
-    label: "図形の性質",
+    label: "数ⅠA 図形の性質",
     description: "重心 / チェバ / 円周角 / 2円",
     note: "",
     mission: `
@@ -33,7 +33,7 @@ const UNIT_META = {
   },
 
   nijikansuu: {
-    label: "二次関数",
+    label: "数ⅠA 二次関数",
     description: "グラフ / 判別式 / 最大最小",
     note: "",
     mission: `
@@ -44,6 +44,100 @@ const UNIT_META = {
     `,
     questions: questions_nijikansuu,
     routeChoices: ROUTE_CHOICES_NIJIKANSUU
+  },
+
+  kitaichi: {
+    label: "数ⅠA 期待値(ミニ)",
+    description: "値×確率 / 分布表 / 意味の理解",
+    note: "",
+    mission: `
+      第1問：期待値の定義と基本計算(さいころの7/2)
+      第2問：確率が均等でない分布表からの期待値(合計=1の検算込み)
+    `,
+    questions: questions_kitaichi,
+    routeChoices: ROUTE_CHOICES_KITAICHI
+  },
+
+  vector: {
+    label: "数ⅡBC ベクトル",
+    description: "成分 / 内積 / 平行と垂直 / 球面",
+    note: "",
+    mission: `
+      第1問：成分計算・大きさ・単位ベクトル
+      第2問：内積と平行・垂直の判定(混同しやすい2条件の区別)
+      第3問：内分点・重心・位置ベクトル
+      第4問：空間座標と球面(大問チェーン形式)
+    `,
+    questions: questions_vector,
+    routeChoices: ROUTE_CHOICES_VECTOR
+  },
+
+  shisuu: {
+    label: "数ⅡBC 指数・対数",
+    description: "指数法則 / 置き換え / 対数の基礎",
+    note: "",
+    mission: `
+      第1問：指数法則の基礎(2^x×2^(-x)=1、4^x=(2^x)²)
+      第2問：相加相乗とtの範囲
+      第3問：対数の定義・計算法則・真数条件
+      第4問：置き換え方程式の大問チェーン(序盤検算の練習)
+    `,
+    questions: questions_shisuu,
+    routeChoices: ROUTE_CHOICES_SHISUU
+  },
+
+  zahyou: {
+    label: "数ⅡBC 図形と方程式",
+    description: "直線 / 円 / 距離 / 領域",
+    note: "",
+    mission: `
+      第1問：直線の方程式と交点(検算習慣)
+      第2問：距離の公式(2点間・点と直線・円と直線)
+      第3問：円の方程式と平方完成
+      第4問：領域の判定と最小値(大問チェーン形式)
+    `,
+    questions: questions_zahyou,
+    routeChoices: ROUTE_CHOICES_ZAHYOU
+  },
+
+  bisekibun: {
+    label: "数ⅡBC 微積(グラフ判断)",
+    description: "極値判定 / 解の動き / 面積",
+    note: "",
+    mission: `
+      第1問：極値の判定(f'の符号変化)と代入計算
+      第2問：グラフ概形の言語化
+      第3問：水平線y=kを動かしたときの解の動き(チェーン)
+      第4問：定積分と面積の立式
+    `,
+    questions: questions_bisekibun,
+    routeChoices: ROUTE_CHOICES_BISEKIBUN
+  },
+
+  suuretsu: {
+    label: "数ⅡBC 数列(累計・再利用ミニ)",
+    description: "累計の3列表 / 特性方程式の再利用",
+    note: "",
+    mission: `
+      第1問：累計Sₙを表で追うトレーニング
+      第2問：特性方程式と「前問の結果の再利用」
+    `,
+    questions: questions_suuretsu,
+    routeChoices: ROUTE_CHOICES_SUURETSU
+  },
+
+  toukei: {
+    label: "数ⅡBC 統計的な推測",
+    description: "標準化 / 検定 / 確率密度関数",
+    note: "",
+    mission: `
+      第1問：標準化と正規分布表の読み方
+      第2問：標本平均の分散
+      第3問：仮説検定の考え方(帰無仮説・棄却域)
+      第4問：確率密度関数(全区間の積分=1からkを決める)
+    `,
+    questions: questions_toukei,
+    routeChoices: ROUTE_CHOICES_TOUKEI
   }
 };
 
@@ -68,6 +162,7 @@ function defaultState(unit) {
     stageFilter: null,
     answerLog: [],
     questionStartTs: null,
+    candidateIndex: null, // 早合点防止：確定前の「仮選択」状態
   };
 }
 
@@ -77,7 +172,8 @@ function defaultStats() {
       "計算精度": 0,
       "方針切替": 0,
       "時間判断": 0,
-      "時間不足": 0
+      "時間不足": 0,
+      "共通点抽出": 0
     },
     stage: {
       "第1問": { t: 0, c: 0 },
@@ -264,6 +360,7 @@ const TAG_LABELS = {
   range_error: "範囲・場合分けミス",
   concept_gap: "入口が見えていない",
   near_miss: "方針は正しく詰めでミス",
+  partial_match: "一部の例だけに成り立つ性質を全体の共通点と誤認",
   time_pressure: "時間切れ",
   skipped: "スキップ"
 };
@@ -658,6 +755,7 @@ function addReviewTarget(q) {
 }
 
 function lockOptionsAndMark(correctIndex, selectedIndex = null) {
+  removeConfirmBar();
   document.querySelectorAll(".option").forEach((b) => {
     b.disabled = true;
 
@@ -714,6 +812,7 @@ function update() {
   if (el("wSwitch")) el("wSwitch").innerText = stats.weakness["方針切替"] || 0;
   if (el("wTime")) el("wTime").innerText = stats.weakness["時間不足"] || 0;
   if (el("wJudge")) el("wJudge").innerText = stats.weakness["時間判断"] || 0;
+  if (el("wPattern")) el("wPattern").innerText = stats.weakness["共通点抽出"] || 0;
   if (el("topWeak")) el("topWeak").innerText = topWeak();
 
   ["第1問", "第2問", "第3問", "第4問"].forEach((stage, i) => {
@@ -1117,6 +1216,8 @@ const box = el("optionsBox");
 if (box) {
   box.innerHTML = "";
   box.classList.add("disabled");
+  state.candidateIndex = null;
+  removeConfirmBar();
 
   if (state.mode !== "tips") {
 
@@ -1131,8 +1232,8 @@ shuffled.forEach((item, i) => {
   // ✅ 元の位置を保存
   b.dataset.index = item.index;
 
-  // ✅ 正解判定用
-  b.onclick = () => answer(item.index);
+  // ✅ 早合点防止：即答ではなく、まず「仮選択」にする
+  b.onclick = () => selectCandidate(item.index, b);
 
   b.disabled = true;
 
@@ -1201,6 +1302,68 @@ if (el("startQuestionBtn")) {
     }
     if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
   }
+}
+
+/* =========================
+   早合点防止：仮選択→確定の2段階クリック
+   選んだ瞬間に即採点せず、一度立ち止まって他の選択肢も
+   見てから確定させることで「早合点」による誤答を減らす。
+   他の選択肢をタップすると「消去済み」トグル（取り消し線）になり、
+   自分の判断過程を可視化できる（採点には影響しない）。
+========================= */
+function selectCandidate(index, btnEl) {
+  const box = el("optionsBox");
+  if (!box || box.classList.contains("disabled")) return;
+
+  // すでに仮選択がある状態で「別の」選択肢をタップした場合は
+  // 消去法メモ（取り消し線）のトグルとして扱う
+  if (state.candidateIndex !== null && state.candidateIndex !== index) {
+    btnEl.classList.toggle("eliminated");
+    return;
+  }
+
+  // 消去済みにしていた選択肢を仮選択には戻さない（一貫性のため解除してから選ばせる）
+  if (btnEl.classList.contains("eliminated")) {
+    btnEl.classList.remove("eliminated");
+    return;
+  }
+
+  state.candidateIndex = index;
+
+  Array.from(box.children).forEach((child) => {
+    child.classList.remove("candidate");
+  });
+  btnEl.classList.add("candidate");
+
+  showConfirmBar(index);
+}
+
+function showConfirmBar(index) {
+  removeConfirmBar();
+  const box = el("optionsBox");
+  if (!box) return;
+
+  const bar = document.createElement("div");
+  bar.id = "confirmBar";
+  bar.className = "confirm-bar";
+  bar.innerHTML = `
+    <div class="confirm-hint">その答えで確定する前に、他の選択肢も一度見てみよう。違うと思うものはタップすると消せます。</div>
+    <button class="btn primary" id="confirmAnswerBtn">この答えで確定する</button>
+  `;
+  box.insertAdjacentElement("afterend", bar);
+
+  const confirmBtn = el("confirmAnswerBtn");
+  if (confirmBtn) {
+    confirmBtn.onclick = () => {
+      removeConfirmBar();
+      answer(index);
+    };
+  }
+}
+
+function removeConfirmBar() {
+  const bar = el("confirmBar");
+  if (bar) bar.remove();
 }
 
 /* =========================
