@@ -365,6 +365,151 @@ const TAG_LABELS = {
   skipped: "スキップ"
 };
 
+/* =========================
+   図形問題用SVG図
+   - 必要な問題だけ、問題IDごとに表示する
+   - 図は位置関係確認用の模式図。長さ・角度を図から測らせる目的ではない
+========================= */
+
+const DIAGRAM_NOTICE = "※図は位置関係を確認するための模式図です。長さや角度を図から測って解くものではありません。";
+
+const DIAGRAMS = {
+  "g2-3": `
+    <svg viewBox="0 0 660 250" class="diagram-svg" role="img" aria-label="g2-3 メネラウス図">
+      <polygon class="shape" points="70,190 250,190 160,40"/>
+      <line class="thin dash" x1="50" y1="190" x2="630" y2="190"/>
+      <line class="thin" x1="100" y1="140" x2="610" y2="190"/>
+      <circle class="point" cx="70" cy="190" r="4"/>
+      <circle class="point" cx="250" cy="190" r="4"/>
+      <circle class="point" cx="160" cy="40" r="4"/>
+      <circle class="point" cx="100" cy="140" r="4"/>
+      <circle class="point" cx="227.5" cy="152.5" r="4"/>
+      <circle class="ext-point" cx="610" cy="190" r="5"/>
+      <text class="label" x="55" y="212">B</text>
+      <text class="label" x="253" y="212">C</text>
+      <text class="label" x="154" y="31">A</text>
+      <text class="label" x="84" y="139">R</text>
+      <text class="label" x="233" y="151">Q</text>
+      <text class="red-label" x="616" y="189">P</text>
+      <text class="small-label" x="565" y="214">Cの外側</text>
+      <text class="ratio" x="88" y="84">AR:RB=2:1</text>
+      <text class="ratio" x="238" y="117">CQ:QA=1:3</text>
+      <text class="note" x="360" y="174">※Pは実際かなり遠い</text>
+    </svg>
+  `,
+
+  "g2-4": `
+    <svg viewBox="0 0 450 280" class="diagram-svg" role="img" aria-label="g2-4 メネラウス図">
+      <polygon class="shape" points="70,180 240,180 160,50"/>
+      <line class="thin dash" x1="45" y1="180" x2="425" y2="180"/>
+      <line class="thin dash" x1="160" y1="50" x2="25" y2="245"/>
+      <line class="thin dash" x1="160" y1="50" x2="270" y2="226"/>
+      <line class="thin" x1="25" y1="245" x2="410" y2="180"/>
+      <circle class="point" cx="70" cy="180" r="4"/>
+      <circle class="point" cx="240" cy="180" r="4"/>
+      <circle class="point" cx="160" cy="50" r="4"/>
+      <circle class="ext-point" cx="25" cy="245" r="5"/>
+      <circle class="ext-point" cx="410" cy="180" r="5"/>
+      <circle class="ext-point" cx="256" cy="206" r="5"/>
+      <text class="label" x="55" y="201">B</text>
+      <text class="label" x="244" y="201">C</text>
+      <text class="label" x="154" y="41">A</text>
+      <text class="red-label" x="11" y="244">R</text>
+      <text class="red-label" x="416" y="179">P</text>
+      <text class="red-label" x="262" y="209">Q</text>
+      <text class="small-label" x="28" y="226">Bの外側</text>
+      <text class="small-label" x="367" y="204">Cの外側</text>
+      <text class="small-label" x="268" y="232">Cの外側</text>
+      <text class="ratio" x="52" y="122">AR:RB=3:1</text>
+      <text class="ratio" x="252" y="166">BP:PC=2:1</text>
+    </svg>
+  `,
+
+  "g2-6": `
+    <svg viewBox="0 0 540 260" class="diagram-svg" role="img" aria-label="g2-6 チェバとメネラウス連続図">
+      <g transform="translate(150,0)">
+        <polygon class="shape" points="70,195 270,195 165,40"/>
+        <line class="thin dash" x1="-140" y1="195" x2="295" y2="195"/>
+        <line class="thin" x1="165" y1="40" x2="136.7" y2="195"/>
+        <line class="thin" x1="70" y1="195" x2="217.5" y2="117.5"/>
+        <line class="thin" x1="270" y1="195" x2="101.7" y2="143.3"/>
+        <line class="thin" x1="-130" y1="195" x2="217.5" y2="117.5"/>
+        <circle class="point" cx="70" cy="195" r="4"/>
+        <circle class="point" cx="270" cy="195" r="4"/>
+        <circle class="point" cx="165" cy="40" r="4"/>
+        <circle class="point" cx="136.7" cy="195" r="4"/>
+        <circle class="point" cx="217.5" cy="117.5" r="4"/>
+        <circle class="point" cx="101.7" cy="143.3" r="4"/>
+        <circle class="p-point" cx="143.8" cy="156.2" r="5"/>
+        <circle class="ext-point" cx="-130" cy="195" r="5"/>
+        <text class="label" x="55" y="216">B</text>
+        <text class="label" x="274" y="216">C</text>
+        <text class="label" x="159" y="31">A</text>
+        <text class="label" x="134" y="216">D</text>
+        <text class="label" x="222" y="114">E</text>
+        <text class="label" x="86" y="143">F</text>
+        <text class="blue-label" x="150" y="152">P</text>
+        <text class="red-label" x="-148" y="193">Q</text>
+        <text class="small-label" x="-120" y="218">Bの外側</text>
+        <text class="ratio" x="82" y="187">BD:DC=1:2</text>
+        <text class="ratio" x="212" y="82">CE:EA=1:1</text>
+        <text class="note" x="-42" y="175">※QはB側に遠く出る</text>
+      </g>
+    </svg>
+  `,
+
+  "g4-3": `
+    <svg viewBox="0 0 360 250" class="diagram-svg" role="img" aria-label="2円の共通外接線">
+      <circle class="shape" cx="95" cy="150" r="52"/>
+      <circle class="shape" cx="260" cy="150" r="24"/>
+      <line class="thin" x1="95" y1="150" x2="260" y2="150"/>
+      <line class="shape" x1="103.8" y1="98.8" x2="264.1" y2="126.3"/>
+      <line class="thin" x1="95" y1="150" x2="103.8" y2="98.8"/>
+      <line class="thin" x1="260" y1="150" x2="264.1" y2="126.3"/>
+      <line class="thin dash" x1="95" y1="150" x2="264.1" y2="126.3"/>
+      <circle class="point" cx="95" cy="150" r="4"/>
+      <circle class="point" cx="260" cy="150" r="4"/>
+      <circle class="point" cx="103.8" cy="98.8" r="4"/>
+      <circle class="point" cx="264.1" cy="126.3" r="4"/>
+      <text class="label" x="78" y="171">O₁</text>
+      <text class="label" x="263" y="171">O₂</text>
+      <text class="label" x="91" y="92">A</text>
+      <text class="label" x="269" y="126">B</text>
+      <text class="ratio" x="157" y="145">中心間距離</text>
+      <text class="ratio" x="146" y="102">共通外接線</text>
+      <text class="small-label" x="112" y="122">r₁</text>
+      <text class="small-label" x="268" y="141">r₂</text>
+      <path class="angle" d="M259 126 L264 138 L276 135"/>
+      <text class="note" x="122" y="221">半径差と接線長で直角三角形を見る</text>
+    </svg>
+  `,
+
+  "g4-4": `
+    <svg viewBox="0 0 300 260" class="diagram-svg" role="img" aria-label="外接する2円と、接点を通らない共通外接線">
+      <circle class="shape" cx="90" cy="150" r="70"/>
+      <circle class="shape" cx="185" cy="150" r="25"/>
+      <line class="thin dash" x1="90" y1="150" x2="185" y2="150"/>
+      <line class="shape" x1="123.2" y1="88.3" x2="196.8" y2="128.0"/>
+      <line class="thin" x1="90" y1="150" x2="123.2" y2="88.3"/>
+      <line class="thin" x1="185" y1="150" x2="196.8" y2="128.0"/>
+      <circle class="point" cx="90" cy="150" r="4"/>
+      <circle class="point" cx="185" cy="150" r="4"/>
+      <circle class="point" cx="123.2" cy="88.3" r="4"/>
+      <circle class="point" cx="196.8" cy="128.0" r="4"/>
+      <circle class="ext-point" cx="160" cy="150" r="5"/>
+      <text class="label" x="73" y="171">O</text>
+      <text class="label" x="188" y="171">O'</text>
+      <text class="label" x="115" y="80">A</text>
+      <text class="label" x="203" y="122">B</text>
+      <text class="red-label" x="163" y="143">接点</text>
+      <text class="small-label" x="107" y="122">r=4</text>
+      <text class="small-label" x="200" y="141">r=1</text>
+      <text class="ratio" x="118" y="160">d=OO'=5（外接：d=R+r）</text>
+      <text class="note" x="98" y="238">円は接点で接しているが、共通外接線(AB)は接点を通らない</text>
+    </svg>
+  `
+};
+
 function tagLabel(tag) {
   if (!tag) return "分類なし";
   return TAG_LABELS[tag] || tag;
@@ -1210,7 +1355,22 @@ function show() {
     `;
   }
 
-  if (el("svgBox")) el("svgBox").innerHTML = q.svg || "";
+  if (el("svgBox")) {
+    const diagramHtml = q.svg || DIAGRAMS[q.id] || "";
+
+    if (diagramHtml) {
+      el("svgBox").innerHTML = `
+        <div class="diagram-box">
+          ${diagramHtml}
+          <div class="diagram-notice">${DIAGRAM_NOTICE}</div>
+        </div>
+      `;
+      el("svgBox").style.display = "block";
+    } else {
+      el("svgBox").innerHTML = "";
+      el("svgBox").style.display = "none";
+    }
+  }
 
 const box = el("optionsBox");
 if (box) {

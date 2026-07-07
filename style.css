@@ -150,7 +150,6 @@ body{
 }
 
 .options-list.disabled{
-  opacity:0.6;
   pointer-events:none;
 }
 
@@ -163,12 +162,39 @@ body{
 }
 
 .option.correct{
-  background:#22c55e;
-  color:#fff;
+  background:#dcfce7;
+  color:#166534;
 }
 .option.wrong{
-  background:#ef4444;
-  color:#fff;
+  background:#fee2e2;
+  color:#991b1b;
+}
+
+
+/* 採点後の正誤表示を最優先する
+   - disabled時に薄くしない
+   - candidate / eliminated が残っていても correct / wrong の色を勝たせる
+   - 目に優しい淡色背景＋濃色文字にする */
+.option.correct,
+.option.correct.candidate,
+.option.correct.eliminated{
+  background:#dcfce7;
+  color:#166534;
+  border:2px solid #86efac;
+  text-decoration:none;
+  opacity:1;
+  font-weight:800;
+}
+
+.option.wrong,
+.option.wrong.candidate,
+.option.wrong.eliminated{
+  background:#fee2e2;
+  color:#991b1b;
+  border:2px solid #fca5a5;
+  text-decoration:none;
+  opacity:1;
+  font-weight:800;
 }
 
 /* =========================
@@ -721,4 +747,185 @@ body.exam-mode .main-layout{
 .confirm-hint {
   font-size: 13px;
   color: #6b5a2a;
+}
+
+/* =========================
+   図形問題用SVG図
+========================= */
+
+#svgBox {
+  margin: 10px 0 12px;
+}
+
+.diagram-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.diagram-svg {
+  width: 100%;
+  max-width: 560px;
+  display: block;
+  margin: 0 auto;
+}
+
+.diagram-notice {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #92400e;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+
+/* SVG内部の共通スタイル */
+.diagram-svg .shape {
+  fill: none;
+  stroke: #111827;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram-svg .thin {
+  fill: none;
+  stroke: #6b7280;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram-svg .dash {
+  stroke-dasharray: 6 5;
+}
+
+.diagram-svg .point {
+  fill: #111827;
+}
+
+.diagram-svg .ext-point {
+  fill: #dc2626;
+}
+
+.diagram-svg .p-point {
+  fill: #2563eb;
+}
+
+.diagram-svg .label {
+  font-size: 16px;
+  font-weight: 800;
+  fill: #111827;
+}
+
+.diagram-svg .red-label {
+  font-size: 15px;
+  font-weight: 800;
+  fill: #dc2626;
+}
+
+.diagram-svg .blue-label {
+  font-size: 15px;
+  font-weight: 800;
+  fill: #2563eb;
+}
+
+.diagram-svg .small-label {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #374151;
+}
+
+.diagram-svg .ratio {
+  font-size: 12px;
+  font-weight: 800;
+  fill: #2563eb;
+}
+
+.diagram-svg .note {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #7c2d12;
+}
+
+.diagram-svg .angle {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+
+/* =========================
+   追加: 方針選択を「頻出 + その他」に整理
+========================= */
+.route-options-enhanced {
+  gap: 10px;
+}
+
+.route-choice-group {
+  display: grid;
+  gap: 8px;
+}
+
+.route-choice-heading {
+  font-size: 12px;
+  font-weight: 800;
+  color: #92400e;
+  letter-spacing: 0.02em;
+  margin: 2px 0 0;
+}
+
+.route-choice-primary {
+  padding: 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fffaf2;
+}
+
+.route-choice-extra {
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+/* hidden属性が .route-choice-extra の display:grid に負けるのを防ぐ */
+.route-choice-extra[hidden] {
+  display: none !important;
+}
+
+.route-more-toggle {
+  width: 100%;
+  border: 1px dashed #f59e0b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  color: #92400e;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: left;
+}
+
+.route-more-toggle:hover {
+  background: #ffedd5;
+}
+
+.route-options-enhanced label {
+  min-height: 46px;
+}
+
+@media (max-width: 900px) {
+  .route-choice-primary,
+  .route-choice-extra {
+    padding: 6px;
+  }
+
+  .route-more-toggle {
+    padding: 12px;
+  }
 }
