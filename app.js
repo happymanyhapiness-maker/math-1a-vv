@@ -1258,6 +1258,38 @@ function resetTimer() {
   }
 }
 
+/* =========================
+   方針確認クイズの選択肢を絞り込む
+   単元の全ルート(10件前後)をそのまま出すと、正解が「その他」に埋もれて
+   展開しないと選べない問題が起きていた。ここで問題ごとに
+   「正解ルートを必ず含む・目安6件」まで絞ってから描画することで、
+   折り畳みUIそのものを不要にする（labels.length<=6なら展開UIは発火しない）。
+========================= */
+const ROUTE_QUIZ_TARGET_COUNT = 6;
+
+function buildRouteQuizOptions(q) {
+  const meta = UNIT_META[state.unit];
+  const allChoices = meta.routeChoices || [];
+  const correct = Array.isArray(q.route) ? q.route : [];
+
+  // 正解ルートは（単元の選択肢一覧に無い表記ゆれがあっても）必ず含める
+  const pool = correct.slice();
+
+  const shuffle = (list) => list.slice().sort(() => Math.random() - 0.5);
+
+  // 埋め合わせの優先順位：①よく使う方針 → ②単元の残り全部
+  const primary = shuffle((meta.primaryRoutes || []).filter((r) => !pool.includes(r)));
+  const rest = shuffle(allChoices.filter((r) => !pool.includes(r) && !primary.includes(r)));
+
+  [primary, rest].forEach((list) => {
+    list.forEach((r) => {
+      if (pool.length < ROUTE_QUIZ_TARGET_COUNT) pool.push(r);
+    });
+  });
+
+  return shuffle(pool);
+}
+
 function startQuestionTimer() {
   const q = currentQuestion();
 
@@ -1319,7 +1351,7 @@ if (routeOptions) {
   guide.innerText = `解き方を選んでください（${q.route.length}つ選択）`;
   routeOptions.appendChild(guide);
 }
-const choices = UNIT_META[state.unit].routeChoices;
+const choices = buildRouteQuizOptions(q);
 
 choices.forEach((label) => {
   const wrap = document.createElement("label");
