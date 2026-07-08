@@ -16,6 +16,8 @@ body{
   background:#f7f8fb;
   color:#111827;
   overflow:auto;
+  /* iPhone Safariの下部ツールバー・ホームインジケータで本文末尾が隠れる問題への対策 */
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
 }
 
 .app-shell{
@@ -137,7 +139,7 @@ body{
 ========================= */
 
 .question-panel{
-  padding:14px;
+  padding:14px 14px calc(14px + 24px) 14px;
   display:flex;
   flex-direction:column;
   gap:12px;
