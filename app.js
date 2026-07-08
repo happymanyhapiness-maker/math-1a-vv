@@ -15,7 +15,8 @@ const UNIT_META = {
       第4問：誘導の読み方・時間配分
     `,
     questions: questions_keiryo,
-    routeChoices: ROUTE_CHOICES_KEIRYO
+    routeChoices: ROUTE_CHOICES_KEIRYO,
+    primaryRoutes: ["三平方", "面積", "接線の長さ", "角の二等分線", "同じ量を2通りで表す", "面積→半径"]
   },
 
   seishitsu: {
@@ -29,7 +30,8 @@ const UNIT_META = {
       第4問：2円の位置関係・共通接線
     `,
     questions: questions_seishitsu,
-    routeChoices: ROUTE_CHOICES_SEISHITSU
+    routeChoices: ROUTE_CHOICES_SEISHITSU,
+    primaryRoutes: ["三平方", "二等辺三角形の性質", "外心の性質", "チェバの定理", "メネラウスの定理", "円周角の定理"]
   },
 
   nijikansuu: {
@@ -43,7 +45,8 @@ const UNIT_META = {
       第4問：最大最小の応用+大問形式(具体値→一般化→振り返り)
     `,
     questions: questions_nijikansuu,
-    routeChoices: ROUTE_CHOICES_NIJIKANSUU
+    routeChoices: ROUTE_CHOICES_NIJIKANSUU,
+    primaryRoutes: ["頂点の座標", "判別式", "2次不等式", "最大最小(区間)", "式の決定(頂点)", "平行移動"]
   },
 
   kitaichi: {
@@ -55,7 +58,8 @@ const UNIT_META = {
       第2問：確率が均等でない分布表からの期待値(合計=1の検算込み)
     `,
     questions: questions_kitaichi,
-    routeChoices: ROUTE_CHOICES_KITAICHI
+    routeChoices: ROUTE_CHOICES_KITAICHI,
+    primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"]
   },
 
   vector: {
@@ -69,7 +73,8 @@ const UNIT_META = {
       第4問：空間座標と球面(大問チェーン形式)
     `,
     questions: questions_vector,
-    routeChoices: ROUTE_CHOICES_VECTOR
+    routeChoices: ROUTE_CHOICES_VECTOR,
+    primaryRoutes: ["成分計算", "内積", "平行条件", "垂直条件", "内分点の公式", "位置ベクトル"]
   },
 
   shisuu: {
@@ -83,7 +88,8 @@ const UNIT_META = {
       第4問：置き換え方程式の大問チェーン(序盤検算の練習)
     `,
     questions: questions_shisuu,
-    routeChoices: ROUTE_CHOICES_SHISUU
+    routeChoices: ROUTE_CHOICES_SHISUU,
+    primaryRoutes: ["指数法則", "置き換え(tの式)", "対数の定義", "対数の計算法則", "真数条件", "tの範囲の確認"]
   },
 
   zahyou: {
@@ -97,7 +103,8 @@ const UNIT_META = {
       第4問：領域の判定と最小値(大問チェーン形式)
     `,
     questions: questions_zahyou,
-    routeChoices: ROUTE_CHOICES_ZAHYOU
+    routeChoices: ROUTE_CHOICES_ZAHYOU,
+    primaryRoutes: ["直線の方程式", "連立方程式(交点)", "2点間の距離", "円の方程式", "代表点の代入(領域)", "点と直線の距離"]
   },
 
   bisekibun: {
@@ -111,7 +118,8 @@ const UNIT_META = {
       第4問：定積分と面積の立式
     `,
     questions: questions_bisekibun,
-    routeChoices: ROUTE_CHOICES_BISEKIBUN
+    routeChoices: ROUTE_CHOICES_BISEKIBUN,
+    primaryRoutes: ["f'の符号と増減", "極値の判定", "具体値で試す", "定積分の計算", "上-下の確認"]
   },
 
   suuretsu: {
@@ -123,7 +131,8 @@ const UNIT_META = {
       第2問：特性方程式と「前問の結果の再利用」
     `,
     questions: questions_suuretsu,
-    routeChoices: ROUTE_CHOICES_SUURETSU
+    routeChoices: ROUTE_CHOICES_SUURETSU,
+    primaryRoutes: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す"]
   },
 
   toukei: {
@@ -137,7 +146,8 @@ const UNIT_META = {
       第4問：確率密度関数(全区間の積分=1からkを決める)
     `,
     questions: questions_toukei,
-    routeChoices: ROUTE_CHOICES_TOUKEI
+    routeChoices: ROUTE_CHOICES_TOUKEI,
+    primaryRoutes: ["標準化", "正規分布表の読み方", "標本平均の分散", "帰無仮説の設定", "棄却域との比較"]
   }
 };
 
@@ -163,6 +173,7 @@ function defaultState(unit) {
     answerLog: [],
     questionStartTs: null,
     candidateIndex: null, // 早合点防止：確定前の「仮選択」状態
+    reviewMeta: {}, // questionId -> {streak, dueAt, lastSeenAt} 間隔復習(スペースドリピティション)用
   };
 }
 
@@ -180,7 +191,8 @@ function defaultStats() {
       "第2問": { t: 0, c: 0 },
       "第3問": { t: 0, c: 0 },
       "第4問": { t: 0, c: 0 }
-    }
+    },
+    clearedCount: 0 // 間隔復習を完走して「完全に直した」と判定された問題数
   };
 }
 
@@ -271,6 +283,7 @@ function loadUnit(unit) {
       // (古い/不完全な保存データに欠けているキーがあっても、デフォルト値で補える)
       if (obj.stats && obj.stats.weakness) Object.assign(stats.weakness, obj.stats.weakness);
       if (obj.stats && obj.stats.stage) Object.assign(stats.stage, obj.stats.stage);
+      if (obj.stats && typeof obj.stats.clearedCount === "number") stats.clearedCount = obj.stats.clearedCount;
     } catch (e) {
       console.error(e);
     }
@@ -283,6 +296,14 @@ function loadUnit(unit) {
   if (!Array.isArray(state.tipList)) state.tipList = [];
   if (!Array.isArray(state.answerLog)) state.answerLog = [];
   if (typeof state.finished !== "boolean") state.finished = false;
+
+  // v14以前のデータにはreviewMetaが無いので、既存のwrong[]から「今すぐ復習対象」として補完する
+  if (!state.reviewMeta || typeof state.reviewMeta !== "object") state.reviewMeta = {};
+  state.wrong.forEach((q) => {
+    if (q && q.id && !state.reviewMeta[q.id]) {
+      state.reviewMeta[q.id] = { streak: 0, dueAt: Date.now(), lastSeenAt: null };
+    }
+  });
 }
 
 /* =========================
@@ -290,6 +311,7 @@ function loadUnit(unit) {
 ========================= */
 function currentList() {
   if (state.mode === "review") return state.wrong;
+  if (state.mode === "dueReview") return dueReviewList();
   if (state.mode === "tips") return state.tipList;
   if (state.mode === "stage") {
     return UNIT_META[state.unit].questions.filter((q) => q.stage === state.stageFilter);
@@ -643,6 +665,62 @@ function analyzeLog(log) {
   return result;
 }
 
+/* =========================
+   アプリ内ミニ分析（第3段階）
+   analyzeLog()の結果を、コピペしてClaudeに渡さなくても
+   その場で気づけるよう、サイドバーに直接表示する。
+   「コピー→貼り付け→分析」のラグを埋めるための即時フィードバック。
+========================= */
+function renderInsightsPanel() {
+  const box = el("insightsBox");
+  if (!box) return;
+
+  const a = analyzeLog(state.answerLog);
+
+  if (a.unseen) {
+    box.innerHTML = `<div class="small-text">まだ回答ログがありません。数問解くと、ここにその場でミス傾向が出ます。</div>`;
+    return;
+  }
+
+  const topTags = a.tagRanking.slice(0, 3);
+  const maxCount = topTags.length ? topTags[0].count : 0;
+
+  const tagBars = topTags.length
+    ? topTags
+        .map(
+          (t) => `
+        <div class="insight-bar-row">
+          <span class="insight-bar-label">${t.label}</span>
+          <div class="insight-bar-track">
+            <div class="insight-bar-fill" style="width:${maxCount ? Math.round((t.count / maxCount) * 100) : 0}%;"></div>
+          </div>
+          <span class="insight-bar-count">${t.count}</span>
+        </div>
+      `
+        )
+        .join("")
+    : `<div class="small-text">誤答なし。今のところ完璧！</div>`;
+
+  const stageEntries = Object.entries(a.byStage).filter(([, v]) => v.total > 0);
+  let weakestStageHtml = "";
+  if (stageEntries.length) {
+    const weakest = stageEntries.sort((x, y) => (x[1].rate ?? 100) - (y[1].rate ?? 100))[0];
+    weakestStageHtml = `<div class="pill" style="margin-top:8px;">今一番弱いステージ: ${weakest[0]}（${weakest[1].rate}%）</div>`;
+  }
+
+  let repeatHtml = "";
+  if (a.repeatMistakes.length) {
+    repeatHtml = `<div class="small-text" style="margin-top:8px; color:#991b1b;">同じ問題を${a.repeatMistakes.length}問、2回以上ミスしています。「今日の復習」から解き直すのがおすすめ。</div>`;
+  }
+
+  box.innerHTML = `
+    <div class="small-text">直近 ${a.totalAnswered}問 / 正答率 ${a.overallRate}%</div>
+    <div class="insight-bars" style="margin-top:8px;">${tagBars}</div>
+    ${weakestStageHtml}
+    ${repeatHtml}
+  `;
+}
+
 // コンソールで人間が読める形に整形して出す（開発・確認用）
 function debugPrintAnalysis(log) {
   const a = analyzeLog(log || state.answerLog);
@@ -897,6 +975,64 @@ function addReviewTarget(q) {
   if (!state.tipList.find((qq) => qq.id === q.id)) {
     state.tipList.push(q);
   }
+
+  // 間隔復習用メタ情報：初めて間違えた問題は「今すぐ復習対象」として登録する
+  if (!state.reviewMeta[q.id]) {
+    state.reviewMeta[q.id] = { streak: 0, dueAt: Date.now(), lastSeenAt: null };
+  }
+}
+
+/* =========================
+   間隔復習（スペースドリピティション・簡易版）
+   「途中結果を確定させずに次へ進む」癖の矯正には、間違えた問題を
+   本人任せにせず「今日はこれだけ」と機械的に提示することが必要。
+   正解が続くほど間隔を空け、一定回数連続正解したら「完全に直した」
+   として復習リストから卒業させる。
+========================= */
+const REVIEW_INTERVAL_DAYS = [0, 1, 3, 7]; // streak(連続正解数)ごとの次回間隔(日)
+const REVIEW_CLEAR_STREAK = REVIEW_INTERVAL_DAYS.length; // これに到達したら卒業
+
+function dueReviewList() {
+  const now = Date.now();
+  return state.wrong.filter((q) => {
+    const meta = state.reviewMeta[q.id];
+    if (!meta) return true; // メタ情報がない古いデータは、念のため復習対象に含める
+    return meta.dueAt <= now;
+  });
+}
+
+function dueReviewCount() {
+  return dueReviewList().length;
+}
+
+// 復習モード中の1問について、正誤に応じてreviewMetaを更新する。
+// 卒業条件を満たしたらwrong[]/reviewMetaから外し、stats.clearedCountを加算する。
+function markReviewResult(q, isCorrect) {
+  if (!q || !q.id) return;
+
+  const meta = state.reviewMeta[q.id] || { streak: 0, dueAt: Date.now(), lastSeenAt: null };
+  meta.lastSeenAt = Date.now();
+
+  if (isCorrect) {
+    meta.streak++;
+
+    if (meta.streak >= REVIEW_CLEAR_STREAK) {
+      // 卒業：復習リストから完全に除去
+      state.wrong = state.wrong.filter((qq) => qq.id !== q.id);
+      delete state.reviewMeta[q.id];
+      stats.clearedCount = (stats.clearedCount || 0) + 1;
+      return;
+    }
+
+    const days = REVIEW_INTERVAL_DAYS[meta.streak] ?? REVIEW_INTERVAL_DAYS[REVIEW_INTERVAL_DAYS.length - 1];
+    meta.dueAt = Date.now() + days * 24 * 60 * 60 * 1000;
+  } else {
+    // 間違えたら振り出しに戻し、次回すぐ復習対象にする
+    meta.streak = 0;
+    meta.dueAt = Date.now();
+  }
+
+  state.reviewMeta[q.id] = meta;
 }
 
 function lockOptionsAndMark(correctIndex, selectedIndex = null) {
@@ -966,9 +1102,16 @@ function update() {
     if (el("stageRate" + i)) el("stageRate" + i).innerText = r + "%";
   });
 
-  if (el("todayReviewCount")) el("todayReviewCount").innerText = state.wrong.length;
-  if (el("reviewRate")) el("reviewRate").innerText = "0%";
-  if (el("clearedCount")) el("clearedCount").innerText = "0";
+  if (el("todayReviewCount")) el("todayReviewCount").innerText = dueReviewCount();
+  if (el("reviewRate")) {
+    const reviewLogs = state.answerLog.filter((r) => r.mode === "review" || r.mode === "dueReview");
+    const reviewCorrect = reviewLogs.filter((r) => r.isCorrect).length;
+    const rr = safeRate(reviewCorrect, reviewLogs.length);
+    el("reviewRate").innerText = rr === null ? "―" : rr + "%";
+  }
+  if (el("clearedCount")) el("clearedCount").innerText = stats.clearedCount || 0;
+
+  renderInsightsPanel();
 }
 
 /* =========================
@@ -991,6 +1134,8 @@ function addHistory() {
     mode:
       state.mode === "review"
         ? "復習"
+        : state.mode === "dueReview"
+        ? "今日の復習"
         : state.mode === "tips"
         ? "TIPS"
         : state.mode === "stage"
@@ -1552,6 +1697,10 @@ function answer(i) {
     addReviewTarget(q);
   }
 
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, ok);
+  }
+
   lockOptionsAndMark(q.correct, i);
 
   if (el("feedback")) {
@@ -1582,6 +1731,10 @@ function timeoutQuestion() {
   stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
 
   addReviewTarget(q);
+
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, false);
+  }
 
   // シャッフル後も正しい選択肢を緑にする
   lockOptionsAndMark(q.correct);
@@ -1619,6 +1772,10 @@ function skipQuestion() {
   stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
 
   addReviewTarget(q);
+
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, false);
+  }
 
   // スキップ後に選択肢を押せないようにする
   lockOptionsAndMark(q.correct);
@@ -1844,6 +2001,32 @@ function startWrongOnlyReview() {
   save();
 }
 
+function startDueReview() {
+  const due = dueReviewList();
+  if (!due.length) {
+    alert(
+      state.wrong.length
+        ? "今復習すべき問題はまだありません。間隔をあけて出題する仕組みなので、少し時間を置いてから来てください。"
+        : "復習対象の問題がありません。"
+    );
+    return;
+  }
+
+  state.mode = "dueReview";
+  state.index = 0;
+  state.correct = 0;
+  state.total = 0;
+  state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
+
+  show();
+  save();
+}
+
 function startTipReview() {
   if (!state.tipList.length) {
     alert("復習するTIPSがありません");
@@ -1914,6 +2097,7 @@ if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
 if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
 if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
 if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
+if (el("startDueReviewBtn")) el("startDueReviewBtn").onclick = startDueReview;
 if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
 if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
 if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;

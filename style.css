@@ -501,6 +501,50 @@ body.exam-mode .main-layout{
   color: #6b7280;
 }
 
+.insight-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.insight-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.insight-bar-label {
+  flex: 0 0 auto;
+  width: 92px;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.insight-bar-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 9999px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+
+.insight-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #dc2626;
+}
+
+.insight-bar-count {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: right;
+  color: #6b7280;
+  font-weight: 600;
+}
+
 .history-box {
   display: flex;
   flex-direction: column;

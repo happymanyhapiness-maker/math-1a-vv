@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>共通テスト数学</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
   <div class="app-shell">
@@ -78,6 +78,11 @@
         </section>
 
         <section class="panel-block">
+          <h2>今の傾向（自動）</h2>
+          <div id="insightsBox" class="small-text">まだ回答ログがありません。</div>
+        </section>
+
+        <section class="panel-block">
           <h2>AI分析</h2>
           <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。</div>
           <div class="stack-buttons">
@@ -140,6 +145,7 @@
           <div class="toolbar">
             <button class="btn primary" id="startExamBtn">試験開始</button>
             <button class="btn warning" id="resumeExamBtn">途中から再開</button>
+            <button class="btn success" id="startDueReviewBtn">今日の復習だけ</button>
             <button class="btn success" id="startWrongOnlyReviewBtn">間違えた問題だけ再挑戦</button>
             <button class="btn success" id="startTipReviewBtn">TIPSだけ復習</button>
           </div>
@@ -237,7 +243,7 @@
   <script src="questions_bisekibun.js?v=1"></script>
   <script src="questions_suuretsu.js?v=1"></script>
   <script src="questions_toukei.js?v=1"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=15"></script>
 
   <script>
   /* =========================================================
@@ -246,42 +252,26 @@
      - input/label 自体は移動するだけなので、既存の正誤判定ロジックは壊さない
   ========================================================= */
   (function () {
-    const PRIMARY_ROUTE_CHOICES = {
-      keiryo: ["三平方", "面積", "接線の長さ", "角の二等分線", "同じ量を2通りで表す", "面積→半径"],
-      seishitsu: ["三平方", "二等辺三角形の性質", "外心の性質", "チェバの定理", "メネラウスの定理", "円周角の定理"],
-      nijikansuu: ["頂点の座標", "判別式", "2次不等式", "最大最小(区間)", "式の決定(頂点)", "平行移動"],
-      kitaichi: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"],
-      vector: ["成分計算", "内積", "平行条件", "垂直条件", "内分点の公式", "位置ベクトル"],
-      shisuu: ["指数法則", "置き換え(tの式)", "対数の定義", "対数の計算法則", "真数条件", "tの範囲の確認"],
-      zahyou: ["直線の方程式", "連立方程式(交点)", "2点間の距離", "円の方程式", "代表点の代入(領域)", "点と直線の距離"],
-      bisekibun: ["f'の符号と増減", "極値の判定", "具体値で試す", "定積分の計算", "上-下の確認"],
-      suuretsu: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す"],
-      toukei: ["標準化", "正規分布表の読み方", "標本平均の分散", "帰無仮説の設定", "棄却域との比較"]
-    };
-
-    const UNIT_LABEL_TO_KEY = [
-      ["図形と計量", "keiryo"],
-      ["図形の性質", "seishitsu"],
-      ["二次関数", "nijikansuu"],
-      ["期待値", "kitaichi"],
-      ["ベクトル", "vector"],
-      ["指数", "shisuu"],
-      ["対数", "shisuu"],
-      ["図形と方程式", "zahyou"],
-      ["微積", "bisekibun"],
-      ["数列", "suuretsu"],
-      ["統計", "toukei"]
-    ];
+    // ✅ 単元追加時の二重管理を解消：ここでは何も持たず、app.jsのUNIT_METAを唯一の情報源として使う。
+    //    新しい単元を追加するときは、app.js側にprimaryRoutesを書けばここは自動で追従する。
+    const PRIMARY_ROUTE_CHOICES = {};
+    if (typeof UNIT_META === "object" && UNIT_META) {
+      Object.keys(UNIT_META).forEach((key) => {
+        PRIMARY_ROUTE_CHOICES[key] = UNIT_META[key].primaryRoutes || [];
+      });
+    }
 
     const normalize = (text) => String(text || "").replace(/\s+/g, "").trim();
     const labelText = (label) => normalize(label.textContent);
 
     function inferUnitKey(routeTexts) {
       const unitLabel = document.getElementById("currentUnitLabel")?.textContent || "";
-      for (const [word, key] of UNIT_LABEL_TO_KEY) {
-        if (unitLabel.includes(word)) return key;
-      }
 
+      // UNIT_METAのlabelと完全一致するキーを探す（applyUnitUIがmeta.labelをそのまま表示しているため）
+      const exactKey = Object.keys(UNIT_META || {}).find((k) => UNIT_META[k].label === unitLabel);
+      if (exactKey) return exactKey;
+
+      // フォールバック：ラベルが取得できない場合は、方針テキストの一致数が最も多い単元を推定する
       let bestKey = null;
       let bestScore = -1;
       for (const [key, primary] of Object.entries(PRIMARY_ROUTE_CHOICES)) {
