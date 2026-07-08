@@ -719,9 +719,15 @@ function renderInsightsPanel() {
 
   const stageEntries = Object.entries(a.byStage).filter(([, v]) => v.total > 0);
   let weakestStageHtml = "";
-  if (stageEntries.length) {
+  if (stageEntries.length >= 2) {
+    // 比較できるステージが2つ以上あるときだけ「弱い」と言う（1ステージしか解いていないのに
+    // 「一番弱い」と決めつけるのはデータ不足による誤診断なので避ける）
     const weakest = stageEntries.sort((x, y) => (x[1].rate ?? 100) - (y[1].rate ?? 100))[0];
-    weakestStageHtml = `<div class="pill" style="margin-top:8px;">今一番弱いステージ: ${weakest[0]}（${weakest[1].rate}%）</div>`;
+    if (weakest[1].rate < 100) {
+      weakestStageHtml = `<div class="pill" style="margin-top:8px;">今一番弱いステージ: ${weakest[0]}（${weakest[1].rate}%）</div>`;
+    } else {
+      weakestStageHtml = `<div class="small-text" style="margin-top:8px; color:#166534;">全ステージ100%、今のところ死角なし！</div>`;
+    }
   }
 
   let repeatHtml = "";
