@@ -396,9 +396,9 @@ const TAG_LABELS = {
   diagram_reading: "図の読み違い",
   ratio_reverse: "比の向き逆",
   range_error: "範囲・場合分けミス",
-  concept_gap: "入口が見えていない",
-  near_miss: "方針は正しく詰めでミス",
-  partial_match: "一部の例だけに成り立つ性質を全体の共通点と誤認",
+  concept_gap: "どこから手をつけるか思いつかなかった",
+  near_miss: "考え方は合ってたけど最後で計算/確認をミスった",
+  partial_match: "一部にしか当てはまらないものを「全部共通」と勘違いした",
   time_pressure: "時間切れ",
   skipped: "スキップ"
 };
