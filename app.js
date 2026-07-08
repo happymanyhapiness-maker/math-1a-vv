@@ -59,7 +59,8 @@ const UNIT_META = {
     `,
     questions: questions_kitaichi,
     routeChoices: ROUTE_CHOICES_KITAICHI,
-    primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"]
+    primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"],
+    reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
   },
 
   vector: {
@@ -132,7 +133,8 @@ const UNIT_META = {
     `,
     questions: questions_suuretsu,
     routeChoices: ROUTE_CHOICES_SUURETSU,
-    primaryRoutes: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す"]
+    primaryRoutes: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す"],
+    reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
   },
 
   toukei: {
@@ -217,6 +219,20 @@ function escapeHtml(str) {
 function formatText(str) {
   if (str === undefined || str === null) return "";
   return escapeHtml(str).replace(/\n/g, "<br>");
+}
+
+/* =========================
+   穴埋め式(fillin)問題用：解答の正規化
+   全角数字・全角マイナス・空白の違いだけで誤答扱いにならないようにする。
+   （選択式と違い、自由入力なので表記ゆれの吸収が必須）
+========================= */
+function normalizeAnswer(v) {
+  if (v === undefined || v === null) return "";
+  let s = String(v).trim();
+  s = s.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); // 全角数字→半角
+  s = s.replace(/－/g, "-").replace(/ー/g, "-").replace(/／/g, "/");
+  s = s.replace(/\s+/g, "");
+  return s;
 }
 
 /* =========================
@@ -965,6 +981,43 @@ function logAnswer(q, selectedIndex, outcome) {
   });
 }
 
+/* =========================
+   穴埋め式(fillin)問題のログ記録
+   選択式のlogAnswer()と違い、selectedIndexという概念がないため別関数にする。
+   ただし analyzeLog() / buildAnalysisReport() が読むフィールド形状は
+   選択式とまったく同じにして、分析ロジック側は一切変更しないで済むようにしてある。
+========================= */
+function logFillinAnswer(q, results, overallTag, isCorrect, outcome) {
+  let elapsed = null;
+  if (state.questionStartTs) {
+    elapsed = Math.round((Date.now() - state.questionStartTs) / 1000);
+  } else if (typeof state.remaining === "number") {
+    elapsed = timeLimit(q) - state.remaining;
+  }
+
+  const userAnswerText = results.map((r) => `${r.label}=${r.userRaw || "(空欄)"}`).join(", ");
+  const correctAnswerText = results.map((r) => `${r.label}=${r.correctDisplay}`).join(", ");
+
+  state.answerLog.push({
+    questionId: q.id,
+    stage: q.stage,
+    num: q.num,
+    weakness: q.weakness,
+    route: Array.isArray(q.route) ? q.route.slice() : [],
+    selectedIndex: null,
+    selectedText: userAnswerText,
+    selectedTag: overallTag,
+    correctIndex: null,
+    correctText: correctAnswerText,
+    correctTag: "correct",
+    isCorrect: isCorrect,
+    outcome: outcome,
+    mode: state.mode,
+    timestamp: Date.now(),
+    elapsedTime: elapsed
+  });
+}
+
 function addReviewTarget(q) {
   if (!q) return;
 
@@ -989,8 +1042,16 @@ function addReviewTarget(q) {
    正解が続くほど間隔を空け、一定回数連続正解したら「完全に直した」
    として復習リストから卒業させる。
 ========================= */
-const REVIEW_INTERVAL_DAYS = [0, 1, 3, 7]; // streak(連続正解数)ごとの次回間隔(日)
-const REVIEW_CLEAR_STREAK = REVIEW_INTERVAL_DAYS.length; // これに到達したら卒業
+const REVIEW_INTERVAL_DAYS = [0, 1, 3, 7, 14, 30]; // streak(連続正解数)ごとの次回間隔(日)
+const REVIEW_CLEAR_STREAK_DEFAULT = 4; // これに到達したら卒業（デフォルト）
+
+// 単元ごとに卒業条件を上書きできるようにする。
+// 問題数が薄い単元(期待値・数列など)は「たまたま覚えた」と「本当に理解した」の
+// 区別がつきにくいので、卒業までの連続正解数を厳しめにする。
+function reviewClearStreakFor(unit) {
+  const meta = UNIT_META[unit];
+  return (meta && meta.reviewClearStreak) || REVIEW_CLEAR_STREAK_DEFAULT;
+}
 
 function dueReviewList() {
   const now = Date.now();
@@ -1016,7 +1077,7 @@ function markReviewResult(q, isCorrect) {
   if (isCorrect) {
     meta.streak++;
 
-    if (meta.streak >= REVIEW_CLEAR_STREAK) {
+    if (meta.streak >= reviewClearStreakFor(state.unit)) {
       // 卒業：復習リストから完全に除去
       state.wrong = state.wrong.filter((qq) => qq.id !== q.id);
       delete state.reviewMeta[q.id];
@@ -1206,6 +1267,7 @@ function startQuestionTimer() {
     document.querySelectorAll(".option").forEach((b) => {
       b.disabled = false;
     });
+    enableFillinInputs();
 
     clearInterval(state.timer);
     state.questionStartTs = Date.now();
@@ -1343,6 +1405,7 @@ function checkRouteAndStart() {
         document.querySelectorAll(".option").forEach((b) => {
           b.disabled = false;
         });
+        enableFillinInputs();
 
         clearInterval(state.timer);
         state.questionStartTs = Date.now();
@@ -1401,6 +1464,7 @@ if (forceBtn) {
     document.querySelectorAll(".option").forEach((b) => {
       b.disabled = false;
     });
+    enableFillinInputs();
 
     clearInterval(state.timer);
     state.questionStartTs = Date.now();
@@ -1518,7 +1582,22 @@ function show() {
   }
 
 const box = el("optionsBox");
+if (q.type === "fillin") {
+  if (box) {
+    box.innerHTML = "";
+    box.style.display = "none";
+  }
+  state.candidateIndex = null;
+  removeConfirmBar();
+  renderFillinBlanks(q);
+} else {
+  if (el("fillinBox")) {
+    el("fillinBox").innerHTML = "";
+    el("fillinBox").style.display = "none";
+  }
+
 if (box) {
+  box.style.display = "";
   box.innerHTML = "";
   box.classList.add("disabled");
   state.candidateIndex = null;
@@ -1546,6 +1625,7 @@ shuffled.forEach((item, i) => {
 });
   }
 }  // ← ✅ ここでしっかり閉じる
+}
 
 // 👇 ここからは外側
 
@@ -1672,6 +1752,226 @@ function removeConfirmBar() {
 }
 
 /* =========================
+   穴埋め式(fillin)問題：入力欄の描画・有効化・採点
+   選択式(4択)とは別の描画パスを持つ。既存の選択式の描画・採点は一切触らない。
+========================= */
+function renderFillinBlanks(q) {
+  const box = el("fillinBox");
+  if (!box) return;
+
+  box.innerHTML = "";
+  box.style.display = "block";
+
+  q.blanks.forEach((b) => {
+    const row = document.createElement("div");
+    row.className = "fillin-row";
+
+    const label = document.createElement("span");
+    label.className = "fillin-label";
+    label.innerText = b.label;
+    row.appendChild(label);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "fillin-input";
+    input.dataset.blankId = b.id;
+    input.disabled = true;
+    input.autocomplete = "off";
+    row.appendChild(input);
+
+    const answerNote = document.createElement("span");
+    answerNote.className = "fillin-answer";
+    answerNote.dataset.blankId = b.id;
+    row.appendChild(answerNote);
+
+    box.appendChild(row);
+  });
+
+  const btnWrap = document.createElement("div");
+  btnWrap.className = "toolbar q-toolbar";
+
+  const submitBtn = document.createElement("button");
+  submitBtn.className = "btn primary";
+  submitBtn.id = "submitFillinBtn";
+  submitBtn.innerText = "採点する";
+  submitBtn.disabled = true;
+  submitBtn.onclick = submitFillin;
+  btnWrap.appendChild(submitBtn);
+
+  box.appendChild(btnWrap);
+}
+
+// 「この問題を開始」「方針確定」などのタイミングで、選択肢ボタンと同じように呼ぶ。
+// fillin問題でなければ何もしない（呼び出し側で型を気にしなくていいようにするため）。
+function enableFillinInputs() {
+  document.querySelectorAll("#fillinBox input").forEach((inp) => {
+    inp.disabled = false;
+  });
+  const submitBtn = el("submitFillinBtn");
+  if (submitBtn) submitBtn.disabled = false;
+}
+
+function lockFillinAndMark(results) {
+  document.querySelectorAll("#fillinBox input").forEach((inp) => {
+    inp.disabled = true;
+  });
+  const submitBtn = el("submitFillinBtn");
+  if (submitBtn) submitBtn.disabled = true;
+
+  results.forEach((r) => {
+    const inp = document.querySelector(`#fillinBox input[data-blank-id="${r.id}"]`);
+    if (inp) inp.classList.add(r.isCorrect ? "correct" : "wrong");
+
+    if (!r.isCorrect) {
+      const noteEl = document.querySelector(`#fillinBox .fillin-answer[data-blank-id="${r.id}"]`);
+      if (noteEl) noteEl.innerText = `正解: ${r.correctDisplay}`;
+    }
+  });
+}
+
+// 各blankを採点し、{id, label, isCorrect, tag, userRaw, correctDisplay} の配列を返す
+function gradeFillinBlanks(q) {
+  return q.blanks.map((b) => {
+    const inp = document.querySelector(`#fillinBox input[data-blank-id="${b.id}"]`);
+    const raw = inp ? inp.value : "";
+    const userNorm = normalizeAnswer(raw);
+    const answerNorm = normalizeAnswer(b.answer);
+    const altNorms = (b.altAnswers || []).map(normalizeAnswer);
+    const isCorrect = userNorm !== "" && (userNorm === answerNorm || altNorms.includes(userNorm));
+
+    let tag = "correct";
+    if (!isCorrect) {
+      if (userNorm === "") {
+        tag = "skipped";
+      } else {
+        const miss = (b.commonMistakes || []).find((m) => normalizeAnswer(m.value) === userNorm);
+        tag = miss ? miss.tag : "calc_error";
+      }
+    }
+
+    return { id: b.id, label: b.label, isCorrect, tag, userRaw: raw, correctDisplay: b.answer };
+  });
+}
+
+function submitFillin() {
+  const q = currentQuestion();
+  if (!q || q.type !== "fillin") return;
+
+  clearInterval(state.timer);
+
+  const results = gradeFillinBlanks(q);
+  const overallCorrect = results.every((r) => r.isCorrect);
+  // 最初に間違えたblankのタグを代表タグとして記録する（近似。複数blank同時ミスの詳細はresults自体に残っている）
+  const overallTag = overallCorrect ? "correct" : (results.find((r) => !r.isCorrect) || {}).tag || "calc_error";
+
+  logFillinAnswer(q, results, overallTag, overallCorrect, "answered");
+
+  state.total++;
+  stats.stage[q.stage].t++;
+
+  if (overallCorrect) {
+    state.correct++;
+    stats.stage[q.stage].c++;
+  } else {
+    stats.weakness[q.weakness] = (stats.weakness[q.weakness] || 0) + 1;
+    addReviewTarget(q);
+  }
+
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, overallCorrect);
+  }
+
+  lockFillinAndMark(results);
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = explainHTML(q, overallCorrect);
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
+
+  maybeShowStopGuide();
+  update();
+  save();
+}
+
+function skipFillin(q) {
+  const results = q.blanks.map((b) => ({
+    id: b.id, label: b.label, isCorrect: false, tag: "skipped", userRaw: "", correctDisplay: b.answer
+  }));
+
+  logFillinAnswer(q, results, "skipped", false, "skip");
+
+  state.total++;
+  stats.stage[q.stage].t++;
+  stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
+  addReviewTarget(q);
+
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, false);
+  }
+
+  lockFillinAndMark(results);
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = `
+      <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
+    `;
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
+
+  maybeShowStopGuide();
+  update();
+  save();
+}
+
+function timeoutFillin(q) {
+  const results = q.blanks.map((b) => {
+    const graded = gradeFillinBlanks(q).find((r) => r.id === b.id);
+    return graded || { id: b.id, label: b.label, isCorrect: false, tag: "time_pressure", userRaw: "", correctDisplay: b.answer };
+  });
+  // 時間切れ時点の入力内容も採点対象にするが、正解でも代表タグは time_pressure 寄りにしておく
+  const overallCorrect = results.every((r) => r.isCorrect);
+
+  logFillinAnswer(q, results, overallCorrect ? "correct" : "time_pressure", overallCorrect, "timeout");
+
+  state.total++;
+  stats.stage[q.stage].t++;
+  stats.weakness["時間不足"] = (stats.weakness["時間不足"] || 0) + 1;
+  addReviewTarget(q);
+
+  if (state.mode === "review" || state.mode === "dueReview") {
+    markReviewResult(q, overallCorrect);
+  }
+
+  lockFillinAndMark(results);
+
+  if (el("feedback")) {
+    el("feedback").style.display = "block";
+    el("feedback").innerHTML = `
+      <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
+      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
+      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
+      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
+    `;
+  }
+
+  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
+  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
+
+  maybeShowStopGuide();
+  update();
+  save();
+}
+
+/* =========================
    回答
 ========================= */
 function answer(i) {
@@ -1722,6 +2022,11 @@ function timeoutQuestion() {
   const q = currentQuestion();
   if (!q) return;
 
+  if (q.type === "fillin") {
+    timeoutFillin(q);
+    return;
+  }
+
   clearInterval(state.timer);
 
   logAnswer(q, null, "timeout");
@@ -1762,6 +2067,11 @@ function timeoutQuestion() {
 function skipQuestion() {
   const q = currentQuestion();
   if (!q) return;
+
+  if (q.type === "fillin") {
+    skipFillin(q);
+    return;
+  }
 
   clearInterval(state.timer);
 

@@ -501,6 +501,60 @@ body.exam-mode .main-layout{
   color: #6b7280;
 }
 
+.fillin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.fillin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fillin-label {
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+}
+
+.fillin-input {
+  width: 96px;
+  padding: 8px 10px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.fillin-input:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.fillin-input.correct {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 700;
+}
+
+.fillin-input.wrong {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.fillin-answer {
+  font-size: 13px;
+  color: #166534;
+  font-weight: 600;
+}
+
 .insight-bars {
   display: flex;
   flex-direction: column;
