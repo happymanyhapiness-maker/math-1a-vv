@@ -216,9 +216,29 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;");
 }
 
+/* =========================
+   数式の軽量フォーマッタ
+   - x^2 のような数字指数を上付き文字に変換(sin^2θ のような形も含めて自動対応)
+   - <=, >= を ≤, ≥ に変換して見た目を改善
+   - 元のテキストデータ(questions_*.js側)は一切書き換えず、表示直前にここで変換するだけ
+========================= */
+const SUPERSCRIPT_MAP = {
+  "0": "\u2070", "1": "\u00B9", "2": "\u00B2", "3": "\u00B3", "4": "\u2074",
+  "5": "\u2075", "6": "\u2076", "7": "\u2077", "8": "\u2078", "9": "\u2079", "-": "\u207B"
+};
+
+function applyMathFormatting(str) {
+  return String(str)
+    // 数字だけの指数(^2, ^10, ^-3 など)を上付き文字に変換。
+    // 2^x のように指数が文字の場合はUnicodeに対応する上付き文字がないため、^ のまま残す。
+    .replace(/\^(-?\d+)/g, (_, digits) => digits.split("").map((c) => SUPERSCRIPT_MAP[c] || c).join(""))
+    .replace(/<=/g, "\u2264")
+    .replace(/>=/g, "\u2265");
+}
+
 function formatText(str) {
   if (str === undefined || str === null) return "";
-  return escapeHtml(str).replace(/\n/g, "<br>");
+  return escapeHtml(applyMathFormatting(str)).replace(/\n/g, "<br>");
 }
 
 /* =========================
