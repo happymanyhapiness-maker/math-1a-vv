@@ -1532,6 +1532,11 @@ if (forceBtn) {
 /* =========================
    解説表示
 ========================= */
+function explainAimHTML(q) {
+  if (!q.explain || !q.explain.aim) return "";
+  return `<div style="margin-top:10px;"><strong>◆ 出題のねらい</strong><br>${formatText(q.explain.aim)}</div>`;
+}
+
 function explainHTML(q, ok) {
   if (state.mode === "tips") {
     return `
@@ -1544,6 +1549,7 @@ function explainHTML(q, ok) {
     <div style="font-weight:bold; font-size:18px; color:${ok ? "#166534" : "#991b1b"};">
       ${ok ? "正解！" : "不正解"}
     </div>
+    ${explainAimHTML(q)}
     <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
     <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
     <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -1956,6 +1962,7 @@ function skipFillin(q) {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
+      ${explainAimHTML(q)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -1995,6 +2002,7 @@ function timeoutFillin(q) {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
+      ${explainAimHTML(q)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2086,6 +2094,7 @@ function timeoutQuestion() {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
+      ${explainAimHTML(q)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2132,6 +2141,7 @@ function skipQuestion() {
     el("feedback").style.display = "block";
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
+      ${explainAimHTML(q)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
