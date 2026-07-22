@@ -834,8 +834,18 @@ body.exam-mode .main-layout{
 
 /* =========================
    早合点防止：仮選択・消去法・確定バー
-   (app.js の selectCandidate / showConfirmBar に対応)
+   (app.js の selectCandidate / attachOptionHandlers / showConfirmBar に対応)
+   ・タップ＝選び直し（仮選択の切り替え）
+   ・長押し＝消去法メモ（取り消し線）のトグル
 ========================= */
+
+/* 長押しでコピー用の選択メニューやコールアウトが出て
+   ジェスチャー判定の邪魔にならないようにする */
+.option {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 /* 仮選択中の選択肢（まだ確定していない） */
 .option.candidate {

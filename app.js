@@ -4,21 +4,6 @@ const UNIT_KEY = "kyotsu_app_unit_v1";
 const HISTORY_VISIBLE = 5;
 
 const UNIT_META = {
-chugaku: {
-    label: "図形の土台",
-    description: "相似 / 円周角 / 三平方 / 面積比",
-    note: "",
-    mission: `
-      第1問：平行線と角(外角の定理)・合同条件
-      第2問：相似の対応・平行線と線分の比(チェバの土台)
-      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
-      第4問：三平方の使い分け・相似比と面積比
-    `,
-    questions: questions_chugaku,
-    routeChoices: ROUTE_CHOICES_CHUGAKU,
-    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
-    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
-  },
   keiryo: {
     label: "数ⅠA 図形と計量",
     description: "三角比 / 三平方 / 面積",
@@ -1508,11 +1493,19 @@ function checkRouteAndStart() {
   }
 
   // 正解
+  // 2回目ミスのときと同様に、選択肢一覧と「方針を確定」ボタンを消す。
+  // 確定済みなのに確定ボタンが残っていると、もう一度押せてしまうため。
+  if (routeOptions) routeOptions.style.display = "none";
+  if (el("submitRouteBtn")) el("submitRouteBtn").style.display = "none";
+
 if (routeFeedback) {
   routeFeedback.style.display = "block";
   routeFeedback.innerHTML = `
     <div style="color:#166534; font-weight:bold;">
       方針OK！
+    </div>
+    <div style="margin-top:8px;">
+      正解ルート：${q.route.join(" → ")}
     </div>
     <div style="margin-top:12px;">
       <button class="btn primary" id="forceStartBtn">問題開始</button>
@@ -1695,8 +1688,8 @@ shuffled.forEach((item, i) => {
   // ✅ 元の位置を保存
   b.dataset.index = item.index;
 
-  // ✅ 早合点防止：即答ではなく、まず「仮選択」にする
-  b.onclick = () => selectCandidate(item.index, b);
+  // ✅ 早合点防止：タップは選び直し、長押しで消去法メモ
+  attachOptionHandlers(b, item.index);
 
   b.disabled = true;
 
@@ -1769,28 +1762,77 @@ if (el("startQuestionBtn")) {
 }
 
 /* =========================
-   早合点防止：仮選択→確定の2段階クリック
+   早合点防止：タップで仮選択→確定、長押しで消去法メモ
    選んだ瞬間に即採点せず、一度立ち止まって他の選択肢も
    見てから確定させることで「早合点」による誤答を減らす。
-   他の選択肢をタップすると「消去済み」トグル（取り消し線）になり、
-   自分の判断過程を可視化できる（採点には影響しない）。
+   ・タップ：その選択肢を仮選択にする（何度でも選び直せる）
+   ・長押し：「消去済み」トグル（取り消し線）を付ける／外す
+     （採点には影響しない、あくまでメモ）
 ========================= */
+
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_TOLERANCE = 10; // px。指が少しズレただけで長押し扱いにしないための遊び
+
+// 選択肢ボタンに「タップ＝選び直し」「長押し＝消去法メモ」の
+// 2種類のジェスチャーを登録する。PointerEventでマウス・タッチを一本化。
+function attachOptionHandlers(btnEl, index) {
+  let pressTimer = null;
+  let longPressFired = false;
+  let startX = 0;
+  let startY = 0;
+
+  const clearPressTimer = () => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  };
+
+  const movedTooFar = (x, y) =>
+    Math.abs(x - startX) > LONG_PRESS_MOVE_TOLERANCE ||
+    Math.abs(y - startY) > LONG_PRESS_MOVE_TOLERANCE;
+
+  btnEl.addEventListener("pointerdown", (e) => {
+    if (btnEl.disabled) return;
+    longPressFired = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    clearPressTimer();
+    pressTimer = setTimeout(() => {
+      longPressFired = true;
+      btnEl.classList.toggle("eliminated");
+    }, LONG_PRESS_MS);
+  });
+
+  btnEl.addEventListener("pointermove", (e) => {
+    if (pressTimer && movedTooFar(e.clientX, e.clientY)) {
+      clearPressTimer();
+    }
+  });
+
+  ["pointerup", "pointercancel", "pointerleave"].forEach((evt) => {
+    btnEl.addEventListener(evt, clearPressTimer);
+  });
+
+  btnEl.addEventListener("click", () => {
+    if (longPressFired) {
+      // 長押しで消去法メモを付け終わった直後のクリックは、
+      // 選び直し扱いにしない（メモを付けただけのつもりが誤って仮選択されるのを防ぐ）
+      longPressFired = false;
+      return;
+    }
+    selectCandidate(index, btnEl);
+  });
+}
+
 function selectCandidate(index, btnEl) {
   const box = el("optionsBox");
   if (!box || box.classList.contains("disabled")) return;
 
-  // すでに仮選択がある状態で「別の」選択肢をタップした場合は
-  // 消去法メモ（取り消し線）のトグルとして扱う
-  if (state.candidateIndex !== null && state.candidateIndex !== index) {
-    btnEl.classList.toggle("eliminated");
-    return;
-  }
-
-  // 消去済みにしていた選択肢を仮選択には戻さない（一貫性のため解除してから選ばせる）
-  if (btnEl.classList.contains("eliminated")) {
-    btnEl.classList.remove("eliminated");
-    return;
-  }
+  // タップは常に「この選択肢を仮選択にする」動作（選び直し自由）。
+  // 消去法メモ（取り消し線）は長押しの専用ジェスチャーに分離したので、
+  // これから選ぶ選択肢についていた消去済みマークは解除する。
+  btnEl.classList.remove("eliminated");
 
   state.candidateIndex = index;
 
@@ -1811,7 +1853,7 @@ function showConfirmBar(index) {
   bar.id = "confirmBar";
   bar.className = "confirm-bar";
   bar.innerHTML = `
-    <div class="confirm-hint">その答えで確定する前に、他の選択肢も一度見てみよう。違うと思うものはタップすると消せます。</div>
+    <div class="confirm-hint">その答えで確定する前に、他の選択肢も見比べてみよう。タップすれば選び直せます。違うと思うものは長押しすると消去法メモ（取り消し線）を付けられます。</div>
     <button class="btn primary" id="confirmAnswerBtn">この答えで確定する</button>
   `;
   box.insertAdjacentElement("afterend", bar);
@@ -1829,6 +1871,7 @@ function removeConfirmBar() {
   const bar = el("confirmBar");
   if (bar) bar.remove();
 }
+
 
 /* =========================
    穴埋め式(fillin)問題：入力欄の描画・有効化・採点
