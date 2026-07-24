@@ -63,6 +63,22 @@ const UNIT_META = {
     reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
   },
 
+  chugaku: {
+    label: "図形の土台",
+    description: "相似 / 円周角 / 三平方 / 面積比",
+    note: "",
+    mission: `
+      第1問：平行線と角(外角の定理)・合同条件
+      第2問：相似の対応・平行線と線分の比(チェバの土台)
+      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
+      第4問：三平方の使い分け・相似比と面積比
+    `,
+    questions: questions_chugaku,
+    routeChoices: ROUTE_CHOICES_CHUGAKU,
+    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
+    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
+  },
+
   vector: {
     label: "数ⅡBC ベクトル",
     description: "成分 / 内積 / 平行と垂直 / 球面",
