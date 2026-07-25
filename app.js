@@ -2205,53 +2205,6 @@ function timeoutQuestion() {
 /* =========================
    スキップ
 ========================= */
-function skipQuestion() {
-  const q = currentQuestion();
-  if (!q) return;
-
-  if (q.type === "fillin") {
-    skipFillin(q);
-    return;
-  }
-
-  clearInterval(state.timer);
-
-  logAnswer(q, null, "skip");
-
-  state.total++;
-  stats.stage[q.stage].t++;
-  stats.weakness["時間判断"] = (stats.weakness["時間判断"] || 0) + 1;
-
-  addReviewTarget(q);
-
-  if (state.mode === "review" || state.mode === "dueReview") {
-    markReviewResult(q, false);
-  }
-
-  // スキップ後に選択肢を押せないようにする
-  lockOptionsAndMark(q.correct);
-
-  if (el("feedback")) {
-    el("feedback").style.display = "block";
-    el("feedback").innerHTML = `
-      <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
-      ${explainAimHTML(q)}
-      <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
-      <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
-      <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
-    `;
-  }
-
-  if (el("nextBtn")) el("nextBtn").style.display = "inline-block";
-  if (el("skipQuestionBtn")) el("skipQuestionBtn").style.display = "none";
-
-  maybeShowStopGuide();
-  update();
-  save();
-}
-/* =========================
-   次へ
-========================= */
 function nextQuestion() {
   state.index++;
   show();
@@ -2553,9 +2506,7 @@ if (el("startDueReviewBtn")) el("startDueReviewBtn").onclick = startDueReview;
 if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
 if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
 if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;
-if (el("skipQuestionBtn")) el("skipQuestionBtn").onclick = skipQuestion;
 if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
-if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
 if (el("resetStatsBtn")) el("resetStatsBtn").onclick = resetStatsOnly;
