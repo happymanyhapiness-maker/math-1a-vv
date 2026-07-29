@@ -1334,7 +1334,8 @@ function startQuestionTimer() {
   const routeFeedback = el("routeFeedback");
 
   // route がない問題は、そのまま開始
-  if (!q.route || q.route.length === 0) {
+  // 方針チェック機能は廃止したため、常にこの分岐（即開始）を通す。
+  if (true || !q.route || q.route.length === 0) {
     if (el("questionStartBox")) el("questionStartBox").style.display = "none";
     if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
@@ -1738,23 +1739,14 @@ if (el("routeQuizBox")) {
 if (el("questionStartBox")) {
   el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
 
-  if (q.route && q.route.length > 0) {
-    el("questionStartBox").innerHTML = `
-      <p class="start-text">
-        まずはこの問題の解き方（方針）を選んでください。<br>
-        方針が正しければ問題が開始されます。
-      </p>
-      <button class="btn primary" id="startQuestionBtn">方針を確認</button>
-    `;
-  } else {
-    el("questionStartBox").innerHTML = `
-      <p class="start-text">
-        準備ができたら「この問題を開始」を押してください。<br>
-        問題ごとに制限時間は変わります。
-      </p>
-      <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
-    `;
-  }
+  // 方針チェック機能は廃止。常に「この問題を開始」のみ表示する。
+  el("questionStartBox").innerHTML = `
+    <p class="start-text">
+      準備ができたら「この問題を開始」を押してください。<br>
+      問題ごとに制限時間は変わります。
+    </p>
+    <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
+  `;
 }
 
 if (el("startQuestionBtn")) {
