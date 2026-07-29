@@ -4,6 +4,22 @@ const UNIT_KEY = "kyotsu_app_unit_v1";
 const HISTORY_VISIBLE = 5;
 
 const UNIT_META = {
+  chugaku: {
+    label: "図形の土台",
+    description: "相似 / 円周角 / 三平方 / 面積比",
+    note: "",
+    mission: `
+      第1問：平行線と角(外角の定理)・合同条件
+      第2問：相似の対応・平行線と線分の比(チェバの土台)
+      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
+      第4問：三平方の使い分け・相似比と面積比
+    `,
+    questions: questions_chugaku,
+    routeChoices: ROUTE_CHOICES_CHUGAKU,
+    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
+    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
+  },
+
   keiryo: {
     label: "数ⅠA 図形と計量",
     description: "三角比 / 三平方 / 面積",
@@ -61,22 +77,6 @@ const UNIT_META = {
     routeChoices: ROUTE_CHOICES_KITAICHI,
     primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"],
     reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
-  },
-
-  chugaku: {
-    label: "図形の土台",
-    description: "相似 / 円周角 / 三平方 / 面積比",
-    note: "",
-    mission: `
-      第1問：平行線と角(外角の定理)・合同条件
-      第2問：相似の対応・平行線と線分の比(チェバの土台)
-      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
-      第4問：三平方の使い分け・相似比と面積比
-    `,
-    questions: questions_chugaku,
-    routeChoices: ROUTE_CHOICES_CHUGAKU,
-    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
-    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
   },
 
   vector: {
@@ -2296,10 +2296,11 @@ function buildUnitSelectCards() {
     const card = document.createElement("div");
     card.className = "unit-card";
 
+    const startBtnClass = key === "chugaku" ? "btn purple" : "btn primary";
     card.innerHTML = `
       <h3>${meta.label}</h3>
       <p>${meta.description || ""}</p>
-      <button class="btn primary">開始</button>
+      <button class="${startBtnClass}">開始</button>
     `;
 
     const startBtn = card.querySelector("button");
