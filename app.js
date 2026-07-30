@@ -3,23 +3,13 @@ const LEGACY_STORAGE_KEY = "kyotsu_app_v13"; // 単元分離前の旧キー。�
 const UNIT_KEY = "kyotsu_app_unit_v1";
 const HISTORY_VISIBLE = 5;
 
-const UNIT_META = {
-  chugaku: {
-    label: "図形の土台",
-    description: "相似 / 円周角 / 三平方 / 面積比",
-    note: "",
-    mission: `
-      第1問：平行線と角(外角の定理)・合同条件
-      第2問：相似の対応・平行線と線分の比(チェバの土台)
-      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
-      第4問：三平方の使い分け・相似比と面積比
-    `,
-    questions: questions_chugaku,
-    routeChoices: ROUTE_CHOICES_CHUGAKU,
-    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
-    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
-  },
+// 「方針を確認」クイズ（問題開始前にq.routeを選ばせるUI）のON/OFFスイッチ。
+// falseにすると、q.routeを持つ問題でもクイズをスキップしていきなり4択/穴埋めが始まる。
+// q.routeのデータ自体は消さず、不正解時の解説（explainRouteHTML）で引き続き使う。
+// 元に戻したい時はtrueに戻すだけでOK。
+const ROUTE_QUIZ_ENABLED = false;
 
+const UNIT_META = {
   keiryo: {
     label: "数ⅠA 図形と計量",
     description: "三角比 / 三平方 / 面積",
@@ -77,6 +67,22 @@ const UNIT_META = {
     routeChoices: ROUTE_CHOICES_KITAICHI,
     primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"],
     reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
+  },
+
+  chugaku: {
+    label: "図形の土台",
+    description: "相似 / 円周角 / 三平方 / 面積比",
+    note: "",
+    mission: `
+      第1問：平行線と角(外角の定理)・合同条件
+      第2問：相似の対応・平行線と線分の比(チェバの土台)
+      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
+      第4問：三平方の使い分け・相似比と面積比
+    `,
+    questions: questions_chugaku,
+    routeChoices: ROUTE_CHOICES_CHUGAKU,
+    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
+    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
   },
 
   vector: {
@@ -1333,9 +1339,8 @@ function startQuestionTimer() {
   const routeOptions = el("routeOptions");
   const routeFeedback = el("routeFeedback");
 
-  // route がない問題は、そのまま開始
-  // 方針チェック機能は廃止したため、常にこの分岐（即開始）を通す。
-  if (true || !q.route || q.route.length === 0) {
+  // route がない問題、または方針クイズが無効化されている場合は、そのまま開始
+  if (!ROUTE_QUIZ_ENABLED || !q.route || q.route.length === 0) {
     if (el("questionStartBox")) el("questionStartBox").style.display = "none";
     if (el("optionsBox")) el("optionsBox").classList.remove("disabled");
 
@@ -1582,6 +1587,14 @@ function explainAimHTML(q) {
   return `<div style="margin-top:10px;"><strong>◆ 出題のねらい</strong><br>${formatText(q.explain.aim)}</div>`;
 }
 
+// 不正解の時だけ、最初に見極めるべきだった方針を解説に表示する。
+// q.route が無い問題（方針という概念がない単元）では何も出さない。
+function explainRouteHTML(q, ok) {
+  if (ok) return "";
+  if (!Array.isArray(q.route) || q.route.length === 0) return "";
+  return `<div style="margin-top:10px;"><strong>◆ この問題の方針</strong><br>${q.route.join(" → ")}</div>`;
+}
+
 function explainHTML(q, ok) {
   if (state.mode === "tips") {
     return `
@@ -1595,6 +1608,7 @@ function explainHTML(q, ok) {
       ${ok ? "正解！" : "不正解"}
     </div>
     ${explainAimHTML(q)}
+    ${explainRouteHTML(q, ok)}
     <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
     <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
     <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -1739,14 +1753,23 @@ if (el("routeQuizBox")) {
 if (el("questionStartBox")) {
   el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
 
-  // 方針チェック機能は廃止。常に「この問題を開始」のみ表示する。
-  el("questionStartBox").innerHTML = `
-    <p class="start-text">
-      準備ができたら「この問題を開始」を押してください。<br>
-      問題ごとに制限時間は変わります。
-    </p>
-    <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
-  `;
+  if (ROUTE_QUIZ_ENABLED && q.route && q.route.length > 0) {
+    el("questionStartBox").innerHTML = `
+      <p class="start-text">
+        まずはこの問題の解き方（方針）を選んでください。<br>
+        方針が正しければ問題が開始されます。
+      </p>
+      <button class="btn primary" id="startQuestionBtn">方針を確認</button>
+    `;
+  } else {
+    el("questionStartBox").innerHTML = `
+      <p class="start-text">
+        準備ができたら「この問題を開始」を押してください。<br>
+        問題ごとに制限時間は変わります。
+      </p>
+      <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
+    `;
+  }
 }
 
 if (el("startQuestionBtn")) {
@@ -2049,6 +2072,7 @@ function skipFillin(q) {
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
       ${explainAimHTML(q)}
+      ${explainRouteHTML(q, false)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2089,6 +2113,7 @@ function timeoutFillin(q) {
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
       ${explainAimHTML(q)}
+      ${explainRouteHTML(q, overallCorrect)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2181,6 +2206,7 @@ function timeoutQuestion() {
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#991b1b;">時間切れ</div>
       ${explainAimHTML(q)}
+      ${explainRouteHTML(q, false)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2228,6 +2254,7 @@ function skipQuestion() {
     el("feedback").innerHTML = `
       <div style="font-weight:bold; font-size:18px; color:#92400e;">この設問を飛ばしました</div>
       ${explainAimHTML(q)}
+      ${explainRouteHTML(q, false)}
       <div style="margin-top:10px;"><strong>◆ 解き方</strong><br>${formatText(q.explain.why)}</div>
       <div style="margin-top:10px;"><strong>◆ ミスしやすい点</strong><br>${formatText(q.explain.mistake)}</div>
       <div style="margin-top:10px;"><strong>◆ 次へのコツ</strong><br>${formatText(q.explain.tip)}</div>
@@ -2296,11 +2323,10 @@ function buildUnitSelectCards() {
     const card = document.createElement("div");
     card.className = "unit-card";
 
-    const startBtnClass = key === "chugaku" ? "btn purple" : "btn primary";
     card.innerHTML = `
       <h3>${meta.label}</h3>
       <p>${meta.description || ""}</p>
-      <button class="${startBtnClass}">開始</button>
+      <button class="btn primary">開始</button>
     `;
 
     const startBtn = card.querySelector("button");
@@ -2598,3 +2624,29 @@ if (savedUnit && UNIT_META[savedUnit]) {
 } else {
   showUnitSelect();
 }
+
+/* =========================
+   MathJax 自動再描画(中学土台ユニットのテスト用)
+   #feedback の中身が書き換わるたびに再描画する。
+   解説文に $...$ が含まれていない場合、MathJaxは何もしないため、
+   既存161問の表示には影響しない。
+========================= */
+(function setupMathJaxAutoTypeset() {
+  const feedbackEl = el("feedback");
+  if (!feedbackEl || typeof MutationObserver === "undefined") return;
+
+  let typesetting = false;
+  const observer = new MutationObserver(() => {
+    if (typesetting) return;
+    if (!window.MathJax || !window.MathJax.typesetPromise) return;
+    typesetting = true;
+    observer.disconnect();
+    window.MathJax.typesetPromise([feedbackEl])
+      .catch((e) => console.error("MathJax typeset error:", e))
+      .finally(() => {
+        typesetting = false;
+        observer.observe(feedbackEl, { childList: true, subtree: true });
+      });
+  });
+  observer.observe(feedbackEl, { childList: true, subtree: true });
+})();

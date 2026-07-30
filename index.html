@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>共通テスト数学</title>
   <link rel="stylesheet" href="style.css?v=12">
+  <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
+       他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    };
+  </script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -242,8 +251,8 @@
   <script src="questions_bisekibun.js?v=1"></script>
   <script src="questions_suuretsu.js?v=1"></script>
   <script src="questions_toukei.js?v=1"></script>
-  <script src="questions_chugaku.js?v=1"></script>
-  <script src="app.js?v=16"></script>
+  <script src="questions_chugaku.js?v=3"></script>
+  <script src="app.js?v=18"></script>
 
 
 </body>
