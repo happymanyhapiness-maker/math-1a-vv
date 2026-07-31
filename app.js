@@ -10,6 +10,23 @@ const HISTORY_VISIBLE = 5;
 const ROUTE_QUIZ_ENABLED = false;
 
 const UNIT_META = {
+  chugaku: {
+    label: "図形の土台",
+    description: "相似 / 円周角 / 三平方 / 面積比",
+    note: "",
+    mission: `
+      第1問：平行線と角(外角の定理)・合同条件
+      第2問：相似の対応・平行線と線分の比(チェバの土台)
+      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
+      第4問：三平方の使い分け・相似比と面積比
+    `,
+    questions: questions_chugaku,
+    routeChoices: ROUTE_CHOICES_CHUGAKU,
+    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
+    reviewClearStreak: 6, // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
+    cardButtonClass: "purple" // 高校範囲の土台として目立たせるため、この単元だけカードのボタンを紫にする（.btn.purple は style.css 定義）
+  },
+
   keiryo: {
     label: "数ⅠA 図形と計量",
     description: "三角比 / 三平方 / 面積",
@@ -67,22 +84,6 @@ const UNIT_META = {
     routeChoices: ROUTE_CHOICES_KITAICHI,
     primaryRoutes: ["値×確率の合計", "確率の合計=1の確認", "分布表の作成"],
     reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
-  },
-
-  chugaku: {
-    label: "図形の土台",
-    description: "相似 / 円周角 / 三平方 / 面積比",
-    note: "",
-    mission: `
-      第1問：平行線と角(外角の定理)・合同条件
-      第2問：相似の対応・平行線と線分の比(チェバの土台)
-      第3問：円周角と中心角・中点連結定理(重心2:1の土台)
-      第4問：三平方の使い分け・相似比と面積比
-    `,
-    questions: questions_chugaku,
-    routeChoices: ROUTE_CHOICES_CHUGAKU,
-    primaryRoutes: ["対応する辺の比", "平行線と線分の比", "円周角と中心角", "三平方", "相似比と面積比", "多角形の内角・外角"],
-    reviewClearStreak: 6 // kitaichiと同様、問題数が薄いミニユニットのため卒業条件を厳しめに
   },
 
   vector: {
@@ -2326,7 +2327,7 @@ function buildUnitSelectCards() {
     card.innerHTML = `
       <h3>${meta.label}</h3>
       <p>${meta.description || ""}</p>
-      <button class="btn primary">開始</button>
+      <button class="btn ${meta.cardButtonClass || "primary"}">開始</button>
     `;
 
     const startBtn = card.querySelector("button");
@@ -2626,27 +2627,35 @@ if (savedUnit && UNIT_META[savedUnit]) {
 }
 
 /* =========================
-   MathJax 自動再描画(中学土台ユニットのテスト用)
-   #feedback の中身が書き換わるたびに再描画する。
-   解説文に $...$ が含まれていない場合、MathJaxは何もしないため、
-   既存161問の表示には影響しない。
+   MathJax 自動再描画
+   解説(#feedback)・問題文(#questionText)・大問の設定(#groupPanel)の
+   中身が書き換わるたびに、その要素だけ再描画する。
+   テキストに $...$ が含まれていない場合、MathJaxは何もしないため、
+   数式化していない既存ユニットの表示には影響しない。
 ========================= */
 (function setupMathJaxAutoTypeset() {
-  const feedbackEl = el("feedback");
-  if (!feedbackEl || typeof MutationObserver === "undefined") return;
+  if (typeof MutationObserver === "undefined") return;
 
-  let typesetting = false;
-  const observer = new MutationObserver(() => {
-    if (typesetting) return;
-    if (!window.MathJax || !window.MathJax.typesetPromise) return;
-    typesetting = true;
-    observer.disconnect();
-    window.MathJax.typesetPromise([feedbackEl])
-      .catch((e) => console.error("MathJax typeset error:", e))
-      .finally(() => {
-        typesetting = false;
-        observer.observe(feedbackEl, { childList: true, subtree: true });
-      });
+  // 要素ごとに独立したObserverを持たせる。
+  // 1つのObserverで複数要素をまとめて監視すると、片方の再描画のために
+  // disconnect した時にもう片方の監視まで止まってしまうため。
+  ["feedback", "questionText", "groupPanel"].forEach((id) => {
+    const target = el(id);
+    if (!target) return;
+
+    let typesetting = false;
+    const observer = new MutationObserver(() => {
+      if (typesetting) return;
+      if (!window.MathJax || !window.MathJax.typesetPromise) return;
+      typesetting = true;
+      observer.disconnect();
+      window.MathJax.typesetPromise([target])
+        .catch((e) => console.error("MathJax typeset error (" + id + "):", e))
+        .finally(() => {
+          typesetting = false;
+          observer.observe(target, { childList: true, subtree: true });
+        });
+    });
+    observer.observe(target, { childList: true, subtree: true });
   });
-  observer.observe(feedbackEl, { childList: true, subtree: true });
 })();

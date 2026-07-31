@@ -58,10 +58,10 @@ a: ["8", "6", "4", "9"],
 correct: 0,
 tags: ["correct", "calc_error", "calc_error", "concept_gap"],
 explain: {
-aim: "頂点から重心までの長さが中線の2/3であるという関係を正しく使えるかを測る問題。",
-why: "重心ではAG:GD=2:1となるので、AG:AD=2:(2+1)=2:3。\n\nつまりAGはAD全体の2/3にあたる。\n\nしたがってAG=12×2/3=8。",
-mistake: "2/3ではなく1/2や1/3をかけてしまうことがある。",
-tip: "頂点から重心までの長さは『中線×2/3』。"
+aim: "頂点から重心までの長さが中線の$\\dfrac{2}{3}$であるという関係を正しく使えるかを測る問題。",
+why: "重心ではAG:GD=2:1となるので、AG:AD=2:(2+1)=2:3。\n\nつまりAGはAD全体の$\\dfrac{2}{3}$にあたる。\n\nしたがって$\\mathrm{AG}=12\\times\\dfrac{2}{3}=8$。",
+mistake: "$\\dfrac{2}{3}$ではなく$\\dfrac{1}{2}$や$\\dfrac{1}{3}$をかけてしまうことがある。",
+tip: "頂点から重心までの長さは『中線×$\\dfrac{2}{3}$』。"
 }
 },
 {
@@ -78,7 +78,7 @@ correct: 0,
 tags: ["correct", "calc_error", "concept_gap", "diagram_reading"],
 explain: {
 aim: "二等辺三角形の対称性から垂線の位置を見抜き、三平方の定理につなげられるかを測る問題。",
-why: "二等辺三角形では、底辺の中点と頂角の頂点を結ぶ線分は、底辺に垂直になる(対称性より)。\n\nしたがってAMは底辺BCに垂直な高さでもあり、直角三角形ABMで三平方の定理が使える。\n\nBM=BC/2=5なので、AM^2=AB^2-BM^2=13^2-5^2=169-25=144。\n\nよってAM=√144=12。",
+why: "二等辺三角形では、底辺の中点と頂角の頂点を結ぶ線分は、底辺に垂直になる(対称性より)。\n\nしたがってAMは底辺BCに垂直な高さでもあり、直角三角形ABMで三平方の定理が使える。\n\n$\\mathrm{BM}=\\dfrac{\\mathrm{BC}}{2}=5$なので、$\\mathrm{AM}^{2}=\\mathrm{AB}^{2}-\\mathrm{BM}^{2}=13^{2}-5^{2}=169-25=144$。\n\nよって$\\mathrm{AM}=\\sqrt{144}=12$。",
 mistake: "AMが垂線になることに気づかず、計算を進められなくなることが多い。",
 tip: "二等辺三角形が出たら『底辺の中点=垂線の足』を真っ先に疑う。"
 }
@@ -139,7 +139,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "ratio_reverse"],
 explain: {
 aim: "チェバの定理を、頂点を一周する向きで正しく比を掛けられるかを測る問題。",
-why: "チェバの定理より、(BD/DC)×(CE/EA)×(AF/FB)=1が成り立つ。\n\nBD/DC=2/3、CE/EA=4/1を代入すると、(2/3)×4×(AF/FB)=1。\n\n整理すると(8/3)×(AF/FB)=1なので、AF/FB=3/8。\n\nしたがってAF:FB=3:8。",
+why: "チェバの定理(三角形の3本の線分が1点で交わるとき、頂点を一周する向きで比を掛けると1になる)より、$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$が成り立つ。\n\n$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=\\dfrac{2}{3}$、$\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=\\dfrac{4}{1}$を代入すると、$\\dfrac{2}{3}\\times4\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$。\n\n整理すると$\\dfrac{8}{3}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$なので、$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=\\dfrac{3}{8}$。\n\nしたがってAF:FB=3:8。",
 mistake: "3つの比をかける順番を間違えたり、逆数にしてしまうミスが多い。",
 tip: "チェバは『B→D→C, C→E→A, A→F→B』と頂点を一周する順で比をかける。"
 }
@@ -177,7 +177,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "ratio_reverse"],
 explain: {
 aim: "メネラウスの定理を、内分点と延長上の点が混在する状況でも正しく適用できるかを測る問題。",
-why: "メネラウスの定理より、(BP/PC)×(CQ/QA)×(AR/RB)=1が成り立つ。\n\nCQ/QA=1/3、AR/RB=2/1=2を代入すると、(BP/PC)×(1/3)×2=1。\n\n整理すると(BP/PC)×(2/3)=1なので、BP/PC=3/2。\n\nしたがってBP:PC=3:2。",
+why: "メネラウスの定理(三角形の頂点を通らない1本の直線が3辺(の延長)を横切るとき、頂点を一周する向きで比を掛けると1になる)より、$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}\\times\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}\\times\\dfrac{\\mathrm{AR}}{\\mathrm{RB}}=1$が成り立つ。\n\n$\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}=\\dfrac{1}{3}$、$\\dfrac{\\mathrm{AR}}{\\mathrm{RB}}=\\dfrac{2}{1}=2$を代入すると、$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}\\times\\dfrac{1}{3}\\times2=1$。\n\n整理すると$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}\\times\\dfrac{2}{3}=1$なので、$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}=\\dfrac{3}{2}$。\n\nしたがってBP:PC=3:2。",
 mistake: "内分点と延長上の点が混在していると、どの比をどこに当てはめるか混乱しやすい。",
 tip: "メネラウスは『B→P→C, C→Q→A, A→R→B』の順で一周するように比をかける。"
 }
@@ -196,7 +196,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "ratio_reverse"],
 explain: {
 aim: "メネラウスの定理で、延長上の点の位置関係を正しく踏まえて比を立てられるかを測る問題。",
-why: "メネラウスの定理より、(BP/PC)×(CQ/QA)×(AR/RB)=1が成り立つ。\n\nBP/PC=2/1=2、AR/RB=3/1=3を代入すると、2×(CQ/QA)×3=1。\n\n整理すると(CQ/QA)×6=1なので、CQ/QA=1/6。\n\nしたがってCQ:QA=1:6。",
+why: "メネラウスの定理(三角形の頂点を通らない1本の直線が3辺(の延長)を横切るとき、頂点を一周する向きで比を掛けると1になる)より、$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}\\times\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}\\times\\dfrac{\\mathrm{AR}}{\\mathrm{RB}}=1$が成り立つ。\n\n$\\dfrac{\\mathrm{BP}}{\\mathrm{PC}}=\\dfrac{2}{1}=2$、$\\dfrac{\\mathrm{AR}}{\\mathrm{RB}}=\\dfrac{3}{1}=3$を代入すると、$2\\times\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}\\times3=1$。\n\n整理すると$\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}\\times6=1$なので、$\\dfrac{\\mathrm{CQ}}{\\mathrm{QA}}=\\dfrac{1}{6}$。\n\nしたがってCQ:QA=1:6。",
 mistake: "延長上の点がどちら側にあるかを見落とすと、比の大小関係と答えが矛盾してしまうことがある。",
 tip: "メネラウスでは、点が辺のどちら側の延長上にあるかを問題文で明確にしておくと、図なしでも判断しやすい。"
 }
@@ -209,13 +209,13 @@ time: 25,
 score: 5,
 weakness: "方針切替",
 route: ["チェバの定理"],
-q: "三角形ABCの3辺BC,CA,ABの中点をそれぞれD,E,Fとする。中線AD,BE,CFが1点(重心)で交わることを、チェバの定理の左辺の値で確認したい。BD:DC=CE:EA=AF:FB=1:1のとき、チェバの定理の左辺(BD/DC)×(CE/EA)×(AF/FB)の値は？",
+q: "三角形ABCの3辺BC,CA,ABの中点をそれぞれD,E,Fとする。中線AD,BE,CFが1点(重心)で交わることを、チェバの定理の左辺の値で確認したい。BD:DC=CE:EA=AF:FB=1:1のとき、チェバの定理の左辺$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}$の値は？",
 a: ["1", "2", "1/2", "0"],
 correct: 0,
 tags: ["correct", "concept_gap", "calc_error", "concept_gap"],
 explain: {
 aim: "重心の性質を、チェバの定理の特殊な場合として捉え直せるかを測る問題。",
-why: "D,E,Fはすべて中点なので、BD:DC=CE:EA=AF:FB=1:1、つまりそれぞれの比は1。\n\nしたがって(BD/DC)×(CE/EA)×(AF/FB)=1×1×1=1。\n\nチェバの定理は『この値が1のとき3直線は1点で交わる』という定理なので、これは中線が重心で交わることの確認になっている。",
+why: "D,E,Fはすべて中点なので、BD:DC=CE:EA=AF:FB=1:1、つまりそれぞれの比は1。\n\nしたがって$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1\\times1\\times1=1$。\n\nチェバの定理は『この値が1のとき3直線は1点で交わる』という定理なので、これは中線が重心で交わることの確認になっている。",
 mistake: "重心の性質(2:1)と中点であること(1:1)を混同してしまうことがある。",
 tip: "重心が3本の中線の交点であることは、チェバの定理の特殊な場合(すべての比が1:1)として説明できる。"
 }
@@ -234,7 +234,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "calc_error"],
 explain: {
 aim: "チェバの定理で求めた比を、メネラウスの定理の式にそのまま再利用できるかを測る問題。",
-why: "まずチェバの定理(BD/DC)×(CE/EA)×(AF/FB)=1より、(1/2)×1×(AF/FB)=1なので、AF/FB=2、AF:FB=2:1。\n\n次に、三角形ABCと直線F,Q,Eにメネラウスの定理を使う。(BQ/QC)×(CE/EA)×(AF/FB)=1。\n\nCE/EA=1、AF/FB=2を代入すると、(BQ/QC)×1×2=1なので、BQ/QC=1/2。\n\nしたがってBQ:QC=1:2。",
+why: "まずチェバの定理(三角形の3本の線分が1点で交わるとき、頂点を一周する向きで比を掛けると1になる)$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$より、$\\dfrac{1}{2}\\times1\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$なので、$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=2$、AF:FB=2:1。\n\n次に、三角形ABCと直線F,Q,Eにメネラウスの定理(三角形の頂点を通らない1本の直線が3辺(の延長)を横切るとき、頂点を一周する向きで比を掛けると1になる)を使う。$\\dfrac{\\mathrm{BQ}}{\\mathrm{QC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$。\n\n$\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=1$、$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=2$を代入すると、$\\dfrac{\\mathrm{BQ}}{\\mathrm{QC}}\\times1\\times2=1$なので、$\\dfrac{\\mathrm{BQ}}{\\mathrm{QC}}=\\dfrac{1}{2}$。\n\nしたがってBQ:QC=1:2。",
 mistake: "チェバで求めたAF:FBの値を、メネラウスの式にそのまま使えることに気づかず、最初からやり直そうとしてしまう。",
 tip: "チェバとメネラウスは別々の定理だが、同じ図の中で『前半の結果を後半の式にそのまま使う』問題が共通テストでは典型。"
 }
@@ -260,7 +260,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "ratio_reverse"],
 explain: {
 aim: "チェバの定理を使って、比を図と対応させながら正確に立てて計算できるかを測る問題。",
-why: "チェバの定理より、(BD/DC)×(CE/EA)×(AF/FB)=1が成り立つ。\n\nBD/DC=2、CE/EA=1/3を代入すると、2×(1/3)×(AF/FB)=1。\n\n整理すると(2/3)×(AF/FB)=1なので、AF/FB=3/2。\n\nしたがってAF:FB=3:2。",
+why: "チェバの定理(三角形の3本の線分が1点で交わるとき、頂点を一周する向きで比を掛けると1になる)より、$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$が成り立つ。\n\n$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=2$、$\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=\\dfrac{1}{3}$を代入すると、$2\\times\\dfrac{1}{3}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$。\n\n整理すると$\\dfrac{2}{3}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$なので、$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=\\dfrac{3}{2}$。\n\nしたがってAF:FB=3:2。",
 mistake: "図を描かずに比だけで処理しようとすると、どの辺の比をかけているか混乱しやすい。",
 tip: "図を描かずに比だけで処理すると、どの辺の比を掛けているか混乱しやすい。特に、後で同じ比を複数の式で使い回す問題では、最初に確定した比ほど図に書き込んで確認しておく。"
 }
@@ -282,7 +282,7 @@ correct: 0,
 tags: ["correct", "ratio_reverse", "calc_error", "ratio_reverse"],
 explain: {
 aim: "前の設問で求めた比を、似た形の別の定理(メネラウス)の式にそのまま再利用できるかを測る問題。",
-why: "三角形ABCと直線D,E,Qにメネラウスの定理を使うと、(BD/DC)×(CE/EA)×(AQ/QB)=1が成り立つ。\n\nBD/DC=2、CE/EA=1/3を代入すると、2×(1/3)×(AQ/QB)=1。\n\n整理すると(2/3)×(AQ/QB)=1なので、AQ/QB=3/2。\n\nしたがってAQ:QB=3:2。",
+why: "三角形ABCと直線D,E,Qにメネラウスの定理(三角形の頂点を通らない1本の直線が3辺(の延長)を横切るとき、頂点を一周する向きで比を掛けると1になる)を使うと、$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}=1$が成り立つ。\n\n$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=2$、$\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=\\dfrac{1}{3}$を代入すると、$2\\times\\dfrac{1}{3}\\times\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}=1$。\n\n整理すると$\\dfrac{2}{3}\\times\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}=1$なので、$\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}=\\dfrac{3}{2}$。\n\nしたがってAQ:QB=3:2。",
 mistake: "(1)のチェバの定理の式と見た目がほぼ同じなので、AFをAQに、FBをQBに置き換えるだけで済むことに気づかず、ゼロから図を見直してしまうことがある。",
 tip: "チェバとメネラウスで同じD,Eを使っているときは、立てる式の左側2つの比(BD/DCとCE/EA)はそのまま使い回せる。"
 }
@@ -309,7 +309,7 @@ correct: 0,
 tags: ["correct", "concept_gap", "concept_gap", "concept_gap"],
 explain: {
 aim: "2つの定理の式の構造的な類似性から、結果が一致する理由を論理的に説明できるかを測る問題。",
-why: "チェバの定理: (BD/DC)×(CE/EA)×(AF/FB)=1\n\nメネラウスの定理: (BD/DC)×(CE/EA)×(AQ/QB)=1\n\nこの2つの式は、BD/DCとCE/EAの部分がまったく同じであり、式全体の値が1になることも同じである。\n\nしたがって、AF/FBとAQ/QBは同じ値にならざるを得ない。これはBD:DCやCE:EAの具体的な数値に関係なく、いつでも成り立つ。",
+why: "チェバの定理(三角形の3本の線分が1点で交わるとき、頂点を一周する向きで比を掛けると1になる): $\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=1$\n\nメネラウスの定理(三角形の頂点を通らない1本の直線が3辺(の延長)を横切るとき、頂点を一周する向きで比を掛けると1になる): $\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}\\times\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}=1$\n\nこの2つの式は、$\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}$と$\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}$の部分がまったく同じであり、式全体の値が1になることも同じである。\n\nしたがって、$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}$と$\\dfrac{\\mathrm{AQ}}{\\mathrm{QB}}$は同じ値にならざるを得ない。これはBD:DCやCE:EAの具体的な数値に関係なく、いつでも成り立つ。",
 mistake: "(1)(2)の答えが同じ比になったのを『たまたま』『この問題の数値がたまたま』と思い込み、一般的な構造に気づかないことが多い。",
 tip: "2つの定理を同じ図形・同じ点に対して使うとき、式の形が似ていたら『なぜ似ているのか』を一度立ち止まって考えると、計算ミスの発見にもつながる。"
 }
@@ -514,15 +514,15 @@ time: 25,
 score: 5,
 weakness: "方針切替",
 route: ["2円の位置関係"],
-q: "半径がそれぞれr,R(R>r)の2つの円があり、中心間の距離がdであるとする。2円が互いに離れていて共有点を持たない条件はどれか？",
+q: "半径がそれぞれ$r,R$($R\\gt r$)の2つの円があり、中心間の距離が$d$であるとする。2円が互いに離れていて共有点を持たない条件はどれか？",
 a: ["d>R+r", "d=R+r", "R-r<d<R+r", "d<R-r"],
 correct: 0,
 tags: ["correct", "concept_gap", "concept_gap", "concept_gap"],
 explain: {
 aim: "2円の位置関係を、中心間の距離と半径の和・差の大小関係で正しく判定できるかを測る問題。",
-why: "2円の位置関係は中心間の距離dと2つの半径R,rの大小関係で決まる。\n\n2円がまったく重なり合わず、外部に離れている(共有点を持たない)ためには、中心間の距離が2つの半径の和より大きい必要がある。\n\nしたがって条件はd>R+r。",
-mistake: "d=R+r(外接する、1点で接する)と、d>R+r(完全に離れている)を混同することがある。",
-tip: "位置関係の各パターン(d>R+r/d=R+r/R-r<d<R+r/d=R-r/d<R-r)は不等号の向きまでセットで覚える。"
+why: "2円の位置関係は中心間の距離$d$と2つの半径$R,r$の大小関係で決まる。\n\n2円がまったく重なり合わず、外部に離れている(共有点を持たない)ためには、中心間の距離が2つの半径の和より大きい必要がある。\n\nしたがって条件は$d\\gt R+r$。",
+mistake: "$d=R+r$(外接する、1点で接する)と、$d\\gt R+r$(完全に離れている)を混同することがある。",
+tip: "位置関係の各パターン($d\\gt R+r$ / $d=R+r$ / $R-r\\lt d\\lt R+r$ / $d=R-r$ / $d\\lt R-r$)は不等号の向きまでセットで覚える。"
 }
 },
 {
@@ -539,9 +539,9 @@ correct: 0,
 tags: ["correct", "concept_gap", "concept_gap", "concept_gap"],
 explain: {
 aim: "2円の位置関係を、具体的な数値でR+r・R-rと比較して判定できるかを測る問題。",
-why: "2つの半径の和はR+r=5+3=8。\n\n中心間の距離d=9はR+r=8より大きいので、2円は互いに離れていて共有点を持たない。",
-mistake: "R+rとR-rを取り違え、内接・外接の判定を誤ることがある。",
-tip: "まずR+rとR-rの2つの値を計算し、dがどの範囲に入るかを確認する。"
+why: "2つの半径の和は$R+r=5+3=8$。\n\n中心間の距離$d=9$は$R+r=8$より大きいので、2円は互いに離れていて共有点を持たない。",
+mistake: "$R+r$と$R-r$を取り違え、内接・外接の判定を誤ることがある。",
+tip: "まず$R+r$と$R-r$の2つの値を計算し、$d$がどの範囲に入るかを確認する。"
 }
 },
 {
@@ -558,8 +558,8 @@ correct: 0,
 tags: ["correct", "calc_error", "formula_mismatch", "calc_error"],
 explain: {
 aim: "共通外接線の長さの公式(半径の差を使う)を正しく適用できるかを測る問題。",
-why: "共通外接線の長さLは、中心間の距離d、半径R,rを用いて、L=√(d^2-(R-r)^2)で求められる。\n\n(この式は、O'から大きい円の半径に垂線を下ろすと、斜辺d・一辺R-rの直角三角形ができることから、三平方の定理で導ける。)\n\nd=10、R-r=9-3=6を代入すると、L=√(10^2-6^2)=√(100-36)=√64=8。",
-mistake: "R-rではなくR+rを使ってしまい、別の式(内接線などの式)と混同することがある。",
+why: "共通外接線の長さ$L$は、中心間の距離$d$、半径$R,r$を用いて、$L=\\sqrt{d^{2}-(R-r)^{2}}$で求められる。\n\n(この式は、O'から大きい円の半径に垂線を下ろすと、斜辺$d$・一辺$R-r$の直角三角形ができることから、三平方の定理で導ける。)\n\n$d=10$、$R-r=9-3=6$を代入すると、$L=\\sqrt{10^{2}-6^{2}}=\\sqrt{100-36}=\\sqrt{64}=8$。",
+mistake: "$R-r$ではなく$R+r$を使ってしまい、別の式(内接線などの式)と混同することがある。",
 tip: "共通外接線は『半径の差』、共通内接線は『半径の和』を使う、と覚える。"
 }
 },
@@ -577,9 +577,9 @@ correct: 0,
 tags: ["correct", "calc_error", "concept_gap", "formula_mismatch"],
 explain: {
 aim: "2円の位置関係を判定した上で、外接していても共通外接線の公式が同じ形で使えることを理解しているかを測る問題。",
-why: "まず位置関係を確認する。R+r=4+1=5で、これは中心間の距離d=5と等しい。\n\nしたがって2円はd=R+rの関係にあり、外接する(1点で接する)。\n\n外接する場合でも、接点を通らない共通外接線は存在し、長さはL=√(d^2-(R-r)^2)で求められる。\n\nd=5、R-r=4-1=3を代入すると、L=√(5^2-3^2)=√(25-9)=√16=4。",
+why: "まず位置関係を確認する。$R+r=4+1=5$で、これは中心間の距離$d=5$と等しい。\n\nしたがって2円は$d=R+r$の関係にあり、外接する(1点で接する)。\n\n外接する場合でも、接点を通らない共通外接線は存在し、長さは$L=\\sqrt{d^{2}-(R-r)^{2}}$で求められる。\n\n$d=5$、$R-r=4-1=3$を代入すると、$L=\\sqrt{5^{2}-3^{2}}=\\sqrt{25-9}=\\sqrt{16}=4$。",
 mistake: "外接している(1点で接している)と分かった時点で、接点を通らない共通外接線も存在することに気づかず、答えを0や接点での接線と考えてしまうことがある。",
-tip: "外接していても、共通外接線(接点を通らない方)はR+rではなくR-rを使う公式のまま求められる。"
+tip: "外接していても、共通外接線(接点を通らない方)は$R+r$ではなく$R-r$を使う公式のまま求められる。"
 }
 },
 
@@ -594,14 +594,14 @@ time: 60,
 score: 5,
 weakness: "共通点抽出",
 route: ["共通点の抽出", "チェバの定理"],
-q: "△ABCの辺AB上に点F、辺BC上に点D、辺CA上に点Eがあり、3本の線分AD、BE、CFが1点で交わっている。この状況について、太郎さんは次の3つの例で比の値を調べた。\n例1: AF/FB=2, BD/DC=3, CE/EA=1/6\n例2: AF/FB=1/2, BD/DC=4, CE/EA=1/2\n例3: AF/FB=3, BD/DC=1/3, CE/EA=1\nこの3つの例すべてに共通して成り立つ関係はどれか。",
+q: "△ABCの辺AB上に点F、辺BC上に点D、辺CA上に点Eがあり、3本の線分AD、BE、CFが1点で交わっている。この状況について、太郎さんは次の3つの例で比の値を調べた。\n例1: $\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=2$, $\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=3$, $\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=\\dfrac{1}{6}$\n例2: $\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=\\dfrac{1}{2}$, $\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=4$, $\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=\\dfrac{1}{2}$\n例3: $\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}=3$, $\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=\\dfrac{1}{3}$, $\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=1$\nこの3つの例すべてに共通して成り立つ関係はどれか。",
 a: ["(AF/FB)×(BD/DC)×(CE/EA)=1", "(AF/FB)×(BD/DC)=6", "(AF/FB)+(BD/DC)+(CE/EA)=6", "AF/FBとBD/DCの値が等しい"],
 correct: 0,
 tags: ["correct", "partial_match", "calc_error", "concept_gap"],
 explain: {
 aim: "複数の具体例に共通する関係を、1例だけで早合点せず全部で確認して見抜けるかを測る問題。",
-why: "3本の線分が1点で交わるとき、チェバの定理より(AF/FB)×(BD/DC)×(CE/EA)=1が常に成り立つ。\n\n例1: 2×3×(1/6)=1\n例2: (1/2)×4×(1/2)=1\n例3: 3×(1/3)×1=1\n\nすべて積が1になる。",
-mistake: "例1だけを見て『(AF/FB)×(BD/DC)=2×3=6』という関係に気づき、これを共通の関係だと早合点することがある。例2で確かめると(1/2)×4=2となり成り立たない。最初の1例だけで一般化してしまうミス。",
+why: "チェバの定理(三角形の3本の線分が1点で交わるとき、頂点を一周する向きで比を掛けると1になる)より$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}\\times\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}\\times\\dfrac{\\mathrm{CE}}{\\mathrm{EA}}=1$が常に成り立つ。\n\n例1: $2\\times3\\times\\dfrac{1}{6}=1$\n例2: $\\dfrac{1}{2}\\times4\\times\\dfrac{1}{2}=1$\n例3: $3\\times\\dfrac{1}{3}\\times1=1$\n\nすべて積が1になる。",
+mistake: "例1だけを見て『$\\dfrac{\\mathrm{AF}}{\\mathrm{FB}}\\times\\dfrac{\\mathrm{BD}}{\\mathrm{DC}}=2\\times3=6$』という関係に気づき、これを共通の関係だと早合点することがある。例2で確かめると$\\dfrac{1}{2}\\times4=2$となり成り立たない。最初の1例だけで一般化してしまうミス。",
 tip: "複数の例から法則を見抜くときは、候補を見つけた時点で必ず残りの例にも当てはめて確認する。1例目で『見つけた!』と思った瞬間が一番危ない。"
 }
 }
