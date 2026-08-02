@@ -255,7 +255,9 @@ async function syncAll(opts) {
   log("同期済み（" + t + "）", "#166534");
 
   // 画面に出ている単元のデータが書き換わったら、1回だけリロードして反映
-  if (changedLocal && !sessionStorage.getItem(RELOAD_FLAG)) {
+  // 手動の「今すぐ同期」で押されたときは、リロード回数の制限を無視して必ず反映する
+  //（自動同期のほうは従来どおり1セッション1回のまま＝ループ防止）
+  if (changedLocal && ((opts && opts.forceReload) || !sessionStorage.getItem(RELOAD_FLAG))) {
     sessionStorage.setItem(RELOAD_FLAG, "1");
     log("他の端末のデータを取り込みました。画面を更新します…", "#166534");
     setTimeout(() => location.reload(), 900);
@@ -334,7 +336,7 @@ function injectUI() {
   });
   document.getElementById("syncNowBtn").addEventListener("click", () => {
     sessionStorage.removeItem(RELOAD_FLAG);
-    syncAll({});
+    syncAll({ forceReload: true });
   });
   document.getElementById("syncLogoutBtn").addEventListener("click", () => signOut(auth));
   return true;
