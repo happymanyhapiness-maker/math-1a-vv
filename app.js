@@ -259,6 +259,53 @@ function applyMathFormatting(str) {
     .replace(/>=/g, "\u2265");
 }
 
+/* =========================
+   4択の選択肢の数式表示
+   questions_*.js 側の "1/2" "√2/2" のような素朴な表記を
+   MathJaxが解釈できる $\dfrac{}{}$ / $\sqrt{}$ に変換し、
+   解説(explain)側と同じ「分数はスタック、ルートは根号」の見た目にする。
+   座標・ベクトル・文章など複雑な表記は対象外にして、元の表記のまま出す
+   （誤変換で意味が変わるくらいなら、今まで通りの見た目にしておく）。
+========================= */
+function choiceSqrtToLatex(s) {
+  // "3√2" → "3\sqrt{2}"、"√2" → "\sqrt{2}"
+  return s.replace(/(\d*)√(\d+)/, (_, coef, rad) => `${coef}\\sqrt{${rad}}`);
+}
+
+const CHOICE_NUM_TOKEN = /^-?(?:\d+)?(?:√\d+)?$/;
+const CHOICE_LETTER_TOKEN = /^[A-Za-zΑ-Ωα-ω]+[⁰-⁹¹²³]*$/;
+
+function isSimpleChoiceMathToken(s) {
+  if (s === "" || s === "-") return false;
+  return CHOICE_NUM_TOKEN.test(s) || CHOICE_LETTER_TOKEN.test(s);
+}
+
+function convertChoiceMath(str) {
+  const s = String(str).trim();
+
+  // ケース1: 全体が単純な分数 "a/b" の形
+  const fracMatch = s.match(/^(-)?([^/\s]+)\/([^/\s]+)$/);
+  if (fracMatch) {
+    const [, sign, num, den] = fracMatch;
+    if (isSimpleChoiceMathToken(num) && isSimpleChoiceMathToken(den)) {
+      return `$${sign || ""}\\dfrac{${choiceSqrtToLatex(num)}}{${choiceSqrtToLatex(den)}}$`;
+    }
+  }
+
+  // ケース2: 分数ではないが √ を含む単純な項（"√194" "3√2" など）
+  if (/^-?(?:\d*)√\d+$/.test(s)) {
+    return `$${choiceSqrtToLatex(s)}$`;
+  }
+
+  // それ以外はそのまま
+  return str;
+}
+
+function formatChoiceText(str) {
+  if (str === undefined || str === null) return "";
+  return escapeHtml(applyMathFormatting(convertChoiceMath(str)));
+}
+
 function formatText(str) {
   if (str === undefined || str === null) return "";
   return escapeHtml(applyMathFormatting(str)).replace(/\n/g, "<br>");
@@ -1715,7 +1762,7 @@ if (box) {
 shuffled.forEach((item, i) => {
   const b = document.createElement("button");
   b.className = "option";
-  b.innerText = item.value;
+  b.innerHTML = formatChoiceText(item.value);
 
   // ✅ 元の位置を保存
   b.dataset.index = item.index;
@@ -2639,7 +2686,7 @@ if (savedUnit && UNIT_META[savedUnit]) {
   // 要素ごとに独立したObserverを持たせる。
   // 1つのObserverで複数要素をまとめて監視すると、片方の再描画のために
   // disconnect した時にもう片方の監視まで止まってしまうため。
-  ["feedback", "questionText", "groupPanel"].forEach((id) => {
+  ["feedback", "questionText", "groupPanel", "optionsBox"].forEach((id) => {
     const target = el(id);
     if (!target) return;
 
