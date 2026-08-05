@@ -492,6 +492,11 @@ body.exam-mode .main-layout{
   font-weight: 600;
 }
 
+.pill-sync {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .stack-buttons {
   display: flex;
   flex-direction: column;

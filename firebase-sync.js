@@ -367,11 +367,23 @@ async function doLogin() {
 function renderAuthUI() {
   const out = document.getElementById("syncLoggedOut");
   const inn = document.getElementById("syncLoggedIn");
+
+  // ✅ ヘッダー側の「ログイン中」表示（通常画面・問題演習画面の両方）
+  // exam-mode中はサイドバーのsyncPanelが隠れるので、ここが唯一の目印になる。
+  const syncCardTop = document.getElementById("syncStatusCardTop");
+  const syncPillExam = document.getElementById("syncPillExam");
+  const whoText = currentUser ? "ログイン中: " + (currentUser.email || currentUser.uid) : "";
+  [syncCardTop, syncPillExam].forEach((elm) => {
+    if (!elm) return;
+    elm.style.display = currentUser ? (elm === syncCardTop ? "block" : "inline-flex") : "none";
+    if (currentUser) elm.title = whoText;
+  });
+
   if (!out || !inn) return;
   if (currentUser) {
     out.style.display = "none";
     inn.style.display = "block";
-    document.getElementById("syncWho").innerText = "ログイン中: " + (currentUser.email || currentUser.uid);
+    document.getElementById("syncWho").innerText = whoText;
   } else {
     out.style.display = "block";
     inn.style.display = "none";
