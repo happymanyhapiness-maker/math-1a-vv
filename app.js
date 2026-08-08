@@ -173,6 +173,21 @@ const UNIT_META = {
     questions: questions_toukei,
     routeChoices: ROUTE_CHOICES_TOUKEI,
     primaryRoutes: ["標準化", "正規分布表の読み方", "標本平均の分散", "帰無仮説の設定", "棄却域との比較"]
+  },
+
+  sankaku: {
+    label: "数Ⅱ 三角関数",
+    description: "象限と符号 / 加法定理 / 倍角・半角 / 三角方程式",
+    note: "",
+    mission: `
+      第1問：基準角と象限による値の判断・相互関係
+      第2問：加法定理・倍角公式・半角公式
+      第3問：三角方程式・周期・グラフの最大最小
+      第4問：積分への橋渡し(倍角・半角による式変形)
+    `,
+    questions: [...questions_sankaku_1, ...questions_sankaku_2],
+    routeChoices: ROUTE_CHOICES_SANKAKU,
+    primaryRoutes: ["基準角と象限", "相互関係", "加法定理", "倍角公式", "半角公式", "三角方程式"]
   }
 };
 
