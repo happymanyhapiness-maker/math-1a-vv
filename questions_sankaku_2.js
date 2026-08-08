@@ -19,13 +19,13 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["三角方程式", "単位円"],
   q: "$0\\le\\theta<2\\pi$ のとき、$\\sin\\theta=\\dfrac{1}{2}$ を満たす $\\theta$ を求めよ。",
-  a: ["$\\dfrac{\\pi}{6},\\dfrac{5\\pi}{6}$", "$\\dfrac{\\pi}{6},\\dfrac{7\\pi}{6}$", "$\\dfrac{5\\pi}{6},\\dfrac{7\\pi}{6}$", "$\\dfrac{\\pi}{3},\\dfrac{2\\pi}{3}$"],
+  a: ["π/6, 5π/6", "π/6, 7π/6", "5π/6, 7π/6", "π/3, 2π/3"],
   correct: 0,
   tags: ["correct", "range_error", "range_error", "concept_gap"],
   explain: {
-    aim: "$\\sin\\theta=1/2$ の解を単位円から判断し、指定された範囲の中で2つの解を漏れなく求められるかを測る問題。",
-    why: "$\\sin\\theta=1/2$ なので基準角は $\\pi/6$。sinが正になるのは第1象限と第2象限だから、$\\theta=\\pi/6,\\ 5\\pi/6$。",
-    mistake: "第1象限の $\\pi/6$ だけを書いてもう1つの解を落としたり、第2象限の角を $7\\pi/6$ としてしまったりする。",
+    aim: "$\\sin\\theta=\\dfrac{1}{2}$ の解を単位円から判断し、指定された範囲の中で2つの解を漏れなく求められるかを測る問題。",
+    why: "$\\sin\\theta=\\dfrac{1}{2}$ なので基準角は $\\dfrac{\\pi}{6}$。sinが正になるのは第1象限と第2象限だから、$\\theta=\\dfrac{\\pi}{6},\\ \\dfrac{5\\pi}{6}$。",
+    mistake: "第1象限の $\\dfrac{\\pi}{6}$ だけを書いてもう1つの解を落としたり、第2象限の角を $\\dfrac{7\\pi}{6}$ としてしまったりする。",
     tip: "sinは『y座標』。まず単位円で正になる象限を確認してから、基準角を配置する。"
   }
 },
@@ -38,13 +38,13 @@ const questions_sankaku_2 = [
   weakness: "計算精度",
   route: ["周期"],
   q: "$y=2\\sin\\left(x-\\dfrac{\\pi}{3}\\right)$ の周期はどれか。",
-  a: ["$2\\pi$", "$\\pi$", "$\\dfrac{\\pi}{3}$", "$6\\pi$"],
+  a: ["2π", "π", "π/3", "6π"],
   correct: 0,
   tags: ["correct", "concept_gap", "condition_misread", "calc_error"],
   explain: {
     aim: "三角関数のグラフで、前後の平行移動と周期を混同せず判断できるかを測る問題。",
-    why: "$y=a\\sin(bx+c)$ の周期は $2\\pi/|b|$。この式では x の係数 b=1 なので周期は $2\\pi$。$x-\\pi/3$ はグラフの横方向の移動を表すだけで、周期は変えない。",
-    mistake: "$\\pi/3$ をそのまま周期だと思ったり、係数2を見て周期を $\\pi$ としてしまったりする。",
+    why: "$y=a\\sin(bx+c)$ の周期は $\\dfrac{2\\pi}{|b|}$。この式では x の係数 b=1 なので周期は $2\\pi$。$x-\\dfrac{\\pi}{3}$ はグラフの横方向の移動を表すだけで、周期は変えない。",
+    mistake: "$\\dfrac{\\pi}{3}$ をそのまま周期だと思ったり、係数2を見て周期を $\\pi$ としてしまったりする。",
     tip: "『外の2は振幅』『中のxの係数が周期』『+や-の定数は横移動』と役割を分けて見る。"
   }
 },
@@ -62,7 +62,7 @@ const questions_sankaku_2 = [
   tags: ["correct", "calc_error", "near_miss", "calc_error"],
   explain: {
     aim: "sinの値の範囲から、三角関数の最大値をすばやく判断できるかを測る問題。",
-    why: "$-1\\le\\sin x\\le1$ なので、$2\\sin x$ の最大値は2。したがって $2\\sin x-1$ の最大値は $2-1=1$。$x=\\pi/2$ で実現する。",
+    why: "$-1\\le\\sin x\\le1$ なので、$2\\sin x$ の最大値は2。したがって $2\\sin x-1$ の最大値は $2-1=1$。$x=\\dfrac{\\pi}{2}$ で実現する。",
     mistake: "sin x の最大値1だけを答えてしまったり、外側の2を足してしまったりする。",
     tip: "まず $\\sin x$ の範囲 $[-1,1]$ を書いて、係数を掛けてから定数を足し引きする。"
   }
@@ -76,12 +76,12 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["三角方程式", "単位円"],
   q: "$0\\le\\theta<2\\pi$ のとき、$2\\cos\\theta-1=0$ を満たす $\\theta$ を求めよ。",
-  a: ["$\\dfrac{\\pi}{3},\\dfrac{5\\pi}{3}$", "$\\dfrac{\\pi}{6},\\dfrac{11\\pi}{6}$", "$\\dfrac{2\\pi}{3},\\dfrac{4\\pi}{3}$", "$\\dfrac{\\pi}{3},\\dfrac{4\\pi}{3}$"],
+  a: ["π/3, 5π/3", "π/6, 11π/6", "2π/3, 4π/3", "π/3, 4π/3"],
   correct: 0,
   tags: ["correct", "calc_error", "range_error", "concept_gap"],
   explain: {
     aim: "三角方程式をまず基本形に直し、cosの符号から2つの解を判断できるかを測る問題。",
-    why: "$2\\cos\\theta-1=0$ より $\\cos\\theta=1/2$。基準角は $\\pi/3$。cosが正なのは第1象限と第4象限なので、$\\theta=\\pi/3,\\ 5\\pi/3$。",
+    why: "$2\\cos\\theta-1=0$ より $\\cos\\theta=\\dfrac{1}{2}$。基準角は $\\dfrac{\\pi}{3}$。cosが正なのは第1象限と第4象限なので、$\\theta=\\dfrac{\\pi}{3},\\ \\dfrac{5\\pi}{3}$。",
     mistake: "$2\\cos\\theta=1$ から $\\cos\\theta=1$ としてしまったり、第2・第3象限に解を置いてしまったりする。",
     tip: "三角方程式は①基本形にする、②基準角、③符号で象限、の3手順を固定する。"
   }
@@ -99,7 +99,7 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["半角公式"],
   q: "$\\sin^2x$ を、$\\cos2x$ を使って表したものはどれか。",
-  a: ["$\\dfrac{1-\\cos2x}{2}$", "$\\dfrac{1+\\cos2x}{2}$", "$1-\\cos2x$", "$2-\\cos2x$"],
+  a: ["(1-cos2x)/2", "(1+cos2x)/2", "1-cos2x", "2-cos2x"],
   correct: 0,
   tags: ["correct", "sign_error", "calc_error", "formula_mismatch"],
   explain: {
@@ -118,7 +118,7 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["半角公式"],
   q: "$\\cos^2x$ を、$\\cos2x$ を使って表したものはどれか。",
-  a: ["$\\dfrac{1+\\cos2x}{2}$", "$\\dfrac{1-\\cos2x}{2}$", "$1-\\cos2x$", "$2\\cos2x$"],
+  a: ["(1+cos2x)/2", "(1-cos2x)/2", "1-cos2x", "2cos2x"],
   correct: 0,
   tags: ["correct", "sign_error", "calc_error", "formula_mismatch"],
   explain: {
@@ -137,7 +137,7 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["倍角公式"],
   q: "$2\\sin x\\cos x$ を積分しやすい形に変形するとどれか。",
-  a: ["$\\sin2x$", "$\\cos2x$", "$\\dfrac{1}{2}\\sin2x$", "$2\\sin2x$"],
+  a: ["sin2x", "cos2x", "(1/2)sin2x", "2sin2x"],
   correct: 0,
   tags: ["correct", "formula_mismatch", "calc_error", "calc_error"],
   explain: {
@@ -156,7 +156,7 @@ const questions_sankaku_2 = [
   weakness: "方針切替",
   route: ["倍角公式", "半角公式"],
   q: "$\\sin^2x+\\cos^2x$ を利用して、$\\sin^2x$ を $\\cos2x$ だけを含む式に変形した。正しいものはどれか。",
-  a: ["$\\dfrac{1-\\cos2x}{2}$", "$\\dfrac{1+\\cos2x}{2}$", "$1-\\cos2x$", "$\\dfrac{1}{2}-\\cos2x$"],
+  a: ["(1-cos2x)/2", "(1+cos2x)/2", "1-cos2x", "1/2-cos2x"],
   correct: 0,
   tags: ["correct", "sign_error", "calc_error", "formula_mismatch"],
   explain: {
