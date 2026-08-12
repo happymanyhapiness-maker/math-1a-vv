@@ -237,12 +237,18 @@ async function syncAll(opts) {
 
   let changedLocal = false;
   const units = new Set(unitKeys());
+  console.log("[sync] ローカル既知の単元数:", units.size);
 
   // サーバー側にしか無い単元も拾う
   try {
     const snap = await getDocs(collection(db, "users", targetUid(), "units"));
     snap.forEach(d => units.add(d.id));
-  } catch (e) { /* 一覧が取れなくても既知の単元だけで続行 */ }
+  } catch (e) {
+    // 一覧が取れなくても既知の単元だけで続行するが、原因が見えないと詰むので必ずログに出す
+    console.error("[sync] unit一覧の取得に失敗:", e);
+    if (!silent) log("単元一覧の取得に失敗しました（" + ((e && e.code) || e) + "）", "#991b1b");
+  }
+  console.log("[sync] 同期対象の単元数（サーバー分含む）:", units.size, Array.from(units));
 
   for (const unit of units) {
     try {
