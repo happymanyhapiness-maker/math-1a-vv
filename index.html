@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>共通テスト数学</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=16">
   <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
        他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
   <script>
@@ -97,8 +97,10 @@
         </section>
 
         <section class="panel-block">
-          <h2>AI分析（この単元）</h2>
-          <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。</div>
+          <h2>AI分析</h2>
+          <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。
+            <!-- 対象範囲（この単元／全単元）の切り替えUIは crossunit.js が非破壊的に挿入します -->
+          </div>
           <div class="stack-buttons">
             <button class="btn primary" id="copyAnalysisBtn">分析結果をコピー</button>
             <button class="btn secondary" id="previewAnalysisBtn">中身をプレビュー</button>
@@ -261,8 +263,8 @@
   <script src="questions_sankaku_1.js?v=20260808-1"></script>
   <script src="questions_sankaku_2.js?v=20260808-1"></script>
   <script src="app.js?v=20"></script>
-<script src="crossunit.js?v=2"></script>
-<script src="progress-dashboard.js?v=2"></script>
+<script src="crossunit.js?v=3"></script>
+<script src="progress-dashboard.js?v=3"></script>
 <script type="module" src="firebase-sync.js?v=1"></script>
 
 </body>

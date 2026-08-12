@@ -56,6 +56,11 @@
 
       var correct = log.filter(function (r) { return r && r.isCorrect; }).length;
 
+      var lastTs = 0;
+      log.forEach(function (r) {
+        if (r && r.timestamp && r.timestamp > lastTs) lastTs = r.timestamp;
+      });
+
       return {
         unit: unit,
         label: label,
@@ -64,9 +69,24 @@
         progressPct: total ? pct(Math.min(answeredCount, total), total) : null,
         attempts: log.length,
         correct: correct,
-        accuracyPct: pct(correct, log.length)
+        accuracyPct: pct(correct, log.length),
+        lastTs: lastTs
       };
     });
+  }
+
+  /* ---------- 日付表示 ---------- */
+  function fmtDate(ts) {
+    if (!ts) return null;
+    var d = new Date(ts);
+    var today = new Date();
+    var y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+    var ty = today.getFullYear(), tm = today.getMonth(), td = today.getDate();
+
+    var diffDays = Math.round((new Date(ty, tm, td) - new Date(y, m, day)) / 86400000);
+    if (diffDays === 0) return "今日";
+    if (diffDays === 1) return "きのう";
+    return y + "/" + (m + 1) + "/" + day;
   }
 
   /* ---------- 描画 ---------- */
@@ -79,17 +99,20 @@
       : "-";
 
     var accuracyText = started ? pctText(row.correct, row.attempts) + "（" + row.correct + "/" + row.attempts + "回）" : "まだ未挑戦";
+    var lastDateText = fmtDate(row.lastTs);
+    var footText = progressText + (lastDateText ? "　/　最終学習: " + lastDateText : "");
 
     return (
-      '<div class="progress-row' + (started ? "" : " progress-row-notstarted") + '">' +
+      '<div class="progress-row' + (started ? "" : " progress-row-notstarted") + '" data-unit="' + escapeHtmlSafe(row.unit) + '" role="button" tabindex="0" ' +
+        'aria-label="' + escapeHtmlSafe(row.label) + 'を開く">' +
         '<div class="progress-row-head">' +
-          '<span class="progress-row-label">' + escapeHtmlSafe(row.label) + '</span>' +
+          '<span class="progress-row-label">' + escapeHtmlSafe(row.label) + (started ? "" : '<span class="progress-row-badge">未着手</span>') + '</span>' +
           '<span class="progress-row-accuracy">' + accuracyText + '</span>' +
         '</div>' +
         '<div class="progress-bar-track">' +
           '<div class="progress-bar-fill" style="width:' + progress + '%;"></div>' +
         '</div>' +
-        '<div class="progress-row-foot">' + progressText + '</div>' +
+        '<div class="progress-row-foot">' + footText + '</div>' +
       '</div>'
     );
   }
@@ -138,6 +161,28 @@
       '</div>';
 
     body.innerHTML = summary + started.map(rowHTML).join("") + notStarted.map(rowHTML).join("");
+    bindRowClicks(body);
+  }
+
+  /* ---------- 進捗バーのタップで単元を開始 ---------- */
+  function goToUnit(unit) {
+    if (typeof selectUnit !== "function" || !unit) return;
+    selectUnit(unit);
+  }
+
+  function bindRowClicks(body) {
+    var rows = body.querySelectorAll(".progress-row[data-unit]");
+    rows.forEach(function (row) {
+      row.addEventListener("click", function () {
+        goToUnit(row.getAttribute("data-unit"));
+      });
+      row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goToUnit(row.getAttribute("data-unit"));
+        }
+      });
+    });
   }
 
   /* ---------- 開閉トグル ----------

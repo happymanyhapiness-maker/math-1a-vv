@@ -296,9 +296,9 @@
     return L.join("\n");
   }
 
-  /* ---------- コピー処理 ---------- */
+  /* ---------- コピー処理（全単元ぶん） ---------- */
   function setStatus(msg, color) {
-    var s = document.getElementById("crossCopyStatus");
+    var s = document.getElementById("analysisCopyStatus");
     if (s) { s.innerText = msg; s.style.color = color || "#166534"; }
   }
 
@@ -330,8 +330,8 @@
     }
   }
 
-  function togglePreview() {
-    var pre = document.getElementById("crossPreview");
+  function togglePreviewCross() {
+    var pre = document.getElementById("analysisPreview");
     if (!pre) return;
     if (pre.style.display === "none" || !pre.style.display) {
       pre.innerText = buildCrossUnitReport();
@@ -341,39 +341,62 @@
     }
   }
 
-  /* ---------- UI 注入 ---------- */
-  function injectUI() {
-    if (document.getElementById("copyCrossBtn")) return true;
+  /* ---------- 対象範囲（この単元／全単元）トグル ----------
+     「コピー」「プレビュー」ボタンは1組のまま、ボタンを押す前に
+     どちら向けのログを対象にするかを切り替えるスタイル。
+     app.js側のオリジナル関数（この単元用）はそのまま使い、
+     全単元が選ばれているときだけ、このファイルの関数に差し替える。 */
+  var scope = "unit"; // "unit" | "all"
 
-    var anchor = document.getElementById("analysisCopyStatus");
-    if (!anchor) return false;
+  function applyScopeUI() {
+    var unitBtn = document.getElementById("scopeUnitBtn");
+    var allBtn = document.getElementById("scopeAllBtn");
+    if (unitBtn) unitBtn.classList.toggle("active", scope === "unit");
+    if (allBtn) allBtn.classList.toggle("active", scope === "all");
 
-    // 「この単元」セクションとは別に、独立した見出し付きセクションを追加する
-    // （以前は同じ見出しの下に追記していたため、ボタンが4つ縦に並んでごちゃついていた）
-    var singleUnitSection = anchor.closest ? anchor.closest("section.panel-block") : anchor.parentNode.parentNode;
-
-    var section = document.createElement("section");
-    section.className = "panel-block";
-    section.id = "crossUnitSection";
-    section.innerHTML =
-      '<h2>AI分析（全単元）</h2>' +
-      '<div class="small-text" style="margin-bottom:6px;">' +
-      '全単元のログをまとめて出力します（今ひらいている単元以外も含む）。</div>' +
-      '<div class="stack-buttons">' +
-      '<button class="btn primary" id="copyCrossBtn">全単元まとめてコピー</button>' +
-      '<button class="btn secondary" id="previewCrossBtn">全単元の中身をプレビュー</button>' +
-      '</div>' +
-      '<div class="small-text" id="crossCopyStatus" style="margin-top:6px;"></div>' +
-      '<pre id="crossPreview" class="analysis-preview" style="display:none;"></pre>';
-
-    if (singleUnitSection && singleUnitSection.parentNode) {
-      singleUnitSection.parentNode.insertBefore(section, singleUnitSection.nextSibling);
-    } else {
-      anchor.parentNode.parentNode.appendChild(section);
+    var copyBtn = document.getElementById("copyAnalysisBtn");
+    var previewBtn = document.getElementById("previewAnalysisBtn");
+    if (copyBtn) {
+      copyBtn.onclick = (scope === "all") ? copyCross : (window.copyAnalysisToClipboard || null);
+    }
+    if (previewBtn) {
+      previewBtn.onclick = (scope === "all") ? togglePreviewCross : (window.toggleAnalysisPreview || null);
     }
 
-    document.getElementById("copyCrossBtn").addEventListener("click", copyCross);
-    document.getElementById("previewCrossBtn").addEventListener("click", togglePreview);
+    // 範囲を切り替えたら、開きっぱなしのプレビュー/ステータスは一旦リセットして混乱を防ぐ
+    var pre = document.getElementById("analysisPreview");
+    if (pre) pre.style.display = "none";
+    var status = document.getElementById("analysisCopyStatus");
+    if (status) status.innerText = "";
+  }
+
+  function setScope(next) {
+    if (scope === next) return;
+    scope = next;
+    applyScopeUI();
+  }
+
+  /* ---------- UI 注入 ---------- */
+  function injectUI() {
+    if (document.getElementById("scopeUnitBtn")) { applyScopeUI(); return true; }
+
+    var anchor = document.getElementById("analysisCopyStatus");
+    var statsBox = anchor && anchor.parentNode;
+    var stackButtons = statsBox && statsBox.querySelector(".stack-buttons");
+    if (!statsBox || !stackButtons) return false;
+
+    var toggle = document.createElement("div");
+    toggle.className = "scope-toggle";
+    toggle.innerHTML =
+      '<button type="button" class="scope-toggle-btn" id="scopeUnitBtn">この単元</button>' +
+      '<button type="button" class="scope-toggle-btn" id="scopeAllBtn">全単元も含む</button>';
+
+    statsBox.insertBefore(toggle, stackButtons);
+
+    document.getElementById("scopeUnitBtn").addEventListener("click", function () { setScope("unit"); });
+    document.getElementById("scopeAllBtn").addEventListener("click", function () { setScope("all"); });
+
+    applyScopeUI();
     return true;
   }
 
