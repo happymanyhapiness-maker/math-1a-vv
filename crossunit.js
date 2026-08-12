@@ -348,13 +348,15 @@
     var anchor = document.getElementById("analysisCopyStatus");
     if (!anchor) return false;
 
-    var host = anchor.parentNode; // AI分析 section
-    var box = document.createElement("div");
-    box.style.marginTop = "14px";
-    box.style.paddingTop = "12px";
-    box.style.borderTop = "1px dashed #cbd5e1";
+    // 「この単元」セクションとは別に、独立した見出し付きセクションを追加する
+    // （以前は同じ見出しの下に追記していたため、ボタンが4つ縦に並んでごちゃついていた）
+    var singleUnitSection = anchor.closest ? anchor.closest("section.panel-block") : anchor.parentNode.parentNode;
 
-    box.innerHTML =
+    var section = document.createElement("section");
+    section.className = "panel-block";
+    section.id = "crossUnitSection";
+    section.innerHTML =
+      '<h2>AI分析（全単元）</h2>' +
       '<div class="small-text" style="margin-bottom:6px;">' +
       '全単元のログをまとめて出力します（今ひらいている単元以外も含む）。</div>' +
       '<div class="stack-buttons">' +
@@ -364,7 +366,11 @@
       '<div class="small-text" id="crossCopyStatus" style="margin-top:6px;"></div>' +
       '<pre id="crossPreview" class="analysis-preview" style="display:none;"></pre>';
 
-    host.appendChild(box);
+    if (singleUnitSection && singleUnitSection.parentNode) {
+      singleUnitSection.parentNode.insertBefore(section, singleUnitSection.nextSibling);
+    } else {
+      anchor.parentNode.parentNode.appendChild(section);
+    }
 
     document.getElementById("copyCrossBtn").addEventListener("click", copyCross);
     document.getElementById("previewCrossBtn").addEventListener("click", togglePreview);

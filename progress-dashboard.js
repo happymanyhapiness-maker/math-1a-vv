@@ -140,9 +140,23 @@
     body.innerHTML = summary + started.map(rowHTML).join("") + notStarted.map(rowHTML).join("");
   }
 
+  /* ---------- 開閉トグル ----------
+     単元カードまでの距離が遠くなって選びにくい、という指摘への対策で、
+     初期状態は折りたたみ（見出し行だけ）にし、クリックで展開する。 */
+  function setExpanded(panel, expanded) {
+    var body = document.getElementById("progressDashboardBody");
+    var toggleBtn = document.getElementById("progressDashboardToggle");
+    if (!body || !toggleBtn) return;
+    panel.classList.toggle("progress-dashboard-expanded", expanded);
+    body.style.display = expanded ? "block" : "none";
+    toggleBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggleBtn.querySelector(".progress-dashboard-caret").textContent = expanded ? "▾" : "▸";
+    if (expanded) renderDashboard();
+  }
+
   /* ---------- UI 注入 ---------- */
   function injectUI() {
-    if (document.getElementById("progressDashboard")) { renderDashboard(); return true; }
+    if (document.getElementById("progressDashboard")) return true;
 
     var screen = document.getElementById("unitSelectScreen");
     var anchor = document.getElementById("unitCardList");
@@ -152,28 +166,33 @@
     panel.id = "progressDashboard";
     panel.className = "panel-block progress-dashboard";
     panel.innerHTML =
-      '<div class="progress-dashboard-heading">' +
-        '<h2 style="margin:0;">全体の進捗</h2>' +
-        '<button class="btn secondary" id="refreshProgressBtn" type="button">更新</button>' +
-      '</div>' +
-      '<div id="progressDashboardBody"></div>';
+      '<button type="button" class="progress-dashboard-heading" id="progressDashboardToggle" aria-expanded="false">' +
+        '<h2 style="margin:0;">全体の進捗を見る</h2>' +
+        '<span class="progress-dashboard-caret">▸</span>' +
+      '</button>' +
+      '<div id="progressDashboardBody" style="display:none;"></div>';
 
     screen.insertBefore(panel, anchor);
 
-    var refreshBtn = document.getElementById("refreshProgressBtn");
-    if (refreshBtn) refreshBtn.addEventListener("click", renderDashboard);
+    var toggleBtn = document.getElementById("progressDashboardToggle");
+    toggleBtn.addEventListener("click", function () {
+      var expanded = panel.classList.contains("progress-dashboard-expanded");
+      setExpanded(panel, !expanded);
+    });
 
-    renderDashboard();
     return true;
   }
 
   function boot() {
     if (injectUI()) {
-      // 単元選択画面に戻ってくるたびに最新化する
+      // 展開中に単元選択画面へ戻ってきたときは最新化する
       document.addEventListener("click", function (e) {
         var t = e.target;
         if (t && (t.id === "goTopBtn" || t.id === "goTopBtn3" || t.id === "titleHomeBtn")) {
-          setTimeout(renderDashboard, 50);
+          var panel = document.getElementById("progressDashboard");
+          if (panel && panel.classList.contains("progress-dashboard-expanded")) {
+            setTimeout(renderDashboard, 50);
+          }
         }
       });
       return;
