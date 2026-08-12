@@ -563,6 +563,22 @@ body.exam-mode .main-layout{
   white-space: nowrap;
 }
 
+.progress-bars {
+  display: flex;
+  gap: 10px;
+}
+
+.progress-bar-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-bar-col-cap {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 3px;
+}
+
 .progress-bar-track {
   height: 8px;
   border-radius: 999px;
@@ -575,6 +591,10 @@ body.exam-mode .main-layout{
   border-radius: 999px;
   background: #2563eb;
   transition: width 0.2s ease;
+}
+
+.progress-bar-fill-accuracy {
+  background: #16a34a;
 }
 
 .progress-row-foot {

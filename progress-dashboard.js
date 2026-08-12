@@ -92,27 +92,38 @@
   /* ---------- 描画 ---------- */
   function rowHTML(row) {
     var progress = row.progressPct === null ? 0 : row.progressPct;
+    var accuracy = row.accuracyPct === null ? 0 : row.accuracyPct;
     var started = row.attempts > 0;
 
-    var progressText = row.total
+    var progressCaption = row.total
       ? row.answeredCount + " / " + row.total + "問（" + pctText(Math.min(row.answeredCount, row.total), row.total) + "）"
       : "-";
-
-    var accuracyText = started ? pctText(row.correct, row.attempts) + "（" + row.correct + "/" + row.attempts + "回）" : "まだ未挑戦";
+    var accuracyCaption = started ? pctText(row.correct, row.attempts) + "（" + row.correct + "/" + row.attempts + "回）" : "まだ未挑戦";
     var lastDateText = fmtDate(row.lastTs);
-    var footText = progressText + (lastDateText ? "　/　最終学習: " + lastDateText : "");
 
     return (
       '<div class="progress-row' + (started ? "" : " progress-row-notstarted") + '" data-unit="' + escapeHtmlSafe(row.unit) + '" role="button" tabindex="0" ' +
         'aria-label="' + escapeHtmlSafe(row.label) + 'を開く">' +
         '<div class="progress-row-head">' +
           '<span class="progress-row-label">' + escapeHtmlSafe(row.label) + (started ? "" : '<span class="progress-row-badge">未着手</span>') + '</span>' +
-          '<span class="progress-row-accuracy">' + accuracyText + '</span>' +
         '</div>' +
-        '<div class="progress-bar-track">' +
-          '<div class="progress-bar-fill" style="width:' + progress + '%;"></div>' +
+        '<div class="progress-bars">' +
+          '<div class="progress-bar-col">' +
+            '<div class="progress-bar-col-cap">進捗 ' + (row.total ? pctText(Math.min(row.answeredCount, row.total), row.total) : "-") + '</div>' +
+            '<div class="progress-bar-track">' +
+              '<div class="progress-bar-fill" style="width:' + progress + '%;"></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="progress-bar-col">' +
+            '<div class="progress-bar-col-cap">正答率 ' + (started ? pctText(row.correct, row.attempts) : "-") + '</div>' +
+            '<div class="progress-bar-track">' +
+              '<div class="progress-bar-fill progress-bar-fill-accuracy" style="width:' + accuracy + '%;"></div>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="progress-row-foot">' + footText + '</div>' +
+        '<div class="progress-row-foot">' + progressCaption + '　/　' + accuracyCaption +
+          (lastDateText ? '　/　最終学習: ' + lastDateText : "") +
+        '</div>' +
       '</div>'
     );
   }
