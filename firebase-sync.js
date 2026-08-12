@@ -386,6 +386,11 @@ async function resetLocalTestData() {
 
   log("リセット中…");
   unitKeys().forEach(unit => localStorage.removeItem(PREFIX + unit));
+  // 「図形と計量(keiryo)」だけ、v14キーが無いとv13時代の旧データを自動で
+  // 引き継いでしまう移行処理がapp.js側にある（STORAGE_PREFIX導入前の名残）。
+  // これを消さないとリセットしても keiryo だけゾンビのように復活するので、
+  // 念のためこちらも一緒に消しておく。
+  localStorage.removeItem("kyotsu_app_v13");
   sessionStorage.removeItem(RELOAD_FLAG);
 
   try {
