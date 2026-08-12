@@ -390,11 +390,14 @@ async function resetLocalTestData() {
 
   try {
     await syncAll({ forceReload: true, silent: true });
-    log("リセットしました。子どものデータを取り直しています…", "#166534");
   } catch (e) {
     console.error("[sync] reset failed", e);
-    log("リセットに失敗しました。もう一度お試しください。", "#991b1b");
   }
+  // クラウド側にも何も無い（＝比較のしようがない）ケースだと syncAll 内部では
+  // 「変化なし」判定でリロードされないことがある。リセットは押した時点で
+  // 必ず画面をまっさらにしたいので、ここで無条件にリロードする。
+  log("リセットしました。画面を更新します…", "#166534");
+  setTimeout(() => location.reload(), 500);
 }
 
 async function doLogin() {
