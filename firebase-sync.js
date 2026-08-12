@@ -32,6 +32,17 @@ const PREFIX = "kyotsu_app_v14_";
 const RELOAD_FLAG = "kyotsu_sync_reloaded";
 const PUSH_DELAY = 4000; // 保存後、これだけ静かになったらアップロード
 
+/* ---------- 保護者（閲覧専用）設定 ----------
+   ・子どもの学習ログを同期している「本来のuid」を固定で持っておく。
+   ・GUARDIAN_UIDS に入っているuidでログインした場合は「閲覧モード」になる:
+     - データの読み込み先は自分のuidではなく CHILD_UID 固定
+     - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため）
+   ・保護者アカウントをFirebaseコンソールで作成したら、そのUIDをここに追記する。 */
+const CHILD_UID = "2jRA2hstaoRh2kVyy4MaPV2fyl52";
+const GUARDIAN_UIDS = [
+  "TMjt16vGy4cIo2lAzB9b7g4hPxI3"
+];
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -40,6 +51,15 @@ let currentUser = null;
 let pushTimer = null;
 let dirtyUnits = new Set();
 let busy = false;
+
+function isGuardian() {
+  return !!currentUser && GUARDIAN_UIDS.indexOf(currentUser.uid) >= 0;
+}
+
+/* 読み書き先のuid。保護者なら常に子ども側のuidを見る（＝閲覧モード） */
+function targetUid() {
+  return isGuardian() ? CHILD_UID : currentUser.uid;
+}
 
 /* =========================================================
    小道具
@@ -187,7 +207,7 @@ function mergeUnitData(a, b) {
    Firestore 入出力
    ========================================================= */
 function unitDocRef(unit) {
-  return doc(db, "users", currentUser.uid, "units", unit);
+  return doc(db, "users", targetUid(), "units", unit);
 }
 
 async function fetchRemote(unit) {
@@ -220,7 +240,7 @@ async function syncAll(opts) {
 
   // サーバー側にしか無い単元も拾う
   try {
-    const snap = await getDocs(collection(db, "users", currentUser.uid, "units"));
+    const snap = await getDocs(collection(db, "users", targetUid(), "units"));
     snap.forEach(d => units.add(d.id));
   } catch (e) { /* 一覧が取れなくても既知の単元だけで続行 */ }
 
@@ -241,8 +261,9 @@ async function syncAll(opts) {
       }
 
       // サーバーに書き戻し（変化があった場合のみ）
+      // 保護者（閲覧モード）は絶対にアップロードしない＝検証プレイのログを汚さない
       const remoteStr = remote ? JSON.stringify(remote) : null;
-      if (mergedStr !== remoteStr) {
+      if (mergedStr !== remoteStr && !isGuardian()) {
         await writeRemote(unit, merged);
       }
     } catch (e) {
@@ -268,7 +289,8 @@ async function syncAll(opts) {
 const setItemRaw = localStorage.setItem.bind(localStorage);
 localStorage.setItem = function (key, value) {
   setItemRaw(key, value);
-  if (typeof key === "string" && key.indexOf(PREFIX) === 0 && currentUser && !busy) {
+  // 保護者（閲覧モード）は検証プレイで書き込んでもアップロード対象に積まない
+  if (typeof key === "string" && key.indexOf(PREFIX) === 0 && currentUser && !busy && !isGuardian()) {
     dirtyUnits.add(key.slice(PREFIX.length));
     clearTimeout(pushTimer);
     pushTimer = setTimeout(pushDirty, PUSH_DELAY);
@@ -276,7 +298,7 @@ localStorage.setItem = function (key, value) {
 };
 
 async function pushDirty() {
-  if (!currentUser || busy || dirtyUnits.size === 0) return;
+  if (!currentUser || busy || dirtyUnits.size === 0 || isGuardian()) return;
   busy = true;
   const targets = Array.from(dirtyUnits);
   dirtyUnits.clear();
@@ -325,6 +347,9 @@ function injectUI() {
     '    <button class="btn primary" id="syncNowBtn">今すぐ同期</button>' +
     '    <button class="btn secondary" id="syncLogoutBtn">ログアウト</button>' +
     '  </div>' +
+    '  <div class="stack-buttons" id="syncResetRow" style="display:none;margin-top:6px;">' +
+    '    <button class="btn secondary" id="syncResetBtn" style="color:#991b1b;border-color:#991b1b;">このPCの検証データをリセット</button>' +
+    '  </div>' +
     '</div>' +
     '<div class="small-text" id="syncStatus" style="margin-top:6px;">未ログイン</div>';
 
@@ -339,7 +364,31 @@ function injectUI() {
     syncAll({ forceReload: true });
   });
   document.getElementById("syncLogoutBtn").addEventListener("click", () => signOut(auth));
+  document.getElementById("syncResetBtn").addEventListener("click", resetLocalTestData);
   return true;
+}
+
+/* =========================================================
+   保護者（閲覧モード）専用：このPCに溜まった検証ログを消して、
+   クラウド上の子どものデータだけをまっさらに取り直す。
+   ※ Firestoreには一切書き込まない（isGuardian()中はwriteRemoteが
+     呼ばれない設計なので、このリセットもローカルだけの操作）。
+   ========================================================= */
+async function resetLocalTestData() {
+  if (!isGuardian()) return; // 念のため：閲覧モード以外では動かさない
+  if (!confirm("このPCに保存されている検証プレイのログを消して、子どものデータだけを取り直します。よろしいですか？")) return;
+
+  log("リセット中…");
+  unitKeys().forEach(unit => localStorage.removeItem(PREFIX + unit));
+  sessionStorage.removeItem(RELOAD_FLAG);
+
+  try {
+    await syncAll({ forceReload: true, silent: true });
+    log("リセットしました。子どものデータを取り直しています…", "#166534");
+  } catch (e) {
+    console.error("[sync] reset failed", e);
+    log("リセットに失敗しました。もう一度お試しください。", "#991b1b");
+  }
 }
 
 async function doLogin() {
@@ -372,12 +421,17 @@ function renderAuthUI() {
   // exam-mode中はサイドバーのsyncPanelが隠れるので、ここが唯一の目印になる。
   const syncCardTop = document.getElementById("syncStatusCardTop");
   const syncPillExam = document.getElementById("syncPillExam");
-  const whoText = currentUser ? "ログイン中: " + (currentUser.email || currentUser.uid) : "";
+  const whoText = currentUser
+    ? "ログイン中: " + (currentUser.email || currentUser.uid) + (isGuardian() ? "（閲覧のみ・アップロードなし）" : "")
+    : "";
   [syncCardTop, syncPillExam].forEach((elm) => {
     if (!elm) return;
     elm.style.display = currentUser ? (elm === syncCardTop ? "block" : "inline-flex") : "none";
     if (currentUser) elm.title = whoText;
   });
+
+  const resetRow = document.getElementById("syncResetRow");
+  if (resetRow) resetRow.style.display = (currentUser && isGuardian()) ? "block" : "none";
 
   if (!out || !inn) return;
   if (currentUser) {
