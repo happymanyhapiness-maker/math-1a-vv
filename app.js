@@ -188,6 +188,21 @@ const UNIT_META = {
     questions: [...questions_sankaku_1, ...questions_sankaku_2],
     routeChoices: ROUTE_CHOICES_SANKAKU,
     primaryRoutes: ["基準角と象限", "相互関係", "加法定理", "倍角公式", "半角公式", "三角方程式"]
+  },
+
+  deta_bunseki: {
+    label: "数I データの分析",
+    description: "代表値・分散 / 相関係数 / 箱ひげ図 / 仮説検定の考え方",
+    note: "",
+    mission: `
+      第1問：代表値・分散、標準偏差での計算精度
+      第2問：相関係数の計算と、相関と因果の判断
+      第3問：四分位数・箱ひげ図・外れ値の判定
+      第4問：仮説検定の考え方と、結果の振り返り
+    `,
+    questions: questions_deta_bunseki,
+    routeChoices: ROUTE_CHOICES_DETA,
+    primaryRoutes: ["平均", "分散・標準偏差", "相関係数", "四分位数・箱ひげ図", "外れ値の判定", "仮説検定の考え方"]
   }
 };
 
