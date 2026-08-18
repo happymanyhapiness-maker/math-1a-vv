@@ -86,6 +86,25 @@ const questions_sankaku_2 = [
     tip: "三角方程式は①基本形にする、②基準角、③符号で象限、の3手順を固定する。"
   }
 },
+{
+  id: "s3-5",
+  stage: "第3問",
+  num: 5,
+  time: 55,
+  score: 5,
+  weakness: "方針切替",
+  route: ["三角関数と二次方程式"],
+  q: "$0\\le\\theta<2\\pi$ のとき、$2\\sin^2\\theta-\\sin\\theta-1=0$ を満たす $\\theta$ をすべて求めよ。",
+  a: ["π/2, 7π/6, 11π/6", "π/2, π/6, 5π/6", "π/6, 5π/6", "π/2, 7π/6"],
+  correct: 0,
+  tags: ["correct", "sign_error", "range_error", "range_error"],
+  explain: {
+    aim: "$\\sin\\theta$を1つの文字とみて二次方程式を解き、出てきた2つの解それぞれについて$\\theta$を漏れなく求められるかを測る問題。",
+    why: "$\\sin\\theta=x$とおくと $2x^{2}-x-1=0$、$(2x+1)(x-1)=0$ より $x=1, -\\dfrac{1}{2}$。$\\sin\\theta=1$ のとき $\\theta=\\dfrac{\\pi}{2}$。$\\sin\\theta=-\\dfrac{1}{2}$ のとき、基準角$\\dfrac{\\pi}{6}$でsinが負の第3・第4象限だから $\\theta=\\pi+\\dfrac{\\pi}{6}=\\dfrac{7\\pi}{6}$、$\\theta=2\\pi-\\dfrac{\\pi}{6}=\\dfrac{11\\pi}{6}$。合わせて$\\dfrac{\\pi}{2}, \\dfrac{7\\pi}{6}, \\dfrac{11\\pi}{6}$の3つ。",
+    mistake: "$\\sin\\theta=-\\dfrac{1}{2}$の符号を見落として$\\sin\\theta=\\dfrac{1}{2}$の場合(第1・第2象限、$\\dfrac{\\pi}{6}, \\dfrac{5\\pi}{6}$)を答えてしまう。または2つの解のうち片方(例えば$\\sin\\theta=1$)を忘れて答えを1組しか出さないこともある。",
+    tip: "三角『方程式』に二次式が混ざったら、まず$\\sin\\theta$(または$\\cos\\theta$)を1文字に置き換えて因数分解する。出てきた解の数だけ、それぞれ単位円で$\\theta$を求め直す作業が必要になる。"
+  }
+},
 
 /* =========================
 第4問（微積への橋渡し：式変形）
@@ -164,6 +183,25 @@ const questions_sankaku_2 = [
     why: "$\\sin^2x+\\cos^2x=1$ と $\\cos2x=\\cos^2x-\\sin^2x$ を組み合わせると、$\\cos2x=1-2\\sin^2x$。したがって $\\sin^2x=(1-\\cos2x)/2$。",
     mistake: "$\\cos^2x$ の公式と混同してプラスにする、または $1-\\cos2x$ のまま2で割るのを忘れる。",
     tip: "この変形は『三角関数→積分』の橋。$\\sin^2x$ や $\\cos^2x$ が出たら、そのままではなく半角公式への変形を考える。"
+  }
+},
+{
+  id: "s4-5",
+  stage: "第4問",
+  num: 5,
+  time: 50,
+  score: 5,
+  weakness: "共通点抽出",
+  route: ["半角公式", "定積分"],
+  q: "$\\displaystyle\\int_{0}^{\\pi}\\sin^2x\\,dx$ を、半角公式を使って計算せよ。",
+  a: ["π/2", "π", "π/4", "0"],
+  correct: 0,
+  tags: ["correct", "calc_error", "calc_error", "concept_gap"],
+  explain: {
+    aim: "これまで学んだ半角公式による式変形($\\sin^2x=\\dfrac{1-\\cos2x}{2}$)を、実際に定積分の計算まで通しで使えるかを測る、単元のまとめとなる問題。",
+    why: "$\\displaystyle\\int_{0}^{\\pi}\\sin^2x\\,dx=\\int_{0}^{\\pi}\\dfrac{1-\\cos2x}{2}\\,dx=\\left[\\dfrac{x}{2}-\\dfrac{\\sin2x}{4}\\right]_{0}^{\\pi}=\\left(\\dfrac{\\pi}{2}-0\\right)-\\left(0-0\\right)=\\dfrac{\\pi}{2}$。",
+    mistake: "$\\cos2x$の項は1周期分積分すると0になるため、定数項$\\dfrac{1}{2}$の積分($\\dfrac{x}{2}$の部分)まで丸ごと忘れて0と答えてしまうことがある。または係数$\\dfrac{1}{2}$を掛け忘れて$\\pi$と答えることもある。",
+    tip: "半角公式で変形すると『定数項の積分』と『$\\cos2x$の項の積分』の2つに分かれる。$\\cos2x$側が0になっても、定数項は必ず生き残るので消さないこと。"
   }
 }
 

@@ -14,7 +14,11 @@ const ROUTE_CHOICES_SANKAKU = [
   "単位円",
   "周期",
   "グラフ",
-  "最大最小"
+  "最大最小",
+  "変換公式",
+  "合成",
+  "三角関数と二次方程式",
+  "定積分"
 ];
 
 const questions_sankaku_1 = [
@@ -98,6 +102,25 @@ mistake: "公式で$\\pm\\dfrac{4}{5}$まで出したあと、問題文の『第
 tip: "相互関係の公式は符号まで教えてくれない。$\\pm$が出たら必ず問題文の象限指定に戻って符号を決める。"
 }
 },
+{
+id: "s1-5",
+stage: "第1問",
+num: 5,
+time: 40,
+score: 5,
+weakness: "方針切替",
+route: ["変換公式"],
+q: "$\\cos\\left(90°+\\theta\\right)$ を $\\theta$ の三角関数で表せ。",
+a: ["-sinθ", "sinθ", "-cosθ", "cosθ"],
+correct: 0,
+tags: ["correct", "sign_error", "concept_gap", "concept_gap"],
+explain: {
+aim: "$90°\\pm\\theta$や$180°\\pm\\theta$のような変換公式を、加法定理から自力で導けるかを測る問題。",
+why: "加法定理より $\\cos(90°+\\theta)=\\cos90°\\cos\\theta-\\sin90°\\sin\\theta=0\\times\\cos\\theta-1\\times\\sin\\theta=-\\sin\\theta$。",
+mistake: "『$90°$がらみだからsinとcosが入れ替わる』ところまでは合っていても、符号を反転し忘れて$\\sin\\theta$としてしまう。",
+tip: "変換公式を覚えるのが不安なら、丸暗記せず加法定理$\\cos(a+b)=\\cos a\\cos b-\\sin a\\sin b$に代入して毎回導く方が確実。$90°$の$\\sin,\\cos$の値(0と1)を代入するだけの単純作業になる。"
+}
+},
 
 /* =========================
 第2問(加法定理・倍角公式・半角公式)
@@ -176,6 +199,25 @@ aim: "cosの加法定理を、sinの加法定理と混同せず正しい符号�
 why: "$75°=45°+30°$と分けると、$\\cos75°=\\cos45°\\cos30°-\\sin45°\\sin30°=\\dfrac{\\sqrt2}{2}\\cdot\\dfrac{\\sqrt3}{2}-\\dfrac{\\sqrt2}{2}\\cdot\\dfrac{1}{2}=\\dfrac{\\sqrt6-\\sqrt2}{4}$。",
 mistake: "$\\cos(a+b)$の符号を$+$にしてしまい、$\\sin75°$の値($\\dfrac{\\sqrt6+\\sqrt2}{4}$)と取り違える。",
 tip: "$\\cos(a+b)=\\cos a\\cos b-\\sin a\\sin b$、符号は$-$。sinの加法定理と真逆になる点を意識する。"
+}
+},
+{
+id: "s2-5",
+stage: "第2問",
+num: 5,
+time: 45,
+score: 5,
+weakness: "方針切替",
+route: ["合成"],
+q: "$\\sin\\theta+\\sqrt3\\cos\\theta$ を $r\\sin(\\theta+\\alpha)$ の形に合成せよ。",
+a: ["2sin(θ+π/3)", "2sin(θ-π/3)", "2cos(θ+π/3)", "√3sin(θ+π/3)"],
+correct: 0,
+tags: ["correct", "sign_error", "concept_gap", "calc_error"],
+explain: {
+aim: "三角関数の合成($a\\sin\\theta+b\\cos\\theta=r\\sin(\\theta+\\alpha)$)を、$r$と$\\alpha$の両方を正しく求めて使えるかを測る問題。",
+why: "$r=\\sqrt{1^{2}+(\\sqrt3)^{2}}=\\sqrt{1+3}=2$。$\\cos\\alpha=\\dfrac{1}{2}$、$\\sin\\alpha=\\dfrac{\\sqrt3}{2}$ を満たす$\\alpha$は$\\dfrac{\\pi}{3}$。よって $\\sin\\theta+\\sqrt3\\cos\\theta=2\\sin\\left(\\theta+\\dfrac{\\pi}{3}\\right)$。",
+mistake: "$\\alpha$の符号を反転して$2\\sin(\\theta-\\pi/3)$としてしまう(cosθの係数が正なのに角をマイナス側に取る誤り)。または合成後もsinのままなのにcosの式に変えてしまう、$r$の計算で2乗を忘れて$\\sqrt3$のまま答えてしまうこともある。",
+tip: "合成の$r$は『2乗して足してルート』(ベクトルの大きさと同じ計算)。$\\alpha$は$(\\cos\\alpha, \\sin\\alpha)=\\left(\\dfrac{a}{r}, \\dfrac{b}{r}\\right)$の位置から特定する。"
 }
 }
 
