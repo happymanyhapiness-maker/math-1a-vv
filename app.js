@@ -137,14 +137,14 @@ const UNIT_META = {
     description: "極値判定 / 解の動き / 面積",
     note: "",
     mission: `
-      第1問：極値の判定(f'の符号変化)と代入計算
-      第2問：グラフ概形の言語化
-      第3問：水平線y=kを動かしたときの解の動き(チェーン)
-      第4問：定積分と面積の立式
+      第1問：極値の判定(f'の符号変化)・代入計算・接線の方程式
+      第2問：グラフ概形の言語化・閉区間での最大最小(端点の見落とし注意)
+      第3問：水平線y=kを動かしたときの解の動き(チェーン、最後は振り返り型)
+      第4問：定積分と面積の立式・実際の計算まで
     `,
     questions: questions_bisekibun,
     routeChoices: ROUTE_CHOICES_BISEKIBUN,
-    primaryRoutes: ["f'の符号と増減", "極値の判定", "具体値で試す", "定積分の計算", "上-下の確認"]
+    primaryRoutes: ["f'の符号と増減", "極値の判定", "具体値で試す", "定積分の計算", "上-下の確認", "接線の方程式"]
   },
 
   suuretsu: {
@@ -154,11 +154,12 @@ const UNIT_META = {
     mission: `
       第1問：累計Sₙを表で追うトレーニング
       第2問：特性方程式と「前問の結果の再利用」
+      第3問：等差数列・等比数列の一般項と和の基本
     `,
     questions: questions_suuretsu,
     routeChoices: ROUTE_CHOICES_SUURETSU,
-    primaryRoutes: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す"],
-    reviewClearStreak: 6 // 問題数が薄い単元(2問)なので、卒業条件を厳しめに(デフォルト4→6)
+    primaryRoutes: ["3列表(n・項・累計)", "特性方程式", "前問の結果の再利用", "具体値で試す", "等差数列の一般項", "等比数列の一般項"],
+    reviewClearStreak: 6 // 問題数が薄い単元だったため卒業条件を厳しめに(デフォルト4→6)。第3問追加後も維持
   },
 
   toukei: {
