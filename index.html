@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>共通テスト数学</title>
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
   <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
        他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
   <script>
@@ -161,10 +161,16 @@
           <div class="toolbar">
             <button class="btn primary" id="startExamBtn">試験開始</button>
             <button class="btn warning" id="resumeExamBtn">途中から再開</button>
-            <button class="btn success" id="startDueReviewBtn">今日の復習だけ</button>
-            <button class="btn success" id="startWrongOnlyReviewBtn">間違えた問題だけ再挑戦</button>
-            <button class="btn success" id="startTipReviewBtn">TIPSだけ復習</button>
           </div>
+
+          <div class="small-text" style="margin-top:10px;">その他の練習モード</div>
+          <select id="practiceModeSelect" class="mode-select">
+            <option value="">練習モードを選ぶ...</option>
+            <option value="due">今日の復習だけ</option>
+            <option value="wrong">間違えた問題だけ再挑戦</option>
+            <option value="tips">TIPSだけ復習</option>
+            <option value="unanswered">未挑戦の問題だけ</option>
+          </select>
 
           <div class="small-text" style="margin-top:10px;">ステージを絞って練習</div>
           <div class="toolbar" id="stageOnlyButtons">
@@ -253,7 +259,7 @@
   <script src="questions_keiryo.js?v=4"></script>
   <script src="questions_seishitsu.js?v=4"></script>
   <script src="questions_nijikansuu.js?v=2"></script>
-  <script src="questions_kitaichi.js?v=3"></script>
+  <script src="questions_kitaichi.js?v=4"></script>
   <script src="questions_vector.js?v=2"></script>
   <script src="questions_shisuu.js?v=2"></script>
   <script src="questions_zahyou.js?v=2"></script>
@@ -264,7 +270,7 @@
   <script src="questions_sankaku_1.js?v=20260808-1"></script>
   <script src="questions_sankaku_2.js?v=20260808-1"></script>
   <script src="questions_deta_bunseki.js?v=1"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=24"></script>
 <script src="crossunit.js?v=3"></script>
 <script src="progress-dashboard.js?v=4"></script>
 <script type="module" src="firebase-sync.js?v=1"></script>

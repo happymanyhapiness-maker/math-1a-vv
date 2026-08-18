@@ -79,6 +79,7 @@ const UNIT_META = {
     mission: `
       第1問：期待値の定義と基本計算(さいころの7/2)
       第2問：確率が均等でない分布表からの期待値(合計=1の検算込み)
+      第3問：期待値の比較・考察(2つの案を比べる、E1/E2型)
     `,
     questions: questions_kitaichi,
     routeChoices: ROUTE_CHOICES_KITAICHI,
@@ -229,6 +230,7 @@ function defaultState(unit) {
     questionStartTs: null,
     candidateIndex: null, // 早合点防止：確定前の「仮選択」状態
     reviewMeta: {}, // questionId -> {streak, dueAt, lastSeenAt} 間隔復習(スペースドリピティション)用
+    unansweredSnapshot: [], // 「未挑戦の問題だけ」モード用の出題リスト(開始時に固定し、回答中に動かさない)
   };
 }
 
@@ -451,10 +453,27 @@ function currentList() {
   if (state.mode === "review") return state.wrong;
   if (state.mode === "dueReview") return dueReviewList();
   if (state.mode === "tips") return state.tipList;
+  if (state.mode === "unanswered") return state.unansweredSnapshot;
   if (state.mode === "stage") {
     return UNIT_META[state.unit].questions.filter((q) => q.stage === state.stageFilter);
   }
   return UNIT_META[state.unit].questions;
+}
+
+// 「未挑戦の問題だけ」モード用のリストを組み立てる。
+// stats.questionHistory に記録がない(=一度も回答していない)問題を対象にする。
+// ただし、チェーン問題(group)の一部だけが未挑戦の場合、recap が前の設問の結果を
+// 前提にしているため、そのグループ全体を出題対象に含める(でないと文脈が壊れる)。
+function buildUnansweredList() {
+  const allQs = UNIT_META[state.unit].questions;
+  const hist = stats.questionHistory || {};
+
+  const groupsNeeded = new Set();
+  allQs.forEach((q) => {
+    if (!hist[q.id] && q.group) groupsNeeded.add(q.group);
+  });
+
+  return allQs.filter((q) => !hist[q.id] || (q.group && groupsNeeded.has(q.group)));
 }
 
 function currentQuestion() {
@@ -2647,6 +2666,29 @@ function startTipReview() {
   save();
 }
 
+function startUnansweredOnly() {
+  const list = buildUnansweredList();
+  if (!list.length) {
+    alert("未挑戦の問題はありません(すべて挑戦済みです)");
+    return;
+  }
+
+  state.unansweredSnapshot = list;
+  state.mode = "unanswered";
+  state.index = 0;
+  state.correct = 0;
+  state.total = 0;
+  state.stopHintShown = false;
+  state.routeMiss = 0;
+  state.routeTry = 0;
+  state.finished = false;
+
+  if (el("stopGuide")) el("stopGuide").style.display = "none";
+
+  show();
+  save();
+}
+
 function toggleStrictTime() {
   state.strict = !state.strict;
   if (el("toggleStrictTimeBtn")) {
@@ -2694,10 +2736,21 @@ function resetStatsOnly() {
 ========================= */
 if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
 if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
-if (el("startWrongOnlyReviewBtn")) el("startWrongOnlyReviewBtn").onclick = startWrongOnlyReview;
 if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
-if (el("startDueReviewBtn")) el("startDueReviewBtn").onclick = startDueReview;
-if (el("startTipReviewBtn")) el("startTipReviewBtn").onclick = startTipReview;
+
+// 「今日の復習だけ／間違えた問題だけ／TIPSだけ復習／未挑戦の問題だけ」は
+// ボタンを並べると数が多くなりすぎるため、1つのプルダウンにまとめてある。
+// 選択した瞬間に該当モードを開始し、プルダウン自体はプレースホルダーに戻す。
+if (el("practiceModeSelect")) {
+  el("practiceModeSelect").onchange = function () {
+    const v = this.value;
+    this.value = "";
+    if (v === "due") startDueReview();
+    else if (v === "wrong") startWrongOnlyReview();
+    else if (v === "tips") startTipReview();
+    else if (v === "unanswered") startUnansweredOnly();
+  };
+}
 if (el("startQuestionBtn")) el("startQuestionBtn").onclick = startQuestionTimer;
 if (el("nextBtn")) el("nextBtn").onclick = nextQuestion;
 if (el("skipQuestionBtn")) el("skipQuestionBtn").onclick = skipQuestion;
