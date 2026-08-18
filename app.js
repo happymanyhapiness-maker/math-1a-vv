@@ -232,7 +232,8 @@ function defaultStats() {
       "第3問": { t: 0, c: 0 },
       "第4問": { t: 0, c: 0 }
     },
-    clearedCount: 0 // 間隔復習を完走して「完全に直した」と判定された問題数
+    clearedCount: 0, // 間隔復習を完走して「完全に直した」と判定された問題数
+    questionHistory: {} // 問題ID→{date, isCorrect}（前回結果表示・スキップ機能用）
   };
 }
 
@@ -405,6 +406,7 @@ function loadUnit(unit) {
       if (obj.stats && obj.stats.weakness) Object.assign(stats.weakness, obj.stats.weakness);
       if (obj.stats && obj.stats.stage) Object.assign(stats.stage, obj.stats.stage);
       if (obj.stats && typeof obj.stats.clearedCount === "number") stats.clearedCount = obj.stats.clearedCount;
+      if (obj.stats && obj.stats.questionHistory) Object.assign(stats.questionHistory, obj.stats.questionHistory);
     } catch (e) {
       console.error(e);
     }
@@ -1090,6 +1092,9 @@ function logAnswer(q, selectedIndex, outcome) {
     timestamp: Date.now(),
     elapsedTime: elapsed
   });
+
+  if (!stats.questionHistory) stats.questionHistory = {};
+  stats.questionHistory[q.id] = { date: Date.now(), isCorrect: isCorrect };
 }
 
 /* =========================
@@ -1127,6 +1132,9 @@ function logFillinAnswer(q, results, overallTag, isCorrect, outcome) {
     timestamp: Date.now(),
     elapsedTime: elapsed
   });
+
+  if (!stats.questionHistory) stats.questionHistory = {};
+  stats.questionHistory[q.id] = { date: Date.now(), isCorrect: isCorrect };
 }
 
 function addReviewTarget(q) {
@@ -1249,6 +1257,17 @@ function updateProgressUI(q) {
 
   if (el("progressLabel")) {
     el("progressLabel").innerText = `${state.index + 1} / ${currentList().length}`;
+  }
+
+  if (el("qLastResultLabel")) {
+    const hist = stats.questionHistory && stats.questionHistory[q.id];
+    if (hist) {
+      const d = new Date(hist.date);
+      el("qLastResultLabel").innerText = `前回(${d.getMonth() + 1}/${d.getDate()}): ${hist.isCorrect ? "○" : "×"}`;
+    } else {
+      el("qLastResultLabel").innerText = "前回: 初挑戦";
+    }
+    el("qLastResultLabel").style.display = "inline-block";
   }
 }
 
@@ -1816,13 +1835,23 @@ if (el("routeQuizBox")) {
 if (el("questionStartBox")) {
   el("questionStartBox").style.display = state.mode === "tips" ? "none" : "block";
 
+  const lastHist = stats.questionHistory && stats.questionHistory[q.id];
+  const lastHistHtml = lastHist
+    ? `<p class="small-text">前回(${new Date(lastHist.date).getMonth() + 1}/${new Date(lastHist.date).getDate()}): ${lastHist.isCorrect ? "○ 正解" : "× 不正解"}</p>`
+    : "";
+  const skipKnownBtnHtml = (lastHist && lastHist.isCorrect)
+    ? `<button class="btn secondary" id="skipKnownBtn">前回正解済み→スキップ</button>`
+    : "";
+
   if (ROUTE_QUIZ_ENABLED && q.route && q.route.length > 0) {
     el("questionStartBox").innerHTML = `
       <p class="start-text">
         まずはこの問題の解き方（方針）を選んでください。<br>
         方針が正しければ問題が開始されます。
       </p>
+      ${lastHistHtml}
       <button class="btn primary" id="startQuestionBtn">方針を確認</button>
+      ${skipKnownBtnHtml}
     `;
   } else {
     el("questionStartBox").innerHTML = `
@@ -1830,13 +1859,19 @@ if (el("questionStartBox")) {
         準備ができたら「この問題を開始」を押してください。<br>
         問題ごとに制限時間は変わります。
       </p>
+      ${lastHistHtml}
       <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
+      ${skipKnownBtnHtml}
     `;
   }
 }
 
 if (el("startQuestionBtn")) {
   el("startQuestionBtn").onclick = startQuestionTimer;
+}
+
+if (el("skipKnownBtn")) {
+  el("skipKnownBtn").onclick = skipKnownQuestion;
 }
 
   if (el("stopGuide") && !state.stopHintShown) {
@@ -2330,6 +2365,21 @@ function skipQuestion() {
   maybeShowStopGuide();
   update();
   save();
+}
+/* =========================
+   既知スキップ（前回正解済みの問題を、成績・復習対象に触れず読み飛ばす）
+========================= */
+function skipKnownQuestion() {
+  const q = currentQuestion();
+  if (!q) return;
+
+  clearInterval(state.timer);
+
+  // ✅ state.total / state.correct / stats.weakness / 復習対象には一切触れない。
+  //    進捗（state.index）だけを進める。
+  state.index++;
+  save();
+  show();
 }
 /* =========================
    次へ
