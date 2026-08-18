@@ -6,7 +6,9 @@ const ROUTE_CHOICES_VECTOR = [
   "垂直条件",
   "内分点の公式",
   "位置ベクトル",
-  "球面の方程式"
+  "球面の方程式",
+  "ベクトルの分解",
+  "共線条件"
 ];
 
 const questions_vector = [
@@ -88,6 +90,25 @@ aim: "単位ベクトルの定義(ベクトルをその大きさで割る)を正
 why: "$|\\vec{a}|=\\sqrt{36+64}=\\sqrt{100}=10$。単位ベクトルは$\\vec{a}$をその大きさで割って、$\\left(\\dfrac{6}{10}, \\dfrac{8}{10}\\right)=\\left(\\dfrac{3}{5}, \\dfrac{4}{5}\\right)$。",
 mistake: "大きさ(10)ではなく成分の和($6+8=14$)で割ってしまい、$\\left(\\dfrac{3}{7}, \\dfrac{4}{7}\\right)$とすることがある。",
 tip: "単位ベクトル=『大きさ1にそろえる』作業。割る数は必ず$|\\vec{a}|$(ルートを含む大きさ)。"
+}
+},
+{
+id: "v1-5",
+stage: "第1問",
+num: 5,
+time: 45,
+score: 5,
+weakness: "方針切替",
+route: ["ベクトルの分解"],
+q: "$\\vec{a}=(1, 2)$, $\\vec{b}=(2, -1)$ とする。$\\vec{c}=(4, 3)$ を $s\\vec{a}+t\\vec{b}$ の形で表すとき、$s, t$ の値を求めよ。",
+a: ["s=2, t=1", "s=1, t=2", "s=2, t=-1", "s=3, t=1"],
+correct: 0,
+tags: ["correct", "calc_error", "sign_error", "calc_error"],
+explain: {
+aim: "1つのベクトルを2つのベクトルの実数倍の和で表す(ベクトルの分解)問題を、連立方程式に落として正しく解けるかを測る問題。",
+why: "$s\\vec{a}+t\\vec{b}=(s+2t, 2s-t)$ がこれが$(4, 3)$に等しいので、$s+2t=4$、$2s-t=3$。2式目より$t=2s-3$。1式目に代入して$s+2(2s-3)=4$、$5s=10$、$s=2$。よって$t=2\\times2-3=1$。",
+mistake: "x成分の式とy成分の式を混同してsとtの役割を入れ替えてしまう、または連立方程式を解く途中の符号処理を誤ることがある。",
+tip: "成分ごとに式を1本ずつ立てて連立方程式にする、というのがベクトル分解の基本手順。s, tを求めたら元の式に代入して検算する習慣をつけると安心。"
 }
 },
 
@@ -189,6 +210,25 @@ mistake: "『どちらも$\\vec{a}$と$\\vec{b}$から作ったベクトルだ�
 tip: "$|\\vec{a}|=|\\vec{b}|$のとき、$\\vec{a}+\\vec{b}$は『ひし形の対角線=角の二等分線の方向』、$\\vec{a}-\\vec{b}$は『もう1本の対角線』でそれと垂直。この図をワンセットで覚えると、平行/垂直の判断問題に強くなる。"
 }
 },
+{
+id: "v2-6",
+stage: "第2問",
+num: 6,
+time: 40,
+score: 5,
+weakness: "共通点抽出",
+route: ["平行条件"],
+q: "ひし形ABCDにおいて、$\\overrightarrow{\\mathrm{CB}}+\\overrightarrow{\\mathrm{CD}}$ は、ひし形のどの部分と平行か。",
+a: ["対角線CA", "対角線BD", "辺AB", "辺AD"],
+correct: 0,
+tags: ["correct", "concept_gap", "concept_gap", "concept_gap"],
+explain: {
+aim: "『大きさの等しい2つのベクトルの和は、その2辺が作る図形の対角線方向になる』という性質を、具体的な図形のどの辺・対角線に対応するか正しく判断できるかを測る問題。",
+why: "ひし形は全ての辺の長さが等しいので$|\\overrightarrow{\\mathrm{CB}}|=|\\overrightarrow{\\mathrm{CD}}|$。このとき$\\overrightarrow{\\mathrm{CB}}+\\overrightarrow{\\mathrm{CD}}$は∠BCDを2等分する方向、すなわち頂点Cを通るもう一方の頂点Aへ向かう対角線CAの方向と一致する。座標で確認すると、対角線が直交するように置いた場合($A(-p,0), B(0,q), C(p,0), D(0,-q)$)、$\\overrightarrow{\\mathrm{CB}}+\\overrightarrow{\\mathrm{CD}}=(-2p, 0)$となり、確かにx軸方向(=対角線CAの方向)に一致する。",
+mistake: "『2辺のベクトルの和・差』と聞くと、もう一方の対角線(垂直な方)と反射的に結びつけてしまい、対角線BDを選んでしまうことがある。和は『同じ対角線』、差は『垂直なもう一方の対角線』という対応を逆にしないこと。",
+tip: "ひし形やその他の図形で『2辺ベクトルの和・差』が出てきたら、和は角の二等分線=対角線の1本、差はそれと垂直なもう1本の対角線、とセットで思い出す。どちらの対角線かは、和・差を作っている2つのベクトルの始点(共通の頂点)から見て判断する。"
+}
+},
 
 /* =========================
 第3問(位置ベクトル・分点)
@@ -248,6 +288,25 @@ aim: "内分点公式のたすき掛けの向きを、比から正しく判断�
 why: "AP:PB=m:n=2:1の内分点の公式は $\\overrightarrow{\\mathrm{OP}}=\\dfrac{n\\times\\vec{a}+m\\times\\vec{b}}{m+n}=\\dfrac{1\\times\\vec{a}+2\\times\\vec{b}}{3}=\\dfrac{\\vec{a}+2\\vec{b}}{3}$。",
 mistake: "比の2と1をそのまま$\\vec{a}$と$\\vec{b}$に掛けて$\\dfrac{2\\vec{a}+\\vec{b}}{3}$としてしまう(比の向きの逆転)。公式は『遠い側の比を掛ける』たすき掛け。",
 tip: "AP:PB=2:1ならPはBに近い。だから$\\vec{b}$の係数の方が大きくなるはず、と答えの形を先に予想してから公式を使う。"
+}
+},
+{
+id: "v3-4",
+stage: "第3問",
+num: 4,
+time: 40,
+score: 5,
+weakness: "方針切替",
+route: ["共線条件"],
+q: "$\\overrightarrow{\\mathrm{OA}}=\\vec{a}, \\overrightarrow{\\mathrm{OB}}=\\vec{b}$ とする。点Pが $\\overrightarrow{\\mathrm{OP}}=\\dfrac{2}{5}\\vec{a}+k\\vec{b}$ を満たしながら直線AB上にあるとき、$k$の値を求めよ。",
+a: ["3/5", "2/5", "7/5", "-3/5"],
+correct: 0,
+tags: ["correct", "condition_misread", "sign_error", "sign_error"],
+explain: {
+aim: "『点Pが直線AB上にある ⟺ $\\overrightarrow{\\mathrm{OP}}=s\\vec{a}+t\\vec{b}$ の係数の和が$s+t=1$』という共線条件を正しく使えるかを測る問題。",
+why: "直線AB上の点は$\\overrightarrow{\\mathrm{OP}}=s\\vec{a}+t\\vec{b}$ ($s+t=1$)の形で表せる。ここでは$s=\\dfrac{2}{5}$なので、$\\dfrac{2}{5}+k=1$より$k=\\dfrac{3}{5}$。",
+mistake: "$s+t=1$という条件を忘れて$s$の値をそのまま$k$として答えてしまう($k=\\dfrac{2}{5}$)。または$1-\\dfrac{2}{5}$の引き算で符号を誤ることがある。",
+tip: "『直線AB上』という言葉を見たら、まず頭の中で$s+t=1$を思い出す。これは位置ベクトル分野で最も出題頻度が高い条件の1つ。"
 }
 },
 
@@ -336,6 +395,28 @@ aim: "成分に0が多いケースで、早合点せず最後まで正確に内�
 why: "CB→=(Bの座標)-(Cの座標)=$(1-1, 2-2, 0-3)=(0, 0, -3)$。内積は $\\overrightarrow{\\mathrm{CA}}\\cdot\\overrightarrow{\\mathrm{CB}}=(-1)\\times0+(-2)\\times0+2\\times(-3)=-6$。",
 mistake: "$\\overrightarrow{\\mathrm{CB}}$の成分に0が2つ並ぶので『内積も0だろう』と早合点しがち。z成分の積 $2\\times(-3)=-6$ が残る。",
 tip: "成分に0が多いときほど、残る項の計算に集中する。0でない成分の組が1つでもあれば内積は0とは限らない。"
+}
+},
+{
+id: "v4-5",
+stage: "第4問",
+num: 5,
+time: 40,
+score: 5,
+weakness: "共通点抽出",
+route: ["ベクトルの大きさ"],
+group: "v4-chain1",
+groupIntro: "座標空間に、点$A(0, 0, 5)$を中心とする半径3の球面$S: x^{2}+y^{2}+(z-5)^{2}=9$ がある。点$B(1, 2, 0)$からz軸の正の向きに出た光線が、球面S上の点Cに当たる。",
+recap: ["(1) 点Cの座標は $(1, 2, 3)$", "(2) $\\overrightarrow{\\mathrm{CA}}=(-1, -2, 2)$", "(3) $\\overrightarrow{\\mathrm{CB}}=(0, 0, -3)$、$\\overrightarrow{\\mathrm{CA}}\\cdot\\overrightarrow{\\mathrm{CB}}=-6$"],
+q: "ここまでの結果をふりかえる。$|\\overrightarrow{\\mathrm{CA}}|$と$|\\overrightarrow{\\mathrm{CB}}|$を求め、△ABCがどのような三角形かを選べ。",
+a: ["CA=CBの二等辺三角形", "正三角形", "∠C=90°の直角三角形", "CA=ABの二等辺三角形"],
+correct: 0,
+tags: ["correct", "concept_gap", "concept_gap", "calc_error"],
+explain: {
+aim: "これまでの設問で求めた成分から大きさを計算し、複数の結果を統合して図形の性質を判断できるか(振り返り型の総合問題)を測る問題。",
+why: "$|\\overrightarrow{\\mathrm{CA}}|=\\sqrt{(-1)^{2}+(-2)^{2}+2^{2}}=\\sqrt{9}=3$、$|\\overrightarrow{\\mathrm{CB}}|=\\sqrt{0^{2}+0^{2}+(-3)^{2}}=\\sqrt{9}=3$。CAは球面Sの半径そのものなので3は当然だが、CBも同じ3になっている。CA=CB=3なので、△ABCはCA=CBの二等辺三角形。ちなみに(3)で求めた内積$-6$を使うと$\\cos C=\\dfrac{-6}{3\\times3}=-\\dfrac{2}{3}\\neq0$なので直角三角形ではない。",
+mistake: "『C(点C)は球面上の点だから何か特別な直角関係があるはず』と思い込み、内積が0でないのに直角三角形を選んでしまうことがある。または正三角形と早合点することもあるが、辺ABの長さは$\\sqrt{30}$でCA・CBとは異なる。",
+tip: "振り返り型の設問は、前の設問で出した数値を並べて比較するだけで答えが見えることが多い。新しい計算をする前に、まず『すでに求めた値の中に答えのヒントがないか』を確認する。"
 }
 }
 
