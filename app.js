@@ -840,25 +840,6 @@ function renderInsightsPanel() {
     return;
   }
 
-  const topTags = a.tagRanking.slice(0, 3);
-  const maxCount = topTags.length ? topTags[0].count : 0;
-
-  const tagBars = topTags.length
-    ? topTags
-        .map(
-          (t) => `
-        <div class="insight-bar-row">
-          <span class="insight-bar-label">${t.label}</span>
-          <div class="insight-bar-track">
-            <div class="insight-bar-fill" style="width:${maxCount ? Math.round((t.count / maxCount) * 100) : 0}%;"></div>
-          </div>
-          <span class="insight-bar-count">${t.count}</span>
-        </div>
-      `
-        )
-        .join("")
-    : `<div class="small-text">誤答なし。今のところ完璧！</div>`;
-
   const stageEntries = Object.entries(a.byStage).filter(([, v]) => v.total > 0);
   let weakestStageHtml = "";
   if (stageEntries.length >= 2) {
@@ -879,7 +860,6 @@ function renderInsightsPanel() {
 
   box.innerHTML = `
     <div class="small-text">直近 ${a.totalAnswered}問 / 正答率 ${a.overallRate}%</div>
-    <div class="insight-bars" style="margin-top:8px;">${tagBars}</div>
     ${weakestStageHtml}
     ${repeatHtml}
   `;
