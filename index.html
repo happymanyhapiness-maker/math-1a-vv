@@ -60,68 +60,77 @@
     <main class="main-layout">
 
       <aside class="left-panel card" id="sidebar">
-        <section class="panel-block">
-          <h2>弱点トラッカー</h2>
-          <ul class="metric-list">
-            <li>計算精度: <strong id="wCalc">0</strong></li>
-            <li>方針切替: <strong id="wSwitch">0</strong></li>
-            <li>時間不足: <strong id="wTime">0</strong></li>
-            <li>時間判断: <strong id="wJudge">0</strong></li>
-            <li>共通点抽出: <strong id="wPattern">0</strong></li>
-          </ul>
-          <div class="pill">最重要課題: <span id="topWeak">未判定</span></div>
-        </section>
+        <div class="sidebar-tabs" id="sidebarTabs">
+          <button type="button" class="sidebar-tab active" id="sidebarTabStats" data-sidebar-tab="stats">成績を見る</button>
+          <button type="button" class="sidebar-tab" id="sidebarTabActions" data-sidebar-tab="actions">操作する</button>
+        </div>
 
-        <section class="panel-block">
-          <h2>ステージ別成績</h2>
-          <ul class="metric-list">
-            <li>第1問: <strong id="stageRate0">0%</strong></li>
-            <li>第2問: <strong id="stageRate1">0%</strong></li>
-            <li>第3問: <strong id="stageRate2">0%</strong></li>
-            <li>第4問: <strong id="stageRate3">0%</strong></li>
-          </ul>
-        </section>
+        <div class="sidebar-page active" data-sidebar-page="stats">
+          <section class="panel-block">
+            <h2>弱点トラッカー</h2>
+            <ul class="metric-list">
+              <li>計算精度: <strong id="wCalc">0</strong></li>
+              <li>方針切替: <strong id="wSwitch">0</strong></li>
+              <li>時間不足: <strong id="wTime">0</strong></li>
+              <li>時間判断: <strong id="wJudge">0</strong></li>
+              <li>共通点抽出: <strong id="wPattern">0</strong></li>
+            </ul>
+            <div class="pill">最重要課題: <span id="topWeak">未判定</span></div>
+          </section>
 
-        <section class="panel-block">
-          <h2>復習</h2>
-          <ul class="metric-list">
-            <li>今日の復習件数: <strong id="todayReviewCount">0</strong></li>
-            <li>復習モード正答率: <strong id="reviewRate">0%</strong></li>
-            <li>完全に直した問題数: <strong id="clearedCount">0</strong></li>
-          </ul>
-        </section>
+          <section class="panel-block">
+            <h2>ステージ別成績</h2>
+            <ul class="metric-list">
+              <li>第1問: <strong id="stageRate0">0%</strong></li>
+              <li>第2問: <strong id="stageRate1">0%</strong></li>
+              <li>第3問: <strong id="stageRate2">0%</strong></li>
+              <li>第4問: <strong id="stageRate3">0%</strong></li>
+            </ul>
+          </section>
 
-        <section class="panel-block">
-          <h2>今の傾向（自動）</h2>
-          <div id="insightsBox" class="small-text">まだ回答ログがありません。</div>
-        </section>
+          <section class="panel-block">
+            <h2>復習</h2>
+            <ul class="metric-list">
+              <li>今日の復習件数: <strong id="todayReviewCount">0</strong></li>
+              <li>復習モード正答率: <strong id="reviewRate">0%</strong></li>
+              <li>完全に直した問題数: <strong id="clearedCount">0</strong></li>
+            </ul>
+          </section>
 
-        <section class="panel-block">
-          <h2>AI分析</h2>
-          <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。
-            <!-- 対象範囲（この単元／全単元）の切り替えUIは crossunit.js が非破壊的に挿入します -->
-          </div>
-          <div class="stack-buttons">
-            <button class="btn primary" id="copyAnalysisBtn">分析結果をコピー</button>
-            <button class="btn secondary" id="previewAnalysisBtn">中身をプレビュー</button>
-          </div>
-          <div class="small-text" id="analysisCopyStatus" style="margin-top:6px;"></div>
-          <pre id="analysisPreview" class="analysis-preview" style="display:none;"></pre>
-        </section>
+          <section class="panel-block">
+            <h2>今の傾向（自動）</h2>
+            <div id="insightsBox" class="small-text">まだ回答ログがありません。</div>
+          </section>
+        </div>
 
-        <section class="panel-block">
-          <h2>保存</h2>
-          <div class="small-text" id="saveStatus">保存状態: 未保存</div>
-<div class="stack-buttons">
-  <button class="btn danger" id="resetStatsBtn">学習データをリセット</button>
-</div>
-        </section>
+        <div class="sidebar-page" data-sidebar-page="actions">
+          <section class="panel-block">
+            <h2>学習記録</h2>
+            <div class="small-text" style="margin-bottom:8px;">学習した日と、その日の内容をカレンダーで振り返れます。</div>
+            <a href="calendar.html" class="btn secondary" style="display:block; text-align:center; text-decoration:none;">学習日カレンダーを見る</a>
+          </section>
 
-        <section class="panel-block">
-          <h2>学習記録</h2>
-          <div class="small-text" style="margin-bottom:8px;">学習した日と、その日の内容をカレンダーで振り返れます。</div>
-          <a href="calendar.html" class="btn secondary" style="display:block; text-align:center; text-decoration:none;">学習日カレンダーを見る</a>
-        </section>
+          <section class="panel-block">
+            <h2>AI分析</h2>
+            <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。
+              <!-- 対象範囲（この単元／全単元）の切り替えUIは crossunit.js が非破壊的に挿入します -->
+            </div>
+            <div class="stack-buttons">
+              <button class="btn primary" id="copyAnalysisBtn">分析結果をコピー</button>
+              <button class="btn secondary" id="previewAnalysisBtn">中身をプレビュー</button>
+            </div>
+            <div class="small-text" id="analysisCopyStatus" style="margin-top:6px;"></div>
+            <pre id="analysisPreview" class="analysis-preview" style="display:none;"></pre>
+          </section>
+
+          <section class="panel-block">
+            <h2>保存</h2>
+            <div class="small-text" id="saveStatus">保存状態: 未保存</div>
+            <div class="stack-buttons">
+              <button class="btn danger" id="resetStatsBtn">学習データをリセット</button>
+            </div>
+          </section>
+        </div>
       </aside>
 
       <section class="center-panel">
@@ -273,6 +282,7 @@
 <script src="crossunit.js?v=3"></script>
 <script src="progress-dashboard.js?v=4"></script>
 <script src="unit-strength.js?v=1"></script>
+<script src="sidebar-tabs.js?v=1"></script>
 <script type="module" src="firebase-sync.js?v=1"></script>
 
 </body>
