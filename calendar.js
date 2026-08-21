@@ -5,7 +5,7 @@
      （UNIT_META を丸ごと読み込むと index.html 用の初期化コードまで
      動いてしまうため、単元ラベルだけをここに複製して持つ）。
    ・データソースは他の後付けスクリプト（crossunit.js /
-     progress-dashboard.js / unit-strength.js）と同じ localStorage の
+     unit-strength.js / progress.js）と同じ localStorage の
      kyotsu_app_v14_<unit> キー。
    ========================================================= */
 (function () {

@@ -2,12 +2,12 @@
    unit-strength.js  —  単元別 分析（弱い/強い単元）
    ---------------------------------------------------------
    ・app.js / index.html 本体は変更しない後付けスクリプト
-     （crossunit.js / progress-dashboard.js と同じ方式）。
+     （crossunit.js / calendar.js と同じ方式）。
    ・画面右上（topbar の統計カードの隣）に「分析」ボタンを注入し、
      押すとモーダルで単元ごとの正答率を弱い順に並べて表示する。
-   ・データソースは crossunit.js / progress-dashboard.js と同じ
+   ・データソースは crossunit.js / calendar.js と同じ
      localStorage の kyotsu_app_v14_<unit> キー。
-   ・読み込み順: app.js の後（crossunit.js / progress-dashboard.js の
+   ・読み込み順: app.js の後（crossunit.js / calendar.js の
      前後どちらでも可）に <script> で追加すること。
    ========================================================= */
 (function () {
