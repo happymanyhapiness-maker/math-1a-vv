@@ -1323,6 +1323,48 @@ body.exam-mode .main-layout{
   stroke-width: 2;
 }
 
+/* =========================
+   追加: 答え合わせ後の「注目すべき直角三角形」赤線リビール
+   (補助三角形の発見ユニット用。既存のSVG要素・クラスは一切変更せず追加のみ)
+========================= */
+.diagram-svg .reveal-line {
+  fill: none;
+  stroke: #dc2626;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram-svg .reveal-point {
+  fill: #dc2626;
+}
+
+.diagram-svg .reveal-angle {
+  fill: none;
+  stroke: #dc2626;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diagram-svg .reveal-label {
+  font-size: 15px;
+  font-weight: 800;
+  fill: #dc2626;
+}
+
+.reveal-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
 
 /* =========================
    追加: 方針選択を「頻出 + その他」に整理

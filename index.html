@@ -270,21 +270,62 @@
     </div>
   </div>
 </div>
-  <script src="questions_keiryo.js?v=4"></script>
-  <script src="questions_seishitsu.js?v=4"></script>
+  <script src="questions_keiryo.js?v=5"></script>
+  <script src="questions_seishitsu.js?v=5"></script>
   <script src="questions_nijikansuu.js?v=2"></script>
-  <script src="questions_kitaichi.js?v=4"></script>
-  <script src="questions_vector.js?v=3"></script>
-  <script src="questions_shisuu.js?v=3"></script>
-  <script src="questions_zahyou.js?v=3"></script>
-  <script src="questions_bisekibun.js?v=3"></script>
+  <script src="questions_kitaichi.js?v=5"></script>
+  <script src="questions_vector.js?v=4"></script>
+  <script src="questions_shisuu.js?v=4"></script>
+  <script src="questions_zahyou.js?v=4"></script>
+  <script src="questions_bisekibun.js?v=4"></script>
   <script src="questions_suuretsu.js?v=5"></script>
-  <script src="questions_toukei.js?v=2"></script>
-  <script src="questions_chugaku.js?v=5"></script>
-  <script src="questions_sankaku_1.js?v=20260818-1"></script>
-  <script src="questions_sankaku_2.js?v=20260818-1"></script>
-  <script src="questions_deta_bunseki.js?v=1"></script>
-  <script src="app.js?v=29"></script>
+  <script src="questions_toukei.js?v=3"></script>
+  <script src="questions_chugaku.js?v=6"></script>
+  <script src="questions_sankaku_1.js?v=20260828-1"></script>
+  <script src="questions_sankaku_2.js?v=20260828-1"></script>
+  <script src="questions_deta_bunseki.js?v=2"></script>
+  <script src="questions_hojosankaku.js?v=2"></script>
+  <script src="questions_houteishiki.js?v=1"></script>
+  <script src="app.js?v=32"></script>
+<script>
+/* =========================
+   追加: 答え合わせ後の「注目すべき直角三角形」赤線リビール
+   (非破壊の後付けスクリプト。app.js/questions_*.jsの既存ロジックは一切変更しない。
+    問題データに svgReveal フィールドがある問題(現状は補助三角形の発見ユニットのみ)
+    でだけ動作し、それ以外のユニットには一切影響しない。)
+========================= */
+(function setupSvgReveal() {
+  if (typeof MutationObserver === "undefined") return;
+
+  function tryReveal() {
+    var feedbackEl = document.getElementById("feedback");
+    var svgBoxEl = document.getElementById("svgBox");
+    if (!feedbackEl || !svgBoxEl) return;
+    if (feedbackEl.style.display !== "block") return;
+    if (!feedbackEl.innerHTML || !feedbackEl.innerHTML.trim()) return;
+    if (typeof currentQuestion !== "function") return;
+
+    var q;
+    try { q = currentQuestion(); } catch (e) { return; }
+    if (!q || !q.svgReveal) return;
+    if (svgBoxEl.dataset.revealedFor === q.id) return;
+
+    var notice = "※図は位置関係を確認するための模式図です。長さや角度を図から測って解くものではありません。";
+    svgBoxEl.innerHTML =
+      '<div class="diagram-box">' +
+        '<div class="reveal-badge">ここに注目！</div>' +
+        q.svgReveal +
+        '<div class="diagram-notice">' + notice + '</div>' +
+      '</div>';
+    svgBoxEl.dataset.revealedFor = q.id;
+  }
+
+  var target = document.getElementById("feedback");
+  if (!target) return;
+  var observer = new MutationObserver(tryReveal);
+  observer.observe(target, { attributes: true, attributeFilter: ["style"], childList: true, subtree: true });
+})();
+</script>
 <script src="crossunit.js?v=3"></script>
 <script src="unit-strength.js?v=1"></script>
 <script src="sidebar-tabs.js?v=1"></script>

@@ -205,6 +205,35 @@ const UNIT_META = {
     questions: questions_deta_bunseki,
     routeChoices: ROUTE_CHOICES_DETA,
     primaryRoutes: ["平均", "分散・標準偏差", "相関係数", "四分位数・箱ひげ図", "外れ値の判定", "仮説検定の考え方"]
+  },
+
+  hojosankaku: {
+    label: "図形 補助三角形の発見",
+    description: "図に描かれていない直角三角形を自分で切り出す",
+    note: "",
+    mission: `
+      第1問：注目すべき直角三角形を「選ぶだけ」(計算なし)
+      第2問：三角形を選んだ直後にその三角形で長さを求める(2段階)
+      第3問：誘導なしでいきなり長さを求める(模試の「サ」と同じ状態)
+    `,
+    questions: questions_hojosankaku,
+    routeChoices: ROUTE_CHOICES_HOJOSANKAKU,
+    primaryRoutes: ["共通接線と2円の中心", "直方体の空間対角線", "円錐の母線", "円の弦と中心からの垂線", "内接円の接点", "共通弦の垂直二等分線"]
+  },
+
+  houteishiki: {
+    label: "図形 方程式へのモード切替",
+    description: "未知数が2通りに表せたら、それは方程式のサイン",
+    note: "",
+    mission: `
+      D-1：足場なしの診断問題
+      D-2・D-3：2つの式を提示し、方程式にする指示も明示(足場最大)
+      D-4・D-5：2通りに表すところまでは自分で行う(足場中)
+      D-6：D-1と同条件の仕上げ問題(模試の原問題そのもの)
+    `,
+    questions: questions_houteishiki,
+    routeChoices: ROUTE_CHOICES_HOUTEISHIKI,
+    primaryRoutes: ["接線の長さを2通りに表す", "直角の頂点からの接線=r", "半角の正接による接線の長さ", "複数の接線の和"]
   }
 };
 
@@ -302,8 +331,8 @@ function applyMathFormatting(str) {
    （誤変換で意味が変わるくらいなら、今まで通りの見た目にしておく）。
 ========================= */
 function choiceSqrtToLatex(s) {
-  // "3√2" → "3\sqrt{2}"、"√2" → "\sqrt{2}"
-  return s.replace(/(\d*)√(\d+)/, (_, coef, rad) => `${coef}\\sqrt{${rad}}`);
+  // "3√2" → "3\sqrt{2}"、"√2" → "\sqrt{2}"（式中に複数あってもすべて変換）
+  return s.replace(/(\d*)√(\d+)/g, (_, coef, rad) => `${coef}\\sqrt{${rad}}`);
 }
 
 const CHOICE_NUM_TOKEN = /^-?(?:\d+)?(?:√\d+)?$/;
@@ -314,24 +343,87 @@ function isSimpleChoiceMathToken(s) {
   return CHOICE_NUM_TOKEN.test(s) || CHOICE_LETTER_TOKEN.test(s);
 }
 
+// 2026-08-28 拡張（Option B）：
+// 「√3/3」のような単純な形しかLaTeX化できなかったため、同じ問題内で
+// "8/(√3+1)" のような複雑な形だけプレーンのまま残り、選択肢ごとに見た目が
+// バラつく事故が発生した（houteishiki eq1で発覚）。
+// 括弧・和差を含む一般の数式もまとめてLaTeX化できるよう変換ロジックを拡張する。
+// ただし「文章の選択肢」「√や演算子を含まない裸の数値・文字」は今まで通り
+// プレーン表示のまま変えない（影響範囲を数式選択肢だけに限定するため）。
+const CHOICE_MATH_EXPR_CHARS = /^[0-9A-Za-zΑ-Ωα-ωπ√+\-×÷/().\s]+$/;
+
+function isPureMathExpression(s) {
+  if (!s || s === "-") return false;
+  if (!CHOICE_MATH_EXPR_CHARS.test(s)) return false;
+  // 数字か√を含まない（"π"だけ、文字だけ等）はここでは対象にしない
+  if (!/[0-9√]/.test(s)) return false;
+  // 連続する英字（"sin" "cos" "tan" "log" 等の関数名）を含む場合は対象外。
+  // \sin 等のコマンド化をしないままLaTeX化すると、斜体3文字の掛け算(s×i×n)に
+  // 見えてしまう事故が過去に発生しているため（品質ゲート A-1.5 参照）、
+  // 単純な数値・単独の1文字変数以外は安全側でプレーン表示のまま残す。
+  if (/[A-Za-z]{2,}/.test(s)) return false;
+  return true;
+}
+
+function latexifyMathTerm(s) {
+  return choiceSqrtToLatex(s)
+    .replace(/×/g, "\\times")
+    .replace(/÷/g, "\\div");
+}
+
+// 文字列全体を囲む対応する括弧だけを1枚剥がす（"(√3+1)" → "√3+1"）。
+// 部分的にしか囲んでいない括弧（"5(√3+1)"）はそのまま残す。
+function stripOuterParens(s) {
+  if (s.length < 2 || s[0] !== "(" || s[s.length - 1] !== ")") return s;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") {
+      depth--;
+      if (depth === 0 && i !== s.length - 1) return s;
+    }
+  }
+  return s.slice(1, -1);
+}
+
+// 括弧の外側（深さ0）にある "/" の位置だけを拾う（"5(√3+1)/2" は1箇所だけ検出）
+function topLevelSlashPositions(s) {
+  let depth = 0;
+  const positions = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") depth--;
+    else if (s[i] === "/" && depth === 0) positions.push(i);
+  }
+  return positions;
+}
+
 function convertChoiceMath(str) {
   const s = String(str).trim();
+  if (!isPureMathExpression(s)) return str;
 
-  // ケース1: 全体が単純な分数 "a/b" の形
-  const fracMatch = s.match(/^(-)?([^/\s]+)\/([^/\s]+)$/);
-  if (fracMatch) {
-    const [, sign, num, den] = fracMatch;
-    if (isSimpleChoiceMathToken(num) && isSimpleChoiceMathToken(den)) {
-      return `$${sign || ""}\\dfrac{${choiceSqrtToLatex(num)}}{${choiceSqrtToLatex(den)}}$`;
+  // 分数の形（深さ0の"/"がちょうど1つ）なら \dfrac{}{} に変換
+  const slashPositions = topLevelSlashPositions(s);
+  if (slashPositions.length === 1) {
+    const i = slashPositions[0];
+    const num = stripOuterParens(s.slice(0, i).trim());
+    const den = stripOuterParens(s.slice(i + 1).trim());
+    if (num && den) {
+      return `$\\dfrac{${latexifyMathTerm(num)}}{${latexifyMathTerm(den)}}$`;
     }
   }
 
-  // ケース2: 分数ではないが √ を含む単純な項（"√194" "3√2" など）
-  if (/^-?(?:\d*)√\d+$/.test(s)) {
-    return `$${choiceSqrtToLatex(s)}$`;
+  // 分数ではないが √・×・÷ を含む式（"4√3-4" 等）。
+  // ただし文字（変数）が混ざる式（"(√3-1)r" 等）は対象外にする：
+  // 兄弟選択肢に "2r" のような√を含まない単純な文字式がある場合、
+  // そちらは変換対象にならずプレーンのまま残るため、変換すると
+  // かえって選択肢間の見た目がバラつく（今回houteishiki eq1で発覚した
+  // 事故と同じ構図）。数値だけの式に限定して安全側に倒す。
+  if (/[√×÷]/.test(s) && !/[A-Za-zΑ-Ωα-ω]/.test(s)) {
+    return `$${latexifyMathTerm(s)}$`;
   }
 
-  // それ以外はそのまま
+  // 演算子を含まない裸の数値・文字はプレーン表示のまま（従来通り）
   return str;
 }
 
