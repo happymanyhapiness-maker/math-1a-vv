@@ -1056,7 +1056,8 @@ body.exam-mode .main-layout{
   }
 
   #unitCardList,
-  .unitCardList {
+  .unitCardList,
+  .unit-group-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1688,11 +1689,12 @@ body.exam-mode .main-layout{
 /* [hidden]やdisplay:flexに負けないよう !important で確実に閉じる */
 .unit-group.collapsed .unit-group-grid { display: none !important; }
 
+/* 元の #unitCardList と同じグリッド定義。カード幅（＝開始ボタンの幅）を揃えるため、
+   flexではなくgridを使う。値は既存の #unitCardList の指定と同一。 */
 .unit-group-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
 }
 
 .unit-group-count { font-weight: 600; color: #9ca3af; font-size: 12px; }
