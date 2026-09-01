@@ -147,6 +147,21 @@ const UNIT_META = {
     primaryRoutes: ["f'の符号と増減", "極値の判定", "具体値で試す", "定積分の計算", "上-下の確認", "接線の方程式"]
   },
 
+  zettaichi: {
+    label: "数ⅡBC 絶対値の積分(特訓)",
+    description: "場合分け / 分割点 / 面積",
+    note: "",
+    mission: `
+      第1問：絶対値の正体(V字グラフ)と、1次式・2次式の符号判定・区間分割の性質
+      第2問：どこで・いくつに分けるか(分割点は中身=0の解。区間の外の解は使わない)
+      第3問：実際に値を出す(1次→2次→区間が3つに分かれる型まで)
+      第4問：面積として問われる型・分割点が文字aの型・手順の一般化(振り返り型)
+    `,
+    questions: questions_zettaichi,
+    routeChoices: ROUTE_CHOICES_ZETTAICHI,
+    primaryRoutes: ["中身=0を解く", "符号の確認", "区間の分割", "定積分の計算", "面積の立式", "文字で場合分け"]
+  },
+
   suuretsu: {
     label: "数ⅡBC 数列(累計・再利用ミニ)",
     description: "累計の3列表 / 特性方程式の再利用",
