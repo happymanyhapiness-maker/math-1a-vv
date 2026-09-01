@@ -6,7 +6,12 @@
      → オフラインでもこれまで通り解ける（PWAの強みを維持）。
    ・保存先: users/{uid}/units/{unitKey}  … payload は JSON文字列1本
      （Firestoreの型制約・undefined制約を完全に回避するため）
-   ・読み込み方法: <script type="module" src="firebase-sync.js?v=1"></script>
+   ・読み込み方法: <script type="module" src="firebase-sync.js?v=2"></script>
+   ・2026-09〜: LEAP/planner(デイリークエスト)と同じFirebaseプロジェクト
+     （leap-app-sync）・同じ子供用ログインIDに統一。加えて、同期のたびに
+     「kyotsu-math-summary/{uid}」へ最終学習日時・今日の演習数・累計演習数
+     だけの軽量サマリーを書き込み、planner側（dq-firebase-sync.js）から
+     読めるようにしてある。
    ========================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
@@ -18,14 +23,21 @@ import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
-/* ---------- 設定 ---------- */
+/* ---------- 設定 ----------
+   2026-09〜: LEAP単語帳アプリ／デイリークエスト(planner)と同じ
+   Firebaseプロジェクト（leap-app-sync）・同じログインIDに統一。
+   これにより、子どもは1つのID/パスワードでLEAP・kyotsu-math・plannerに
+   ログインでき、plannerのFirestoreルールもこのプロジェクト内で一元管理できる。
+   ※旧kyotsu-mathプロジェクト（projectId: "kyotsu-math"）に貯まっていた
+     クラウド同期履歴はこの切り替えでは引き継がれない（端末内localStorageは
+     そのまま残るのでローカルの学習データ自体は消えない）。 */
 const firebaseConfig = {
-  apiKey: "AIzaSyAyla5xMj7i_nWRgN958Z-tK-06uUq7z8Q",
-  authDomain: "kyotsu-math.firebaseapp.com",
-  projectId: "kyotsu-math",
-  storageBucket: "kyotsu-math.firebasestorage.app",
-  messagingSenderId: "704799365381",
-  appId: "1:704799365381:web:7d1abef4e454e09c887f6c"
+  apiKey: "AIzaSyBkrhdO_041b7Hi0nyAY8p--uHRYoFKUqk",
+  authDomain: "leap-app-sync.firebaseapp.com",
+  projectId: "leap-app-sync",
+  storageBucket: "leap-app-sync.firebasestorage.app",
+  messagingSenderId: "734689387742",
+  appId: "1:734689387742:web:102895181b561af204ce4f"
 };
 
 const PREFIX = "kyotsu_app_v14_";
@@ -33,15 +45,17 @@ const RELOAD_FLAG = "kyotsu_sync_reloaded";
 const PUSH_DELAY = 4000; // 保存後、これだけ静かになったらアップロード
 
 /* ---------- 保護者（閲覧専用）設定 ----------
-   ・子どもの学習ログを同期している「本来のuid」を固定で持っておく。
+   ・LEAP/planner側と同じUIDを流用する（leap-app-syncプロジェクトの値）。
    ・GUARDIAN_UIDS に入っているuidでログインした場合は「閲覧モード」になる:
      - データの読み込み先は自分のuidではなく CHILD_UID 固定
-     - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため）
-   ・保護者アカウントをFirebaseコンソールで作成したら、そのUIDをここに追記する。 */
-const CHILD_UID = "2jRA2hstaoRh2kVyy4MaPV2fyl52";
+     - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため） */
+const CHILD_UID = "hjWTc7Ll0UeHv5iKbRTlTLRrY8x1";
 const GUARDIAN_UIDS = [
-  "TMjt16vGy4cIo2lAzB9b7g4hPxI3"
+  "eVm3klGUSpcxRPtxN7NHo4lYx7f2"
 ];
+
+// plannerが読みに来る「学習サマリー」の保存先（1ドキュメントだけの軽量な要約）
+const SUMMARY_COLLECTION = "kyotsu-math-summary";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -227,6 +241,56 @@ async function writeRemote(unit, data) {
 }
 
 /* =========================================================
+   学習サマリーの送信（planner連携用）
+   ・全単元のanswerLogを軽く舐めて「今日の演習数」「累計演習数」
+     「最終学習日時」だけをまとめた1ドキュメントをFirestoreに書く。
+   ・planner側はこの1ドキュメントを読むだけで済むので、単元ごとの
+     重いpayloadをplannerが直接読みに行く必要がない。
+   ・保護者（閲覧モード）は書き込まない。
+   ========================================================= */
+function todayKeyJST() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000); // JST固定
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+}
+
+function buildSummary() {
+  let lastStudiedAt = 0;
+  let todayCount = 0;
+  let totalCount = 0;
+  const today = todayKeyJST();
+
+  unitKeys().forEach(unit => {
+    const local = readLocal(unit);
+    const log = local && local.state && Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
+    log.forEach(r => {
+      if (!r || typeof r.timestamp !== "number") return;
+      totalCount++;
+      if (r.timestamp > lastStudiedAt) lastStudiedAt = r.timestamp;
+      const jst = new Date(r.timestamp + 9 * 3600 * 1000);
+      const key = jst.getUTCFullYear() + "-" + String(jst.getUTCMonth() + 1).padStart(2, "0") + "-" + String(jst.getUTCDate()).padStart(2, "0");
+      if (key === today) todayCount++;
+    });
+  });
+
+  return { lastStudiedAt, todayCount, totalCount };
+}
+
+async function pushSummary() {
+  if (!currentUser || isGuardian()) return; // 閲覧モードでは絶対に書かない
+  try {
+    const s = buildSummary();
+    await setDoc(doc(db, SUMMARY_COLLECTION, targetUid()), {
+      lastStudiedAt: s.lastStudiedAt,
+      todayCount: s.todayCount,
+      totalCount: s.totalCount,
+      updatedAt: Date.now()
+    });
+  } catch (e) {
+    console.error("[sync] summary push failed", e);
+  }
+}
+
+/* =========================================================
    同期処理
    ========================================================= */
 async function syncAll(opts) {
@@ -280,6 +344,7 @@ async function syncAll(opts) {
   busy = false;
   const t = new Date().toLocaleTimeString("ja-JP");
   log("同期済み（" + t + "）", "#166534");
+  pushSummary();
 
   // 画面に出ている単元のデータが書き換わったら、1回だけリロードして反映
   // 手動の「今すぐ同期」で押されたときは、リロード回数の制限を無視して必ず反映する
@@ -323,6 +388,7 @@ async function pushDirty() {
   }
   busy = false;
   log("同期済み（" + new Date().toLocaleTimeString("ja-JP") + "）", "#166534");
+  pushSummary();
 }
 
 /* =========================================================
@@ -492,4 +558,4 @@ if (document.readyState === "loading") {
 }
 
 /* デバッグ用 */
-window.kyotsuSync = { syncAll, mergeUnitData, readLocal };
+window.kyotsuSync = { syncAll, mergeUnitData, readLocal, buildSummary, pushSummary };
