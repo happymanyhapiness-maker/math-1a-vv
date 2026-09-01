@@ -12,6 +12,7 @@ const ROUTE_QUIZ_ENABLED = false;
 const UNIT_META = {
   chugaku: {
     label: "図形の土台",
+    group: "foundation",
     description: "相似 / 円周角 / 三平方 / 面積比",
     note: "",
     mission: `
@@ -29,6 +30,7 @@ const UNIT_META = {
 
   keiryo: {
     label: "数ⅠA 図形と計量",
+    group: "1a",
     description: "三角比 / 三平方 / 面積",
     note: "",
     mission: `
@@ -44,6 +46,7 @@ const UNIT_META = {
 
   seishitsu: {
     label: "数ⅠA 図形の性質",
+    group: "1a",
     description: "重心 / チェバ / 円周角 / 2円",
     note: "",
     mission: `
@@ -59,6 +62,7 @@ const UNIT_META = {
 
   nijikansuu: {
     label: "数ⅠA 二次関数",
+    group: "1a",
     description: "グラフ / 判別式 / 最大最小",
     note: "",
     mission: `
@@ -74,6 +78,8 @@ const UNIT_META = {
 
   kitaichi: {
     label: "数ⅠA 期待値(ミニ)",
+    group: "drill",
+    cardButtonClass: "warning",
     description: "値×確率 / 分布表 / 意味の理解",
     note: "",
     mission: `
@@ -89,6 +95,8 @@ const UNIT_META = {
 
   vector: {
     label: "数ⅡBC ベクトル",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "成分 / 内積 / 平行と垂直 / 球面",
     note: "",
     mission: `
@@ -104,6 +112,8 @@ const UNIT_META = {
 
   shisuu: {
     label: "数ⅡBC 指数・対数",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "指数法則 / 置き換え / 対数の基礎",
     note: "",
     mission: `
@@ -119,6 +129,8 @@ const UNIT_META = {
 
   zahyou: {
     label: "数ⅡBC 図形と方程式",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "直線 / 円 / 距離 / 領域",
     note: "",
     mission: `
@@ -134,6 +146,8 @@ const UNIT_META = {
 
   bisekibun: {
     label: "数ⅡBC 微積(グラフ判断)",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "極値判定 / 解の動き / 面積",
     note: "",
     mission: `
@@ -149,6 +163,8 @@ const UNIT_META = {
 
   zettaichi: {
     label: "数ⅡBC 絶対値の積分(特訓)",
+    group: "drill",
+    cardButtonClass: "warning",
     description: "場合分け / 分割点 / 面積",
     note: "",
     mission: `
@@ -164,6 +180,8 @@ const UNIT_META = {
 
   suuretsu: {
     label: "数ⅡBC 数列(累計・再利用ミニ)",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "累計の3列表 / 特性方程式の再利用",
     note: "",
     mission: `
@@ -179,6 +197,8 @@ const UNIT_META = {
 
   toukei: {
     label: "数ⅡBC 統計的な推測",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "標準化 / 検定 / 確率密度関数",
     note: "",
     mission: `
@@ -194,6 +214,8 @@ const UNIT_META = {
 
   sankaku: {
     label: "数Ⅱ 三角関数",
+    group: "2bc",
+    cardButtonClass: "success",
     description: "象限と符号 / 加法定理 / 倍角・半角 / 三角方程式",
     note: "",
     mission: `
@@ -209,6 +231,7 @@ const UNIT_META = {
 
   deta_bunseki: {
     label: "数I データの分析",
+    group: "1a",
     description: "代表値・分散 / 相関係数 / 箱ひげ図 / 仮説検定の考え方",
     note: "",
     mission: `
@@ -224,6 +247,8 @@ const UNIT_META = {
 
   hojosankaku: {
     label: "図形 補助三角形の発見",
+    group: "drill",
+    cardButtonClass: "warning",
     description: "図に描かれていない直角三角形を自分で切り出す",
     note: "",
     mission: `
@@ -238,6 +263,8 @@ const UNIT_META = {
 
   houteishiki: {
     label: "図形 方程式へのモード切替",
+    group: "drill",
+    cardButtonClass: "warning",
     description: "未知数が2通りに表せたら、それは方程式のサイン",
     note: "",
     mission: `

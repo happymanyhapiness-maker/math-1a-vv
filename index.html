@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>共通テスト数学</title>
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=20">
   <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
        他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
   <script>
@@ -287,7 +287,7 @@
   <script src="questions_deta_bunseki.js?v=2"></script>
   <script src="questions_hojosankaku.js?v=2"></script>
   <script src="questions_houteishiki.js?v=1"></script>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 <script>
 /* =========================
    追加: 答え合わせ後の「注目すべき直角三角形」赤線リビール
@@ -332,5 +332,119 @@
 <script src="sidebar-tabs.js?v=1"></script>
 <script type="module" src="firebase-sync.js?v=1"></script>
 
+
+  <!-- =========================================================
+       単元カードのグループ化（非破壊的な後処理）
+       app.js の buildUnitCards() が #unitCardList に生成したカードを、
+       UNIT_META の group フィールドを見て見出しごとに詰め直すだけ。
+       app.js 本体・カードの中身・onclick には一切触れていないので、
+       このscriptタグを消せば完全に元の一覧に戻る。
+  ========================================================== -->
+  <script>
+  (function () {
+    var GROUP_DEFS = [
+      { id: "foundation", title: "土台",         dot: "purple",  defaultCollapsed: false, hint: "高校範囲に入る前の前提知識" },
+      { id: "1a",         title: "数ⅠA",        dot: "primary", defaultCollapsed: false, hint: "" },
+      { id: "2bc",        title: "数ⅡBC",       dot: "success", defaultCollapsed: false, hint: "" },
+      { id: "drill",      title: "弱点特訓ミニ",  dot: "warning", defaultCollapsed: true,  hint: "模試や本人の申告から作った一点集中パック" }
+    ];
+    var STORE_KEY = "kyotsu_app_unit_groups_v1";
+
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveState(s) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {}
+    }
+
+    function regroup() {
+      var box = document.getElementById("unitCardList");
+      if (!box || typeof UNIT_META === "undefined") return;
+      if (box.dataset.grouped === "1") return;          // 二重適用の防止
+      var cards = box.querySelectorAll(":scope > .unit-card");
+      if (!cards.length) return;                        // まだ生成されていない
+
+      // カードはUNIT_METAのキー順に生成されるので、その順で単元キーを対応づける
+      var keys = Object.keys(UNIT_META);
+      if (cards.length !== keys.length) return;         // 想定外の状態なら何もしない（安全側）
+
+      var state = loadState();
+      var buckets = {};
+      for (var i = 0; i < cards.length; i++) {
+        var g = (UNIT_META[keys[i]] && UNIT_META[keys[i]].group) || "other";
+        (buckets[g] = buckets[g] || []).push(cards[i]);
+      }
+
+      var defs = GROUP_DEFS.slice();
+      // group未設定の単元があってもカードが消えないよう、末尾に受け皿を作る
+      Object.keys(buckets).forEach(function (g) {
+        if (!defs.some(function (d) { return d.id === g; })) {
+          defs.push({ id: g, title: "その他", dot: "primary", defaultCollapsed: false, hint: "" });
+        }
+      });
+
+      var frag = document.createDocumentFragment();
+      defs.forEach(function (def) {
+        var items = buckets[def.id];
+        if (!items || !items.length) return;
+
+        var collapsed = (state[def.id] !== undefined) ? state[def.id] : def.defaultCollapsed;
+
+        var sec = document.createElement("div");
+        sec.className = "unit-group" + (collapsed ? " collapsed" : "");
+
+        var head = document.createElement("h2");
+        head.className = "unit-group-head";
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "unit-group-toggle";
+        btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        btn.innerHTML =
+          '<span class="chev">▼</span>' +
+          '<span class="unit-group-dot dot-' + def.dot + '"></span>' +
+          '<span>' + def.title + '</span>' +
+          '<span class="unit-group-count">' + items.length + '</span>';
+        head.appendChild(btn);
+        if (def.hint) {
+          var hint = document.createElement("span");
+          hint.className = "unit-group-hint";
+          hint.textContent = def.hint;
+          head.appendChild(hint);
+        }
+
+        var grid = document.createElement("div");
+        grid.className = "unit-group-grid";
+        items.forEach(function (c) { grid.appendChild(c); });   // カードは移動するだけ（作り直さない＝onclick維持）
+
+        btn.addEventListener("click", function () {
+          var nowCollapsed = sec.classList.toggle("collapsed");
+          btn.setAttribute("aria-expanded", nowCollapsed ? "false" : "true");
+          var s = loadState();
+          s[def.id] = nowCollapsed;
+          saveState(s);
+        });
+
+        sec.appendChild(head);
+        sec.appendChild(grid);
+        frag.appendChild(sec);
+      });
+
+      box.innerHTML = "";
+      box.appendChild(frag);
+      box.dataset.grouped = "1";
+    }
+
+    // buildUnitCards()が呼ばれるたびに(box.innerHTML=""でgroupedフラグごと消える)組み直す
+    var box = document.getElementById("unitCardList");
+    if (box) {
+      new MutationObserver(function () { regroup(); }).observe(box, { childList: true });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", regroup);
+    } else {
+      regroup();
+    }
+  })();
+  </script>
 </body>
 </html>

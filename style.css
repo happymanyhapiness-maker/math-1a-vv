@@ -1633,3 +1633,75 @@ body.exam-mode .main-layout{
   .cal-day-count { font-size: 7px; }
   .cal-nav-btn { padding: 6px 8px; font-size: 11px; }
 }
+
+
+/* =========================
+   単元カードのグループ化（見出し＋折りたたみ）
+   index.html末尾の後処理スクリプトが .unit-group を組み立てる。
+   既存の .unit-card / .btn には一切手を加えていない。
+========================= */
+/* #unitCardList は .toolbar (display:flex) のため、そのままだとグループ自体が
+   横並びのflexアイテムになってしまう。グループ化後だけブロック積みに戻す。 */
+#unitCardList[data-grouped="1"] { display: block; }
+
+.unit-group { margin-bottom: 20px; }
+
+.unit-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.unit-group-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.unit-group-toggle {
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  border: none;
+  font: inherit;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.unit-group-toggle .chev {
+  display: inline-block;
+  transition: transform 0.18s ease;
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.unit-group.collapsed .chev { transform: rotate(-90deg); }
+
+/* [hidden]やdisplay:flexに負けないよう !important で確実に閉じる */
+.unit-group.collapsed .unit-group-grid { display: none !important; }
+
+.unit-group-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.unit-group-count { font-weight: 600; color: #9ca3af; font-size: 12px; }
+
+.unit-group-hint { font-size: 12px; color: #9ca3af; font-weight: 500; }
+
+/* 見出しの色ドット。カードの開始ボタンの色と対応させ、閉じていてもグループが分かるようにする */
+.unit-group-dot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.unit-group-dot.dot-purple  { background: #c084fc; }
+.unit-group-dot.dot-primary { background: #60a5fa; }
+.unit-group-dot.dot-success { background: #34d399; }
+.unit-group-dot.dot-warning { background: #fbbf24; }
