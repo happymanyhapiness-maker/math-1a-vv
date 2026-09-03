@@ -378,6 +378,16 @@ async function backfillDailyQuestLogs() {
     try { store = JSON.parse(snap.data().data); } catch (e) { return { ok: false, reason: "parse-error" }; }
     if (!store.days) store.days = {};
 
+    // 過去分を追加しても、Plannerの「記録開始日」(appStartDate)より前だと
+    // 振り返りカレンダー上でグレーアウトしてタップできなくなってしまう。
+    // バックフィルする日付の中に記録開始日より前のものがあれば、記録開始日を繰り上げる。
+    const earliestKey = dayKeys.reduce((min, k) => (k < min ? k : min), dayKeys[0]);
+    let appStartDateChanged = false;
+    if (!store.appStartDate || earliestKey < store.appStartDate) {
+      store.appStartDate = earliestKey;
+      appStartDateChanged = true;
+    }
+
     let updated = 0;
     dayKeys.forEach(key => {
       if (!store.days[key]) store.days[key] = { events: [], eventDone: {}, quests: [] };
@@ -399,7 +409,7 @@ async function backfillDailyQuestLogs() {
       }
     });
 
-    if (updated === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
+    if (updated === 0 && !appStartDateChanged) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
 
     store._updatedAt = Date.now();
     await setDoc(doc(db, "dailyquest-logs", uid), {
