@@ -20,7 +20,7 @@ import {
   setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs
+  getFirestore, doc, getDoc, setDoc, collection, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
 /* ---------- 設定 ----------
@@ -29,8 +29,8 @@ import {
    これにより、子どもは1つのID/パスワードでLEAP・kyotsu-math・plannerに
    ログインでき、plannerのFirestoreルールもこのプロジェクト内で一元管理できる。
    ※旧kyotsu-mathプロジェクト（projectId: "kyotsu-math"）に貯まっていた
-     クラウド同期履歴はこの切り替えでは引き継がれない（端末内localStorageは
-     そのまま残るのでローカルの学習データ自体は消えない）。 */
+   クラウド同期履歴はこの切り替えでは引き継がれない（端末内localStorageは
+   そのまま残るのでローカルの学習データ自体は消えない）。 */
 const firebaseConfig = {
   apiKey: "AIzaSyBkrhdO_041b7Hi0nyAY8p--uHRYoFKUqk",
   authDomain: "leap-app-sync.firebaseapp.com",
@@ -275,6 +275,56 @@ function buildSummary() {
   return { lastStudiedAt, todayCount, totalCount };
 }
 
+/* =========================================================
+   plannerの「今日のクエスト」に直接反映する
+   ・plannerを開かなくても、この端末で学習してsyncが走るたびに
+     dailyquest-logs/{CHILD_UID} の「今日」の欄へ直接書き込む。
+   ・plannerの構造（{days:{key:{events,eventDone,quests}}}のJSON文字列1本）
+     を壊さないよう、フェッチ→パース→autoSource:"kyotsu-math"の
+     エントリだけ更新→書き戻し、という手順を踏む。
+   ・plannerの記録がまだ一度も存在しない場合は何もしない（安全側）。
+   ・保護者（閲覧モード）では絶対に動かさない。
+   ========================================================= */
+async function pushDailyQuestToday(s) {
+  if (!currentUser || isGuardian()) return;
+  const uid = targetUid();
+  try {
+    const snap = await getDoc(doc(db, "dailyquest-logs", uid));
+    if (!snap.exists() || !snap.data().data) return;
+    let store;
+    try { store = JSON.parse(snap.data().data); } catch (e) { return; }
+    if (!store.days) store.days = {};
+    const today = todayKeyJST();
+    if (!store.days[today]) store.days[today] = { events: [], eventDone: {}, quests: [] };
+    const day = store.days[today];
+    if (!day.quests) day.quests = [];
+    const label = s.todayCount
+      ? "kyotsu-math（自動記録）（本日" + s.todayCount + "問）"
+      : "kyotsu-math（自動記録）";
+    const existing = day.quests.find(q => q.autoSource === "kyotsu-math");
+    let changed = false;
+    if (existing) {
+      if (existing.label !== label || !existing.done) {
+        existing.label = label;
+        existing.done = true;
+        changed = true;
+      }
+    } else {
+      day.quests.push({ label: label, done: true, tag: "数学", autoSource: "kyotsu-math" });
+      changed = true;
+    }
+    if (!changed) return;
+    store._updatedAt = Date.now();
+    await setDoc(doc(db, "dailyquest-logs", uid), {
+      data: JSON.stringify(store),
+      clientUpdatedAt: store._updatedAt,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (e) {
+    console.warn("[sync] dailyquest push失敗", e);
+  }
+}
+
 async function pushSummary() {
   if (!currentUser || isGuardian()) return; // 閲覧モードでは絶対に書かない
   try {
@@ -285,8 +335,82 @@ async function pushSummary() {
       totalCount: s.totalCount,
       updatedAt: Date.now()
     });
+    pushDailyQuestToday(s);
   } catch (e) {
     console.error("[sync] summary push failed", e);
+  }
+}
+
+/* =========================================================
+   過去の学習履歴を、plannerの「今日のクエスト」に一括で反映する
+   （一回限りの移行用）
+   ・全単元のanswerLogを日付ごとに集計し、dailyquest-logs/{uid}の
+     各日付にautoSource:"kyotsu-math"のクエストとして書き込む。
+   ・plannerの記録が一度も存在しない場合は何もしない（安全のため）。
+   ・既存の他のクエストには一切触れない。
+   ========================================================= */
+async function backfillDailyQuestLogs() {
+  if (!currentUser || isGuardian()) return { ok: false, reason: "not-child" };
+  const uid = targetUid();
+
+  const perDay = {};
+  unitKeys().forEach(unit => {
+    const local = readLocal(unit);
+    const log = local && local.state && Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
+    log.forEach(r => {
+      const t = r && typeof r.timestamp === "number" ? r.timestamp : 0;
+      if (!t) return;
+      const jst = new Date(t + 9 * 3600 * 1000);
+      const key = jst.getUTCFullYear() + "-" + String(jst.getUTCMonth() + 1).padStart(2, "0") + "-" + String(jst.getUTCDate()).padStart(2, "0");
+      perDay[key] = (perDay[key] || 0) + 1;
+    });
+  });
+
+  const dayKeys = Object.keys(perDay);
+  if (dayKeys.length === 0) return { ok: true, updatedDays: 0, totalDaysFound: 0 };
+
+  const today = todayKeyJST();
+
+  try {
+    const snap = await getDoc(doc(db, "dailyquest-logs", uid));
+    if (!snap.exists() || !snap.data().data) return { ok: false, reason: "no-dailyquest-doc" };
+    let store;
+    try { store = JSON.parse(snap.data().data); } catch (e) { return { ok: false, reason: "parse-error" }; }
+    if (!store.days) store.days = {};
+
+    let updated = 0;
+    dayKeys.forEach(key => {
+      if (!store.days[key]) store.days[key] = { events: [], eventDone: {}, quests: [] };
+      const day = store.days[key];
+      if (!day.quests) day.quests = [];
+      const label = key === today
+        ? "kyotsu-math（自動記録）（本日" + perDay[key] + "問）"
+        : "kyotsu-math（自動記録）（" + perDay[key] + "問）";
+      const existing = day.quests.find(q => q.autoSource === "kyotsu-math");
+      if (existing) {
+        if (existing.label !== label || !existing.done) {
+          existing.label = label;
+          existing.done = true;
+          updated++;
+        }
+      } else {
+        day.quests.push({ label: label, done: true, tag: "数学", autoSource: "kyotsu-math" });
+        updated++;
+      }
+    });
+
+    if (updated === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
+
+    store._updatedAt = Date.now();
+    await setDoc(doc(db, "dailyquest-logs", uid), {
+      data: JSON.stringify(store),
+      clientUpdatedAt: store._updatedAt,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    return { ok: true, updatedDays: updated, totalDaysFound: dayKeys.length };
+  } catch (e) {
+    console.warn("[sync] backfill失敗", e);
+    return { ok: false, reason: String(e) };
   }
 }
 
@@ -419,6 +543,9 @@ function injectUI() {
     '    <button class="btn primary" id="syncNowBtn">今すぐ同期</button>' +
     '    <button class="btn secondary" id="syncLogoutBtn">ログアウト</button>' +
     '  </div>' +
+    '  <div class="stack-buttons" id="syncBackfillRow" style="display:none;margin-top:6px;">' +
+    '    <button class="btn secondary" id="syncBackfillBtn">過去ログをデイリークエストに反映</button>' +
+    '  </div>' +
     '  <div class="stack-buttons" id="syncResetRow" style="display:none;margin-top:6px;">' +
     '    <button class="btn secondary" id="syncResetBtn" style="color:#991b1b;border-color:#991b1b;">このPCの検証データをリセット</button>' +
     '  </div>' +
@@ -437,6 +564,25 @@ function injectUI() {
   });
   document.getElementById("syncLogoutBtn").addEventListener("click", () => signOut(auth));
   document.getElementById("syncResetBtn").addEventListener("click", resetLocalTestData);
+  document.getElementById("syncBackfillBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("syncBackfillBtn");
+    btn.disabled = true;
+    const r = await backfillDailyQuestLogs();
+    btn.disabled = false;
+    if (!r.ok) {
+      if (r.reason === "no-dailyquest-doc") {
+        alert("デイリークエスト側の記録がまだ見つかりませんでした。先にデイリークエストのアプリを一度開いてから、もう一度試してください。");
+      } else {
+        alert("反映に失敗しました。もう一度試してみてください。");
+      }
+      return;
+    }
+    if (r.updatedDays > 0) {
+      alert("デイリークエストに" + r.updatedDays + "日分の記録を反映しました！");
+    } else {
+      alert("すでに最新の状態でした（今回は追加・更新はありませんでした）。");
+    }
+  });
   return true;
 }
 
@@ -513,6 +659,9 @@ function renderAuthUI() {
   const resetRow = document.getElementById("syncResetRow");
   if (resetRow) resetRow.style.display = (currentUser && isGuardian()) ? "block" : "none";
 
+  const backfillRow = document.getElementById("syncBackfillRow");
+  if (backfillRow) backfillRow.style.display = (currentUser && !isGuardian()) ? "block" : "none";
+
   if (!out || !inn) return;
   if (currentUser) {
     out.style.display = "none";
@@ -558,4 +707,4 @@ if (document.readyState === "loading") {
 }
 
 /* デバッグ用 */
-window.kyotsuSync = { syncAll, mergeUnitData, readLocal, buildSummary, pushSummary };
+window.kyotsuSync = { syncAll, mergeUnitData, readLocal, buildSummary, pushSummary, backfillDailyQuestLogs };
