@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>共通テスト数学</title>
+  <link rel="stylesheet" href="style.css?v=21">
+  <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
+       他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    };
+  </script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+
+<header class="topbar" id="topbar">
+  <div class="brand">
+    <div class="brand-sub">KYOTSU TEST</div>
+    <h1 id="titleHomeBtn">共通テスト数学 ガチ完全再現版</h1>
+  </div>
+
+  <div class="top-stats">
+    <div class="stat-card" id="unitCardClickable">
+      <div class="stat-label">単元</div>
+      <div class="stat-value" id="currentUnitLabel" style="font-size:16px;">―</div>
+    </div>
+
+    <div class="stat-card" id="syncStatusCardTop" style="display:none;">
+      <div class="stat-label">同期</div>
+      <div class="stat-value" id="syncStatusValueTop" style="font-size:16px;color:#166534;">☁ ON</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">総正答数</div>
+      <div class="stat-value" id="correctCnt">0</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">総解答数</div>
+      <div class="stat-value" id="totalCnt">0</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">正答率</div>
+      <div class="stat-value" id="rateCnt">0%</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-label">平均秒数</div>
+      <div class="stat-value" id="avgCnt">0</div>
+    </div>
+  </div>
+</header>
+
+    <main class="main-layout">
+
+      <aside class="left-panel card" id="sidebar">
+        <div class="sidebar-tabs" id="sidebarTabs">
+          <button type="button" class="sidebar-tab active" id="sidebarTabStats" data-sidebar-tab="stats">成績を見る</button>
+          <button type="button" class="sidebar-tab" id="sidebarTabActions" data-sidebar-tab="actions">操作する</button>
+        </div>
+
+        <div class="sidebar-page active" data-sidebar-page="stats">
+          <section class="panel-block">
+            <h2>弱点トラッカー</h2>
+            <ul class="metric-list">
+              <li>計算精度: <strong id="wCalc">0</strong></li>
+              <li>方針切替: <strong id="wSwitch">0</strong></li>
+              <li>時間不足: <strong id="wTime">0</strong></li>
+              <li>時間判断: <strong id="wJudge">0</strong></li>
+              <li>共通点抽出: <strong id="wPattern">0</strong></li>
+            </ul>
+            <div class="pill">最重要課題: <span id="topWeak">未判定</span></div>
+          </section>
+
+          <section class="panel-block">
+            <h2>ステージ別成績</h2>
+            <ul class="metric-list">
+              <li>第1問: <strong id="stageRate0">0%</strong></li>
+              <li>第2問: <strong id="stageRate1">0%</strong></li>
+              <li>第3問: <strong id="stageRate2">0%</strong></li>
+              <li>第4問: <strong id="stageRate3">0%</strong></li>
+            </ul>
+          </section>
+
+          <section class="panel-block">
+            <h2>復習</h2>
+            <ul class="metric-list">
+              <li>今日の復習件数: <strong id="todayReviewCount">0</strong></li>
+              <li>復習モード正答率: <strong id="reviewRate">0%</strong></li>
+              <li>完全に直した問題数: <strong id="clearedCount">0</strong></li>
+            </ul>
+          </section>
+
+          <section class="panel-block">
+            <h2>今の傾向（自動）</h2>
+            <div id="insightsBox" class="small-text">まだ回答ログがありません。</div>
+          </section>
+        </div>
+
+        <div class="sidebar-page" data-sidebar-page="actions">
+          <section class="panel-block">
+            <h2>学習記録</h2>
+            <div class="small-text" style="margin-bottom:8px;">学習した日と、その日の内容をカレンダーで振り返れます。</div>
+            <a href="calendar.html" class="btn secondary" style="display:block; text-align:center; text-decoration:none;">学習日カレンダーを見る</a>
+          </section>
+
+          <section class="panel-block">
+            <h2>全体の進捗</h2>
+            <div class="small-text" style="margin-bottom:8px;">全単元の進捗率・正答率をまとめて見られます。</div>
+            <a href="progress.html" class="btn secondary" style="display:block; text-align:center; text-decoration:none;">全体の進捗を見る</a>
+          </section>
+
+          <section class="panel-block">
+            <h2>AI分析</h2>
+            <div class="small-text">解いたログをまとめてコピーし、Claudeに貼ると弱点診断が受けられます。
+              <!-- 対象範囲（この単元／全単元）の切り替えUIは crossunit.js が非破壊的に挿入します -->
+            </div>
+            <div class="stack-buttons">
+              <button class="btn primary" id="copyAnalysisBtn">分析結果をコピー</button>
+              <button class="btn secondary" id="previewAnalysisBtn">中身をプレビュー</button>
+            </div>
+            <div class="small-text" id="analysisCopyStatus" style="margin-top:6px;"></div>
+            <pre id="analysisPreview" class="analysis-preview" style="display:none;"></pre>
+          </section>
+
+          <section class="panel-block">
+            <h2>保存</h2>
+            <div class="small-text" id="saveStatus">保存状態: 未保存</div>
+            <div class="stack-buttons">
+              <button class="btn danger" id="resetStatsBtn">学習データをリセット</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="center-panel">
+        <div class="card control-panel" id="unitSelectScreen">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-note">単元を選んでください。成績・履歴は単元ごとに記録されます。</div>
+            </div>
+          </div>
+
+          <div class="toolbar" id="unitCardList">
+            <!-- app.js が UNIT_META からカードを生成します -->
+          </div>
+        </div>
+
+        <div class="card control-panel" id="controlPanel" style="display:none;">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-note" id="panelNote">
+                理解はできるのに点が取り切れない人向けのトレーニング版
+              </div>
+            </div>
+            <div class="badge">4題・全問必答</div>
+          </div>
+
+          <div class="mission-box">
+            <strong>今回の狙い</strong><br>
+            <span id="missionBoxContent">
+              第1問：三角比・式変形での計算精度<br>
+              第2問：図形と計量での高さ・面積・方針切替<br>
+              第3問：内接円・接線の長さ・半径<br>
+              第4問：誘導の読み方・時間配分
+            </span>
+          </div>
+
+          <div class="toolbar">
+            <button class="btn primary" id="startExamBtn">試験開始</button>
+            <button class="btn warning" id="resumeExamBtn">途中から再開</button>
+          </div>
+
+          <div class="small-text" style="margin-top:10px;">その他の練習モード</div>
+          <select id="practiceModeSelect" class="mode-select">
+            <option value="">練習モードを選ぶ...</option>
+            <option value="due">今日の復習だけ</option>
+            <option value="wrong">間違えた問題だけ再挑戦</option>
+            <option value="tips">TIPSだけ復習</option>
+            <option value="unanswered">未挑戦の問題だけ</option>
+          </select>
+
+          <div class="small-text" style="margin-top:10px;">ステージを絞って練習</div>
+          <div class="toolbar" id="stageOnlyButtons">
+            <!-- app.js が問題データのstage一覧から自動生成します -->
+          </div>
+
+          <div class="day-guide" id="dayGuide">
+            目安：1日 10〜15問。10問解いたら一度区切るのがおすすめです。
+          </div>
+        </div>
+
+        <div class="exam-topbar card" id="examTopbar" style="display:none;">
+          <div class="exam-actions">
+            <button class="btn secondary" id="goTopBtn">TOPへ戻る</button>
+            <button class="btn secondary" id="toggleStrictTimeBtn">時間制限: 通常</button>
+          </div>
+          <div class="exam-meta-inline">
+            <span class="pill" id="qStageLabel">第1問①</span>
+            <span class="pill" id="qScoreLabel">配点 0点</span>
+            <span class="pill" id="qWeakLabel">弱点軸</span>
+            <span class="pill" id="progressLabel">1 / 21</span>
+            <span class="pill" id="qLastResultLabel" style="display:none;">前回: -</span>
+            <span class="pill pill-sync" id="syncPillExam" style="display:none;">☁ 同期中</span>
+          </div>
+          <div class="timer" id="timer">--</div>
+        </div>
+
+        <div id="questionPanel" class="card question-panel" style="display:none;">
+          <div id="groupPanel" class="group-panel" style="display:none;"></div>
+          <div class="question-text" id="questionText"></div>
+          <div id="svgBox"></div>
+<div id="routeQuizBox" class="route-quiz-box" style="display:none;">
+  <div class="route-title">この問題はどう解く？（先に方針を選ぶ）</div>
+  <div class="route-sub">
+    あてはまるものをすべて選んでから「方針を確定」を押してください。
+  </div>
+  <div id="routeOptions" class="route-options"></div>
+  <div class="toolbar q-toolbar">
+    <button class="btn warning" id="submitRouteBtn">方針を確定</button>
+  </div>
+  <div id="routeFeedback" class="feedback" style="display:none;"></div>
+</div>
+          <div class="question-start-box" id="questionStartBox">
+            <p class="start-text">
+              準備ができたら「この問題を開始」を押してください。<br>
+              問題ごとに制限時間は変わります。
+            </p>
+            <button class="btn primary" id="startQuestionBtn">この問題を開始</button>
+          </div>
+
+          <div id="optionsBox" class="options-list disabled"></div>
+          <div id="fillinBox" class="fillin-list" style="display:none;"></div>
+          <div id="feedback" class="feedback"></div>
+
+          <div class="stop-guide" id="stopGuide" style="display:none;"></div>
+
+          <div class="toolbar q-toolbar">
+            <button class="btn secondary" id="nextBtn" style="display:none;">次へ</button>
+          </div>
+        </div>
+
+        <div id="resultBox" class="card result-box" style="display:none;">
+          <h2>結果</h2>
+          <div class="final-score" id="finalScore">0 / 0</div>
+          <div id="resultSummary" class="result-summary"></div>
+
+          <div class="toolbar q-toolbar">
+            <button class="btn success" id="startWrongOnlyReviewBtn2">間違えた問題だけ再挑戦</button>
+            <button class="btn secondary" id="goTopBtn3">TOPへ戻る</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+<div id="unitModal" class="modal" style="display:none;">
+  <div class="modal-box">
+    <h3>単元の切り替え</h3>
+    <p id="modalText"></p>
+
+    <div class="modal-actions">
+      <button class="btn secondary" id="modalCancel">キャンセル</button>
+      <button class="btn primary" id="modalGo">切り替える</button>
+    </div>
+  </div>
+</div>
+  <script src="questions_keiryo.js?v=5"></script>
+  <script src="questions_seishitsu.js?v=5"></script>
+  <script src="questions_nijikansuu.js?v=2"></script>
+  <script src="questions_kitaichi.js?v=5"></script>
+  <script src="questions_vector.js?v=4"></script>
+  <script src="questions_shisuu.js?v=4"></script>
+  <script src="questions_zahyou.js?v=4"></script>
+  <script src="questions_bisekibun.js?v=8"></script>
+  <script src="questions_zettaichi.js?v=1"></script>
+  <script src="questions_suuretsu.js?v=5"></script>
+  <script src="questions_toukei.js?v=3"></script>
+  <script src="questions_chugaku.js?v=6"></script>
+  <script src="questions_sankaku_1.js?v=20260828-1"></script>
+  <script src="questions_sankaku_2.js?v=20260828-1"></script>
+  <script src="questions_deta_bunseki.js?v=2"></script>
+  <script src="questions_hojosankaku.js?v=2"></script>
+  <script src="questions_houteishiki.js?v=1"></script>
+  <script src="questions_kyokusen.js?v=1"></script>
+  <script src="app.js?v=34"></script>
+<script>
+/* =========================
+   追加: 答え合わせ後の「注目すべき直角三角形」赤線リビール
+   (非破壊の後付けスクリプト。app.js/questions_*.jsの既存ロジックは一切変更しない。
+    問題データに svgReveal フィールドがある問題(現状は補助三角形の発見ユニットのみ)
+    でだけ動作し、それ以外のユニットには一切影響しない。)
+========================= */
+(function setupSvgReveal() {
+  if (typeof MutationObserver === "undefined") return;
+
+  function tryReveal() {
+    var feedbackEl = document.getElementById("feedback");
+    var svgBoxEl = document.getElementById("svgBox");
+    if (!feedbackEl || !svgBoxEl) return;
+    if (feedbackEl.style.display !== "block") return;
+    if (!feedbackEl.innerHTML || !feedbackEl.innerHTML.trim()) return;
+    if (typeof currentQuestion !== "function") return;
+
+    var q;
+    try { q = currentQuestion(); } catch (e) { return; }
+    if (!q || !q.svgReveal) return;
+    if (svgBoxEl.dataset.revealedFor === q.id) return;
+
+    var notice = "※図は位置関係を確認するための模式図です。長さや角度を図から測って解くものではありません。";
+    svgBoxEl.innerHTML =
+      '<div class="diagram-box">' +
+        '<div class="reveal-badge">ここに注目！</div>' +
+        q.svgReveal +
+        '<div class="diagram-notice">' + notice + '</div>' +
+      '</div>';
+    svgBoxEl.dataset.revealedFor = q.id;
+  }
+
+  var target = document.getElementById("feedback");
+  if (!target) return;
+  var observer = new MutationObserver(tryReveal);
+  observer.observe(target, { attributes: true, attributeFilter: ["style"], childList: true, subtree: true });
+})();
+</script>
+<script src="crossunit.js?v=3"></script>
+<script src="unit-strength.js?v=1"></script>
+<script src="sidebar-tabs.js?v=1"></script>
+<script type="module" src="firebase-sync.js?v=1"></script>
+
+
+  <!-- =========================================================
+       単元カードのグループ化（非破壊的な後処理）
+       app.js の buildUnitCards() が #unitCardList に生成したカードを、
+       UNIT_META の group フィールドを見て見出しごとに詰め直すだけ。
+       app.js 本体・カードの中身・onclick には一切触れていないので、
+       このscriptタグを消せば完全に元の一覧に戻る。
+  ========================================================== -->
+  <script>
+  (function () {
+    var GROUP_DEFS = [
+      { id: "foundation", title: "土台",         dot: "purple",  defaultCollapsed: false, hint: "高校範囲に入る前の前提知識" },
+      { id: "1a",         title: "数ⅠA",        dot: "primary", defaultCollapsed: false, hint: "" },
+      { id: "2bc",        title: "数ⅡBC",       dot: "success", defaultCollapsed: false, hint: "" },
+      { id: "drill",      title: "弱点特訓ミニ",  dot: "warning", defaultCollapsed: true,  hint: "模試や本人の申告から作った一点集中パック" }
+    ];
+    var STORE_KEY = "kyotsu_app_unit_groups_v1";
+
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveState(s) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {}
+    }
+
+    function regroup() {
+      var box = document.getElementById("unitCardList");
+      if (!box || typeof UNIT_META === "undefined") return;
+      if (box.dataset.grouped === "1") return;          // 二重適用の防止
+      var cards = box.querySelectorAll(":scope > .unit-card");
+      if (!cards.length) return;                        // まだ生成されていない
+
+      // カードはUNIT_METAのキー順に生成されるので、その順で単元キーを対応づける
+      var keys = Object.keys(UNIT_META);
+      if (cards.length !== keys.length) return;         // 想定外の状態なら何もしない（安全側）
+
+      var state = loadState();
+      var buckets = {};
+      for (var i = 0; i < cards.length; i++) {
+        var g = (UNIT_META[keys[i]] && UNIT_META[keys[i]].group) || "other";
+        (buckets[g] = buckets[g] || []).push(cards[i]);
+      }
+
+      var defs = GROUP_DEFS.slice();
+      // group未設定の単元があってもカードが消えないよう、末尾に受け皿を作る
+      Object.keys(buckets).forEach(function (g) {
+        if (!defs.some(function (d) { return d.id === g; })) {
+          defs.push({ id: g, title: "その他", dot: "primary", defaultCollapsed: false, hint: "" });
+        }
+      });
+
+      var frag = document.createDocumentFragment();
+      defs.forEach(function (def) {
+        var items = buckets[def.id];
+        if (!items || !items.length) return;
+
+        var collapsed = (state[def.id] !== undefined) ? state[def.id] : def.defaultCollapsed;
+
+        var sec = document.createElement("div");
+        sec.className = "unit-group" + (collapsed ? " collapsed" : "");
+
+        var head = document.createElement("h2");
+        head.className = "unit-group-head";
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "unit-group-toggle";
+        btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        btn.innerHTML =
+          '<span class="chev">▼</span>' +
+          '<span class="unit-group-dot dot-' + def.dot + '"></span>' +
+          '<span>' + def.title + '</span>' +
+          '<span class="unit-group-count">' + items.length + '</span>';
+        head.appendChild(btn);
+        if (def.hint) {
+          var hint = document.createElement("span");
+          hint.className = "unit-group-hint";
+          hint.textContent = def.hint;
+          head.appendChild(hint);
+        }
+
+        var grid = document.createElement("div");
+        grid.className = "unit-group-grid";
+        items.forEach(function (c) { grid.appendChild(c); });   // カードは移動するだけ（作り直さない＝onclick維持）
+
+        btn.addEventListener("click", function () {
+          var nowCollapsed = sec.classList.toggle("collapsed");
+          btn.setAttribute("aria-expanded", nowCollapsed ? "false" : "true");
+          var s = loadState();
+          s[def.id] = nowCollapsed;
+          saveState(s);
+        });
+
+        sec.appendChild(head);
+        sec.appendChild(grid);
+        frag.appendChild(sec);
+      });
+
+      box.innerHTML = "";
+      box.appendChild(frag);
+      box.dataset.grouped = "1";
+    }
+
+    // buildUnitCards()が呼ばれるたびに(box.innerHTML=""でgroupedフラグごと消える)組み直す
+    var box = document.getElementById("unitCardList");
+    if (box) {
+      new MutationObserver(function () { regroup(); }).observe(box, { childList: true });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", regroup);
+    } else {
+      regroup();
+    }
+  })();
+  </script>
+</body>
+</html>

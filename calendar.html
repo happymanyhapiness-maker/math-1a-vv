@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>学習日カレンダー | 共通テスト数学</title>
+  <link rel="stylesheet" href="style.css?v=19">
+</head>
+<body>
+  <div class="app-shell">
+
+    <header class="topbar cal-topbar" id="topbar">
+      <div class="brand">
+        <a href="index.html" id="calBackLink" class="cal-back-link">← アプリに戻る</a>
+        <h1>学習日カレンダー</h1>
+      </div>
+    </header>
+
+    <main class="main-layout cal-main">
+      <section class="center-panel cal-shell">
+        <div class="card control-panel cal-card">
+
+          <div class="cal-toolbar">
+            <button type="button" class="btn secondary cal-nav-btn" id="calPrevBtn">戻る</button>
+            <h2 class="cal-month-label" id="calMonthLabel">-</h2>
+            <button type="button" class="btn secondary cal-nav-btn" id="calNextBtn">次へ</button>
+          </div>
+
+          <div class="cal-weekdays">
+            <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+
+          <div class="cal-legend small-text">
+            <span class="cal-legend-item"><span class="cal-dot cal-dot-weak"></span>50%未満</span>
+            <span class="cal-legend-item"><span class="cal-dot cal-dot-mid"></span>50〜74%</span>
+            <span class="cal-legend-item"><span class="cal-dot cal-dot-strong"></span>75%以上</span>
+          </div>
+
+        </div>
+
+        <div class="card control-panel cal-card" id="calDetailPanel">
+          <div id="calDetail">
+            <div class="small-text">カレンダーの日付をクリックすると、その日に学習した内容が表示されます。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <script src="calendar.js?v=1"></script>
+</body>
+</html>
