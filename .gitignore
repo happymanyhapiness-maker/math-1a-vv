@@ -3,5 +3,6 @@ bk_questions_chugaku.js
 index.BAK
 .claude/
 chatgpt/
-tools/
+tools/*
+!tools/verify_sync_merge.js
 模試分析/

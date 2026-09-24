@@ -214,6 +214,30 @@ function mergeUnitData(a, b) {
   });
   stats.clearedCount = Math.max(nT.clearedCount || 0, oT.clearedCount || 0);
 
+  // --- questionHistory: 問題ID→{date, isCorrect}（app.jsが回答のたびに上書きする「前回結果」）---
+  //  ・問題IDごとに date が新しい方を採用
+  //  ・date が同じなら isCorrect:false を優先（「前回正解済み→スキップ」を誤って出さない側に倒す）
+  //  ・キー順は newer の並び → older にしか無いID の順。単一端末なら newer＝local なので
+  //    local の並びがそのまま保たれ、並び順の違いだけで changedLocal → リロード にならない
+  //  ・どちらにも無ければキー自体を作らない（従来の出力を変えない）
+  if (nT.questionHistory || oT.questionHistory) {
+    const nQH = nT.questionHistory || {}, oQH = oT.questionHistory || {};
+    const pick = (x, y) => {
+      if (!y) return x;
+      if (!x) return y;
+      const dx = typeof x.date === "number" ? x.date : 0;
+      const dy = typeof y.date === "number" ? y.date : 0;
+      if (dx !== dy) return dx > dy ? x : y;
+      if (x.isCorrect !== y.isCorrect) return x.isCorrect === false ? x : y;
+      return x;
+    };
+    const qh = {};
+    Object.keys(nQH).forEach(id => { qh[id] = null; });
+    Object.keys(oQH).forEach(id => { qh[id] = null; });
+    Object.keys(qh).forEach(id => { qh[id] = pick(nQH[id], oQH[id]); });
+    stats.questionHistory = qh;
+  }
+
   return { state, stats };
 }
 
