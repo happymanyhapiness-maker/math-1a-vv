@@ -63,8 +63,25 @@ const db = getFirestore(app);
 
 let currentUser = null;
 let pushTimer = null;
-let dirtyUnits = new Set();
+let dirtyUnits = new Set();   // 未送信の単元（メモリだけ。リロード後は起動時の syncAll が local から送り直す）
 let busy = false;
+let savedWhileBusy = false;   // 同期中にアプリが保存した（同期が終わったら、もう一度送る）
+
+const UNSENT_MSG = "未送信のデータがあります。通信が戻ると自動で再送します。";
+
+function schedulePush() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushDirty, PUSH_DELAY);
+}
+
+// 同期中に保存されたものがあれば、同期が終わった後にもう一度送る
+// （失敗しただけの単元は、ここでは送り直さない＝短い間隔で再試行し続けない）
+function afterBusy() {
+  if (savedWhileBusy) {
+    savedWhileBusy = false;
+    schedulePush();
+  }
+}
 
 function isGuardian() {
   return !!currentUser && GUARDIAN_UIDS.indexOf(currentUser.uid) >= 0;
@@ -519,16 +536,19 @@ async function syncAll(opts) {
   console.log("[sync] ローカル既知の単元数:", units.size);
 
   // サーバー側にしか無い単元も拾う
+  let listFailed = false;
   try {
     const snap = await getDocs(collection(db, "users", targetUid(), "units"));
     snap.forEach(d => units.add(d.id));
   } catch (e) {
     // 一覧が取れなくても既知の単元だけで続行するが、原因が見えないと詰むので必ずログに出す
     console.error("[sync] unit一覧の取得に失敗:", e);
+    listFailed = true;   // この場合は最後に「同期済み」で上書きしない
     if (!silent) log("単元一覧の取得に失敗しました（" + ((e && e.code) || e) + "）", "#991b1b");
   }
   console.log("[sync] 同期対象の単元数（サーバー分含む）:", units.size, Array.from(units));
 
+  const failed = [];
   for (const unit of units) {
     try {
       const local = readLocal(unit);
@@ -553,13 +573,21 @@ async function syncAll(opts) {
       }
     } catch (e) {
       console.error("[sync] unit failed: " + unit, e);
+      failed.push(unit);
     }
   }
 
+  // 失敗した単元は未送信として残す（通信が戻ったときや次の保存で pushDirty が送り直す）
+  if (!isGuardian()) failed.forEach(unit => dirtyUnits.add(unit));
   busy = false;
-  const t = new Date().toLocaleTimeString("ja-JP");
-  log("同期済み（" + t + "）", "#166534");
+  if (failed.length > 0) {
+    log(UNSENT_MSG, "#991b1b");
+  } else if (!listFailed) {
+    const t = new Date().toLocaleTimeString("ja-JP");
+    log("同期済み（" + t + "）", "#166534");
+  }
   pushSummary();
+  afterBusy();
 
   // 画面に出ている単元のデータが書き換わったら、1回だけリロードして反映
   // 手動の「今すぐ同期」で押されたときは、リロード回数の制限を無視して必ず反映する
@@ -576,10 +604,11 @@ const setItemRaw = localStorage.setItem.bind(localStorage);
 localStorage.setItem = function (key, value) {
   setItemRaw(key, value);
   // 保護者（閲覧モード）は検証プレイで書き込んでもアップロード対象に積まない
-  if (typeof key === "string" && key.indexOf(PREFIX) === 0 && currentUser && !busy && !isGuardian()) {
+  // 同期中（busy）の保存も取りこぼさない（同期処理自身は setItemRaw で書くのでここには来ない）
+  if (typeof key === "string" && key.indexOf(PREFIX) === 0 && currentUser && !isGuardian()) {
     dirtyUnits.add(key.slice(PREFIX.length));
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(pushDirty, PUSH_DELAY);
+    if (busy) savedWhileBusy = true;
+    schedulePush();
   }
 };
 
@@ -589,6 +618,7 @@ async function pushDirty() {
   const targets = Array.from(dirtyUnits);
   dirtyUnits.clear();
 
+  const failed = [];
   for (const unit of targets) {
     try {
       const local = readLocal(unit);
@@ -598,12 +628,19 @@ async function pushDirty() {
       await writeRemote(unit, merged);
     } catch (e) {
       console.error("[sync] push failed: " + unit, e);
-      log("アップロードに失敗しました（電波が戻れば自動で再送されます）", "#991b1b");
+      failed.push(unit);
     }
   }
+  // 失敗した単元だけ未送信として残す（成功した単元は戻さない）
+  failed.forEach(unit => dirtyUnits.add(unit));
   busy = false;
-  log("同期済み（" + new Date().toLocaleTimeString("ja-JP") + "）", "#166534");
-  pushSummary();
+  if (failed.length > 0) {
+    log(UNSENT_MSG, "#991b1b");
+  } else {
+    log("同期済み（" + new Date().toLocaleTimeString("ja-JP") + "）", "#166534");
+  }
+  pushSummary();   // サマリーは単元本体とは別。失敗しても単元は未送信扱いにしない（次の push で local から計算し直す）
+  afterBusy();
 }
 
 /* =========================================================
@@ -777,6 +814,14 @@ onAuthStateChanged(auth, user => {
 /* ページを離れるとき、未送信ぶんを可能な範囲で送る */
 window.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden" && dirtyUnits.size > 0) {
+    clearTimeout(pushTimer);
+    pushDirty();
+  }
+});
+
+/* 通信が戻ったら、未送信ぶんを送る */
+window.addEventListener("online", () => {
+  if (dirtyUnits.size > 0) {
     clearTimeout(pushTimer);
     pushDirty();
   }

@@ -3,6 +3,8 @@
 // 「学習データをリセット」（resetStatsOnly）が、同期で取り消されないことを確認する回帰テスト。
 // 単元ごとの resetGen（リセット世代）で、古い世代のデータ（remote・別端末）が復活しないこと、
 // 同じ世代同士は今までどおり merge されることを確認する。
+// [14] 以降は、同期の失敗（読み取り・書き込み）で未送信の単元が dirty に残り、
+// 通信の復帰（online）・次の保存・画面を隠す・次回起動で送り直されることを確認する（Phase 6）。
 //
 // 本物の questions_*.js / app.js / firebase-sync.js を node の vm に読み込み、
 // firebase-sync.js の import（Firebase SDK）だけをメモリ上の偽 Firestore に差し替える。
@@ -24,11 +26,17 @@ const J = JSON.stringify;
 
 // ---- 偽 Firestore（端末間で共有）----
 // cloud.offline = true の間は、読み書きが失敗する（オフラインの端末を再現する）
+// cloud.failRead / cloud.failWrite に true か (path) => boolean を入れると、そのパスの読み取り／書き込みだけ失敗する
 function makeCloud() {
   const store = {};
   const writes = [];
-  const cloud = { offline: false };
-  const net = () => { if (cloud.offline) throw new Error("offline"); };
+  const cloud = { offline: false, failRead: false, failWrite: false };
+  const hit = (f, p) => (typeof f === "function" ? f(p) : !!f);
+  const net = (op, p) => {
+    if (cloud.offline) throw new Error("offline");
+    if (op === "read" && hit(cloud.failRead, p)) throw new Error("read failed: " + p);
+    if (op === "write" && hit(cloud.failWrite, p)) throw new Error("write failed: " + p);
+  };
   const snap = (d) => ({ exists: () => !!d, data: () => (d ? JSON.parse(J(d)) : undefined) });
   const fb = {
     initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
@@ -37,16 +45,16 @@ function makeCloud() {
     onAuthStateChanged: () => {},                       // 端末ごとに差し替える
     doc: (_db, ...seg) => ({ path: seg.join("/") }),
     collection: (_db, ...seg) => ({ path: seg.join("/") }),
-    getDoc: async (ref) => { net(); return snap(store[ref.path]); },
+    getDoc: async (ref) => { net("read", ref.path); return snap(store[ref.path]); },
     getDocs: async (col) => {
-      net();
+      net("read", col.path);
       const depth = col.path.split("/").length + 1;
       const docs = Object.keys(store).filter((p) => p.startsWith(col.path + "/") && p.split("/").length === depth)
         .map((p) => ({ id: p.split("/").pop() }));
       return { forEach: (f) => docs.forEach(f) };
     },
     setDoc: async (ref, data, opts) => {
-      net();
+      net("write", ref.path);
       writes.push(ref.path);
       store[ref.path] = opts && opts.merge ? Object.assign({}, store[ref.path] || {}, JSON.parse(J(data))) : JSON.parse(J(data));
     },
@@ -78,10 +86,13 @@ function makeDevice(cloud, clock) {
     if (!(opts && opts.reload)) dev.session = {};
     const session = dev.session;
     const els = {};
+    dev.listeners = {};
     const timers = [];
     const ctx = {
-      console: { log() {}, warn() {}, error: (...a) => { if (!cloud.offline) console.error(...a); } },  // オフライン再現中の想定どおりの失敗ログは出さない
-      alert: () => {}, confirm: () => true, scrollTo: () => {}, addEventListener: () => {},
+      // オフラインや失敗を再現している間の、想定どおりの失敗ログは出さない
+      console: { log() {}, warn() {}, error: (...a) => { if (!cloud.offline && !cloud.failRead && !cloud.failWrite) console.error(...a); } },
+      alert: () => {}, confirm: () => true, scrollTo: () => {},
+      addEventListener: (ev, fn) => { (dev.listeners[ev] = dev.listeners[ev] || []).push(fn); },
       setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
       clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
       setInterval: () => 0, clearInterval: () => {},
@@ -140,6 +151,14 @@ function makeDevice(cloud, clock) {
     }
   };
   dev.local = () => (store[KEY] ? JSON.parse(store[KEY]) : null);
+  // window のイベント（online / visibilitychange）を発火して、非同期処理が落ち着くまで待つ
+  dev.fire = async (ev, visibility) => {
+    if (visibility) dev.ctx.document.visibilityState = visibility;
+    (dev.listeners[ev] || []).forEach((fn) => { dev.ctx.__NOW = clock.now; fn(); });
+    await settle();
+  };
+  dev.dirty = () => dev.run("Array.from(dirtyUnits).sort()");
+  dev.status = () => dev.run("document.getElementById('syncStatus').innerText");
   return dev;
 }
 async function settle() { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); }
@@ -458,6 +477,207 @@ function check(name, cond, detail) {
     check("13-S3-0 前提: B のリセットはオフライン中に gen1 で保存された", w.B.local().state.resetGen === 1 && view(w.B.local()).log === 0);
     await w.B.launch(); await w.A.launch();
     knownLimit("13-S3", w);
+  }
+
+  // ---------------------------------------------------------------
+  // Phase 6：同期の失敗と再送
+  const OK_RE = /^同期済み（/;
+  const UNSENT = "未送信のデータがあります。通信が戻ると自動で再送します。";
+  const OTHER = "keiryo";
+  const OTHER_PATH = "users/" + CHILD_UID + "/units/" + OTHER;
+  const SUMMARY_PATH = "kyotsu-math-summary/" + CHILD_UID;
+  const remoteLog = (cloud, p) => (cloud.store[p || UNIT_PATH] ? JSON.parse(cloud.store[p || UNIT_PATH].payload).state.answerLog.length : 0);
+  const localLog = (dev, unit) => { const raw = dev.store["kyotsu_app_v14_" + (unit || UNIT)]; return raw ? JSON.parse(raw).state.answerLog.length : 0; };
+  // 1問だけ回答して保存する（本物の startExam / answer）
+  function answerOne(dev, ok, unit) {
+    if (unit) dev.run(`selectUnit(${J(unit)})`);
+    dev.run(`startExam(); answer(${ok ? "currentQuestion().correct" : "(currentQuestion().correct + 1) % currentQuestion().a.length"}); exitExamMode();`);
+  }
+  async function synced() {
+    const clock = { now: Date.UTC(2026, 9, 1) };
+    const cloud = makeCloud();
+    const A = makeDevice(cloud, clock);
+    await A.launch();
+    answerOne(A, false); await A.flush();
+    clock.now += 1000;
+    return { clock, cloud, A };
+  }
+  const unitWrites = (p) => (path) => path === (p || UNIT_PATH);
+
+  console.log("\n[14] A: 正常な push");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    check("14-1 回答すると dirty になり、4秒後の push が予約される", J(A.dirty()) === J([UNIT]) && A.timers.some((t) => t.fn && t.ms === 4000));
+    await A.flush();
+    check("14-2 remote に届く", remoteLog(cloud) === localLog(A) && localLog(A) === 2);
+    check("14-3 dirty は空、表示は「同期済み」", A.dirty().length === 0 && OK_RE.test(A.status()), A.status());
+  }
+
+  console.log("\n[15] B: remote の読み取りが失敗");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.failRead = unitWrites(); await A.flush(); cloud.failRead = false;
+    check("15-1 remote は古いまま、local には残る", remoteLog(cloud) === 1 && localLog(A) === 2);
+    check("15-2 dirty に残る", J(A.dirty()) === J([UNIT]));
+    check("15-3 「同期済み」にならず、未送信の表示", A.status() === UNSENT, A.status());
+    await A.flush();
+    check("15-4 失敗しただけなら、短い間隔で再試行し続けない（予約タイマーなし）", !A.timers.some((t) => t.fn) && remoteLog(cloud) === 1);
+  }
+
+  console.log("\n[16] C: 読み取りは成功、書き込みが失敗");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.failWrite = unitWrites(); await A.flush(); cloud.failWrite = false;
+    check("16-1 remote は古いまま、local には残る", remoteLog(cloud) === 1 && localLog(A) === 2);
+    check("16-2 dirty に残る", J(A.dirty()) === J([UNIT]));
+    check("16-3 未送信の表示", A.status() === UNSENT, A.status());
+  }
+
+  console.log("\n[17] D: 失敗 → 通信が戻る（online）→ 新しい操作なしで送られる");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.offline = true; await A.flush(); cloud.offline = false;
+    check("17-0 前提: オフラインで失敗して未送信", J(A.dirty()) === J([UNIT]) && remoteLog(cloud) === 1 && A.status() === UNSENT);
+    await A.fire("online");
+    check("17-1 online で送られる", remoteLog(cloud) === 2);
+    check("17-2 dirty は空、表示は「同期済み」", A.dirty().length === 0 && OK_RE.test(A.status()), A.status());
+    await A.fire("online");
+    check("17-3 未送信が無ければ online でも何もしない", remoteLog(cloud) === 2 && A.dirty().length === 0);
+  }
+
+  console.log("\n[18] E: 失敗 → 次の回答");
+  {
+    const { clock, cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.failWrite = true; await A.flush(); cloud.failWrite = false;
+    clock.now += 1000; answerOne(A, false); await A.flush();
+    check("18-1 同じ単元: 次の push で、失敗した分も新しい分も届く", remoteLog(cloud) === 3 && localLog(A) === 3 && A.dirty().length === 0);
+    clock.now += 1000; answerOne(A, true);
+    cloud.failWrite = unitWrites();                                // kyokusen の書き込みだけ失敗し続ける
+    await A.flush();
+    clock.now += 1000; answerOne(A, false, OTHER); await A.flush();
+    check("18-2 別の単元を回答: その単元は届く", remoteLog(cloud, OTHER_PATH) === 1);
+    check("18-3 失敗が続いている単元は dirty に残ったまま（remote は古い）", J(A.dirty()) === J([UNIT]) && remoteLog(cloud) === 3 && localLog(A) === 4, A.dirty());
+    cloud.failWrite = false;
+    clock.now += 1000; answerOne(A, true, OTHER); await A.flush();
+    check("18-4 失敗が解けた後、別の単元の保存で dirty の単元もまとめて届く", remoteLog(cloud) === 4 && remoteLog(cloud, OTHER_PATH) === 2 && A.dirty().length === 0);
+  }
+
+  console.log("\n[19] F: 未送信がある状態で画面を隠す");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.failWrite = true; await A.fire("visibilitychange", "hidden"); cloud.failWrite = false;
+    check("19-1 hidden で push を試し、失敗したら dirty に残る", J(A.dirty()) === J([UNIT]) && remoteLog(cloud) === 1 && A.status() === UNSENT);
+    await A.fire("visibilitychange", "visible");
+    check("19-2 visible に戻っただけでは送らない", remoteLog(cloud) === 1);
+    await A.fire("visibilitychange", "hidden");
+    check("19-3 次に hidden になったら送られる", remoteLog(cloud) === 2 && A.dirty().length === 0 && OK_RE.test(A.status()));
+  }
+
+  console.log("\n[20] G: 失敗したまま閉じる → 次回起動");
+  {
+    const { clock, cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.failWrite = true; await A.flush(); cloud.failWrite = false;
+    check("20-0 前提: 未送信", remoteLog(cloud) === 1 && localLog(A) === 2);
+    await A.launch();
+    check("20-1 次回起動の syncAll で local の未送信ぶんが届く", remoteLog(cloud) === 2 && OK_RE.test(A.status()), A.status());
+    // 起動時の syncAll でも失敗した場合は「同期済み」にせず、dirty に残して online で送る
+    clock.now += 1000; answerOne(A, true);
+    cloud.failWrite = true; await A.flush();
+    await A.launch();
+    check("20-2 起動時の syncAll でも書き込みに失敗 → 「同期済み」にしない", A.status() === UNSENT, A.status());
+    check("20-3 失敗した単元は dirty に残る", J(A.dirty()) === J([UNIT]));
+    cloud.failWrite = false;
+    await A.fire("online");
+    check("20-4 online で届く", remoteLog(cloud) === 3 && OK_RE.test(A.status()));
+    cloud.failRead = (p) => p.endsWith("/units");               // 単元一覧の取得だけ失敗
+    await A.launch();
+    cloud.failRead = false;
+    check("20-5 単元一覧の取得に失敗 → 「同期済み」で上書きしない", !OK_RE.test(A.status()) && A.status().includes("単元一覧の取得に失敗"), A.status());
+  }
+
+  console.log("\n[21] H: push 中に同じ単元へ保存");
+  {
+    const { clock, cloud, A } = await synced();
+    answerOne(A, true);                                            // 1回目の保存（local 2件）
+    const t = A.timers.find((x) => x.fn && x.ms === 4000);
+    const fn = t.fn; t.fn = null;
+    A.ctx.__NOW = clock.now; fn();                                  // pushDirty 開始（local を読み、remote の読み取りを待っている）
+    check("21-0 前提: push 中（busy）", A.run("busy") === true);
+    clock.now += 1000; answerOne(A, false);                         // push 中に2回目の保存（local 3件）
+    check("21-1 push 中の保存も dirty に積まれる", J(A.dirty()) === J([UNIT]));
+    await settle();
+    check("21-2 進行中の push では2回目の保存より前の分だけが届き、dirty に残る", remoteLog(cloud) === 2 && J(A.dirty()) === J([UNIT]) && localLog(A) === 3);
+    check("21-3 push が終わったら、もう一度送る予約が入る", A.timers.some((x) => x.fn && x.ms === 4000));
+    await A.flush();
+    check("21-4 次の push で2回目の保存も届き、dirty は空", remoteLog(cloud) === 3 && A.dirty().length === 0 && OK_RE.test(A.status()));
+  }
+
+  console.log("\n[22] I: 複数の単元で一部だけ失敗");
+  {
+    const { clock, cloud, A } = await synced();
+    answerOne(A, true);                                            // kyokusen
+    clock.now += 1000; answerOne(A, false, OTHER);                 // keiryo
+    check("22-0 前提: 2単元とも dirty", J(A.dirty()) === J([UNIT, OTHER].sort()));
+    cloud.failWrite = unitWrites(OTHER_PATH); await A.flush(); cloud.failWrite = false;
+    check("22-1 成功した kyokusen は dirty から外れ、remote に届く", !A.dirty().includes(UNIT) && remoteLog(cloud) === 2);
+    check("22-2 失敗した keiryo だけ dirty に残る", J(A.dirty()) === J([OTHER]) && remoteLog(cloud, OTHER_PATH) === 0);
+    check("22-3 表示は「同期済み」ではない", A.status() === UNSENT, A.status());
+    await A.fire("online");
+    check("22-4 online で keiryo も届く", remoteLog(cloud, OTHER_PATH) === 1 && A.dirty().length === 0);
+  }
+
+  console.log("\n[23] サマリーだけ失敗（単元本体は成功）");
+  {
+    const { clock, cloud, A } = await synced();
+    const before = cloud.store[SUMMARY_PATH].totalCount;
+    answerOne(A, true);
+    cloud.failWrite = (p) => p === SUMMARY_PATH; await A.flush(); cloud.failWrite = false;
+    check("23-1 単元本体は届き、dirty は空、表示は「同期済み」（未送信扱いにしない）",
+      remoteLog(cloud) === 2 && A.dirty().length === 0 && OK_RE.test(A.status()), A.status());
+    check("23-2 サマリーは古いまま", cloud.store[SUMMARY_PATH].totalCount === before);
+    clock.now += 1000; answerOne(A, true); await A.flush();
+    check("23-3 次の push でサマリーは local から計算し直される", cloud.store[SUMMARY_PATH].totalCount === localLog(A));
+  }
+
+  console.log("\n[24] J: リセットの push が失敗");
+  {
+    const { cloud, A } = await synced();
+    A.run("resetStatsOnly()");
+    cloud.failWrite = true; await A.flush(); cloud.failWrite = false;
+    check("24-1 dirty に残り、remote は gen0 のまま", J(A.dirty()) === J([UNIT]) && cloud.unit().state.resetGen === undefined && remoteLog(cloud) === 1);
+    await A.fire("online");
+    check("24-2 online で gen1 の空の状態が届く", cloud.unit().state.resetGen === 1 && remoteLog(cloud) === 0);
+    // 次回起動でも同じ
+    const w = await synced();
+    w.A.run("resetStatsOnly()");
+    w.cloud.failWrite = true; await w.A.flush(); w.cloud.failWrite = false;
+    await w.A.launch();
+    check("24-3 失敗したまま次回起動しても gen1 が届き、gen0 は戻らない",
+      w.cloud.unit().state.resetGen === 1 && remoteLog(w.cloud) === 0 && view(w.A.local()).log === 0);
+  }
+
+  console.log("\n[25] K: 卒業の push が失敗");
+  {
+    const { clock, cloud, A } = await synced();
+    const id = A.run(`UNIT_META.${UNIT}.questions[0].id`);
+    const review = () => A.run(`reviewSessionIds = [${J(id)}]; state.mode = "review"; state.index = 0; answer(currentQuestion().correct); finish(); exitExamMode();`);
+    for (let i = 0; i < 3; i++) { clock.now += 31 * DAY; review(); await A.flush(); }
+    clock.now += 31 * DAY; review();                               // 4回目で卒業
+    cloud.failWrite = true; await A.flush(); cloud.failWrite = false;
+    const inRemoteWrong = () => cloud.unit().state.wrong.some((q) => q.id === id);
+    check("25-1 dirty に残り、remote は卒業前（wrong にあり）", J(A.dirty()) === J([UNIT]) && inRemoteWrong());
+    await A.fire("online");
+    check("25-2 online で卒業が届く（remote の wrong から外れ、graduatedAt あり）",
+      !inRemoteWrong() && !!(cloud.unit().state.graduatedAt || {})[id]);
+    await A.launch();
+    check("25-3 次回起動しても wrong に戻らない", !A.local().state.wrong.some((q) => q.id === id) && !inRemoteWrong());
   }
 
   console.log("\n結果: " + pass + " OK / " + fail + " NG");
