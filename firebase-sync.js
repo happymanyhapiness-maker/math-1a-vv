@@ -119,6 +119,13 @@ function mergeUnitData(a, b) {
   if (!a) return b;
   if (!b) return a;
 
+  // --- resetGen: 単元の「リセット世代」（学習データをリセットするたびに +1。無ければ 0）---
+  //  世代が違えば、新しい世代の側をまるごと採用し、古い世代の学習データは一切 merge しない
+  //  （リセットより前のデータが remote や別端末から復活しないように）。同じ世代なら通常の merge。
+  const genOf = d => (d.state && typeof d.state.resetGen === "number" && d.state.resetGen > 0) ? Math.floor(d.state.resetGen) : 0;
+  const genA = genOf(a), genB = genOf(b);
+  if (genA !== genB) return genA > genB ? a : b;
+
   // newer / older を決める
   const fa = freshness(a), fb = freshness(b);
   const newer = (fa >= fb) ? a : b;

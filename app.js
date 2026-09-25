@@ -2888,16 +2888,31 @@ function resetStatsOnly() {
   const strict = state.strict;
 
   const ok = confirm(
-    "この単元の成績・履歴・復習リストをリセットします。\nよろしいですか？"
+    "この単元の学習データをすべてリセットします。成績・解答履歴・復習記録が消え、学習カレンダーや全体進捗にも反映されます。よろしいですか？"
   );
 
   if (!ok) return;
 
+  // リセット世代：同期で、リセット前の世代のデータ（remote や別端末）が復活しないようにする。
+  // 無い・不正な値は 0 扱い。defaultState には入れず、リセットしたときだけ state に付ける。
+  // 基準は「画面のメモリ」と「保存データ」の大きい方（起動時の同期で保存データだけ新しい世代に
+  // なっていて、リロードしていない画面のメモリが古い世代のままの場合に、同じ世代を作らないため）。
+  const genOf = (s) => (s && typeof s.resetGen === "number" && s.resetGen > 0 ? Math.floor(s.resetGen) : 0);
+  let storedGen = 0;
+  try { storedGen = genOf((JSON.parse(localStorage.getItem(STORAGE_PREFIX + unit)) || {}).state); } catch (e) {}
+  const resetGen = Math.max(genOf(state), storedGen) + 1;
+
   state = defaultState(unit);
   stats = defaultStats();
+  state.resetGen = resetGen;
 
   // 時間制限の設定は学習データではないので維持する
   state.strict = strict;
+
+  // この単元のメモリ上のセッション情報（復習の固定リスト・今回の試験の誤答）も破棄する
+  reviewSessionIds = null;
+  reviewSessionFromExam = false;
+  examWrongIds = null;
 
   applyUnitUI(unit);
   update();

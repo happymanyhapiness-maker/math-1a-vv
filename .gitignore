@@ -6,4 +6,5 @@ chatgpt/
 tools/*
 !tools/verify_sync_merge.js
 !tools/verify_review_session.js
+!tools/verify_reset_sync.js
 模試分析/
