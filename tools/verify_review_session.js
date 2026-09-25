@@ -232,7 +232,7 @@ console.log("\n[5] ほかのモードの出題順は変わらない");
   check("5-2 ステージ限定", J(play(env, ["c", "c", "c", "c"]).shown) === J(stageIds));
   setup(env, "kyokusen", [A, B, C], () => 3);
   env.run("startTipReview()");
-  check("5-3 TIPS（卒業条件の問題でも tipList から減らない）", J(play(env, ["c", "w", "s"]).shown) === J([A, B, C]));
+  check("5-3 TIPS（開始時の wrong の順）", J(play(env, ["c", "w", "s"]).shown) === J([A, B, C]));
   setup(env, "kyokusen", [], due0);
   env.run("startUnansweredOnly()");
   const snap = env.run("state.unansweredSnapshot.map((q) => q.id)");
@@ -388,6 +388,105 @@ console.log("\n[7] 通常試験で長期の wrong を消さない／結果画面
   reloaded.run(`selectUnit("kyokusen")`);
   check("7-22 リロード後も長期 wrong は A・B のまま", J(reloaded.run("state.wrong.map((q) => q.id)")) === J([A, B]));
   check("7-23 リロード後は examWrongIds が無い", reloaded.run("examWrongIds") === null);
+}
+
+console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）のコツを、最新の問題データで読む");
+{
+  const syncSrc = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
+  const mergeUnitData = new Function(syncSrc.slice(syncSrc.indexOf("function freshness"),
+    syncSrc.indexOf("/* =========================================================\n   Firestore 入出力")) + ";return mergeUnitData;")();
+  const stored = () => JSON.parse(env.store["kyotsu_app_v14_kyokusen"]);
+  // UI と同じく、TIPS は表示 →「次へ」だけ（選択肢・開始ボタンは出ない）
+  function tipsRun(mid) {
+    const got = []; env.ctx.alert = (m) => got.push(m);
+    env.run("startTipReview()");
+    const shown = [], tips = [], progress = [];
+    const logBefore = env.run("state.answerLog.length");
+    for (let i = 0; ; i++) {
+      const q = env.run("currentQuestion()");
+      if (!q || env.run("state.mode") !== "tips") break;
+      shown.push(q.id);
+      tips.push(env.run("el('feedback').innerHTML"));
+      progress.push(env.run("el('progressLabel').innerText"));
+      if (mid && i === 0) mid();
+      env.run("nextQuestion()");
+    }
+    env.ctx.alert = () => {};
+    return { alert: got[0] || null, shown, tips, progress, finished: env.run("state.finished"), answerLogAdded: env.run("state.answerLog.length") - logBefore };
+  }
+  const canonTip = (id) => env.run(`UNIT_META.kyokusen.questions.find((q) => q.id === ${J(id)}).explain.tip`);
+
+  // A. wrong との連動
+  setup(env, "kyokusen", [A, B, C], () => 0);
+  const a = tipsRun();
+  check("8-A wrong=[A,B,C] → TIPS は A → B → C の3件", J(a.shown) === J([A, B, C]) && a.finished === true, a.shown);
+  check("8-A 各カードに「◆ コツ」が出て、answerLog は増えない", a.tips.every((h) => h.includes("◆ コツ")) && a.answerLogAdded === 0);
+
+  // B. 卒業と連動
+  setup(env, "kyokusen", [A], () => 0);
+  check("8-B 卒業前: TIPS に A が出る", J(tipsRun().shown) === J([A]));
+  for (let i = 0; i < 4; i++) { env.ctx.__NOW += 31 * 86400000; env.run("startDueReview()"); env.run("answer(currentQuestion().correct)"); env.run("nextQuestion()"); }
+  check("8-B 前提: A は間隔復習で卒業して wrong から外れた", !env.run("state.wrong.map((q) => q.id)").includes(A) && env.run(`typeof state.graduatedAt[${J(A)}]`) === "number");
+  check("8-B 卒業後: legacy の tipList には A が残っている", env.run("state.tipList.map((q) => q.id)").includes(A));
+  const b2 = tipsRun();
+  check("8-B 卒業後: TIPS に A は出ない（「復習するTIPSがありません」）", b2.shown.length === 0 && b2.alert === "復習するTIPSがありません", b2);
+
+  // C. 新しい誤答
+  setup(env, "kyokusen", [A, B], () => 0);
+  env.run("startExam()");
+  play(env, ["c", "c", "w", "c"]);                                   // C を新しく誤答
+  check("8-C 前提: wrong は A・B・C", J(env.run("state.wrong.map((q) => q.id)")) === J([A, B, C]));
+  check("8-C 次の TIPS は A・B・C", J(tipsRun().shown) === J([A, B, C]));
+
+  // D. 通常試験開始でも wrong は残る → TIPS も A・B（未ログイン／ログインで同じ）
+  setup(env, "kyokusen", [A, B], () => 0);
+  const remoteBefore = stored();
+  env.run("startExam()"); env.run("exitExamMode()");
+  check("8-D 試験開始後の TIPS は A・B（未ログイン）", J(tipsRun().shown) === J([A, B]));
+  check("8-D 前提: legacy tipList は試験開始で空（今回は変えていない）", env.run("state.tipList.length") === 0);
+  const m = mergeUnitData(stored(), remoteBefore);                   // ログイン中の次回起動
+  env.store["kyotsu_app_v14_kyokusen"] = J(m);
+  env.run(`selectUnit("kyokusen")`);
+  check("8-D ログイン中（merge 後）も TIPS は A・B", J(tipsRun().shown) === J([A, B]));
+
+  // E. tipList とは独立
+  setup(env, "kyokusen", [A], () => 0);
+  env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1], qs[2]]; save(); })()`);
+  check("8-E 前提: wrong=[A], tipList=[B,C]", J(env.run("state.tipList.map((q) => q.id)")) === J([B, C]));
+  check("8-E TIPS は A だけ（legacy tipList に引っ張られない）", J(tipsRun().shown) === J([A]));
+  setup(env, "kyokusen", [], () => 0);
+  env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1]]; save(); })()`);
+  const e2 = tipsRun();
+  check("8-E wrong が空なら tipList に何があっても「復習するTIPSがありません」", e2.alert === "復習するTIPSがありません" && e2.shown.length === 0);
+
+  // F. 最新の問題データ（wrong に保存された古いコピーの tip ではなく、現在の問題データの tip）
+  setup(env, "kyokusen", [A], () => 0);
+  env.run(`(function () {
+    const old = (q) => Object.assign(JSON.parse(JSON.stringify(q)), { explain: Object.assign({}, q.explain, { tip: "古いコツ（保存されたコピー）" }) });
+    state.wrong = state.wrong.map(old);
+    state.tipList = state.tipList.map(old);
+    save();
+  })()`);
+  const f = tipsRun();
+  check("8-F 表示されるのは現在の問題データの tip", f.tips[0].includes(env.run(`formatText(${J(canonTip(A))})`)) && !f.tips[0].includes("古いコツ"), f.tips[0].slice(0, 120));
+
+  // G. 固定リスト：開始後に wrong が変わっても、開始時点の対象を順番どおり1回ずつ
+  setup(env, "kyokusen", [A, B, C], () => 0);
+  const g = tipsRun(() => env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.wrong = [qs[3], qs[2]]; })()`));
+  check("8-G 開始後に wrong が [D,C] に変わっても A → B → C", J(g.shown) === J([A, B, C]), g.shown);
+  check("8-G 各カードのコツはその問題のもの", g.shown.every((id, i) => g.tips[i].includes(env.run(`formatText(${J(canonTip(id))})`))));
+  check("8-G 進捗表示は 1/3 → 2/3 → 3/3", J(g.progress) === J(["1 / 3", "2 / 3", "3 / 3"]), g.progress);
+  check("8-G 終了で固定リストは破棄", env.run("reviewSessionIds") === null);
+
+  // リロード相当：保存された mode が tips でも、固定リストが無ければ何も出さない（legacy tipList に戻らない）
+  setup(env, "kyokusen", [A, B], () => 0);
+  env.run("startTipReview()");
+  const reloaded = makeContext();
+  Object.assign(reloaded.store, env.store);
+  reloaded.run(`selectUnit("kyokusen")`);
+  check("8-H リロード後: 保存された mode は tips、currentList は空（tipList に戻らない）",
+    reloaded.run("state.mode") === "tips" && reloaded.run("currentList().length") === 0 && reloaded.run("state.tipList.length") > 0);
+  env.run("exitExamMode()");
 }
 
 console.log("\n結果: " + pass + " OK / " + fail + " NG");

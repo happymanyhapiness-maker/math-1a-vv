@@ -606,7 +606,7 @@ function loadUnit(unit) {
 /* =========================
    問題取得
 ========================= */
-// 「間違えた問題だけ」「今日の復習」の出題順（問題ID）。セッション開始時に固定する。
+// 「間違えた問題だけ」「今日の復習」「TIPSだけ復習」の出題順（問題ID）。セッション開始時に固定する。
 // 回答で dueAt が延びたり、卒業で wrong から外れたり、途中で別の問題の期限が来たりしても
 // セッション中の並びは変えない（リストが縮む・増えると state.index がずれて、問題が飛んだり
 // 画面と別の問題として採点されたりするため）。メモリ上だけの一時データで、保存・同期はしない。
@@ -625,8 +625,8 @@ function reviewSessionList() {
 }
 
 function currentList() {
-  if (state.mode === "review" || state.mode === "dueReview") return reviewSessionList();
-  if (state.mode === "tips") return state.tipList;
+  // TIPSだけ復習も、開始時点の state.wrong（まだ苦手な問題）を固定リストにして最新の問題データから表示する
+  if (state.mode === "review" || state.mode === "dueReview" || state.mode === "tips") return reviewSessionList();
   if (state.mode === "unanswered") return state.unansweredSnapshot;
   if (state.mode === "stage") {
     return UNIT_META[state.unit].questions.filter((q) => q.stage === state.stageFilter);
@@ -2827,12 +2827,15 @@ function startDueReview() {
   save();
 }
 
+// TIPSだけ復習：長期の復習対象（state.wrong）に残っている問題のコツを読み返す。
+// 卒業して wrong から外れた問題は対象外。state.tipList（旧仕様のリスト）は表示には使わない。
 function startTipReview() {
-  if (!state.tipList.length) {
+  if (!state.wrong.length) {
     alert("復習するTIPSがありません");
     return;
   }
 
+  reviewSessionIds = state.wrong.map((q) => q.id);
   state.mode = "tips";
   state.index = 0;
   state.correct = 0;
