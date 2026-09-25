@@ -5,4 +5,5 @@ index.BAK
 chatgpt/
 tools/*
 !tools/verify_sync_merge.js
+!tools/verify_review_session.js
 模試分析/

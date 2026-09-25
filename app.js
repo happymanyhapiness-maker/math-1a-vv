@@ -605,9 +605,20 @@ function loadUnit(unit) {
 /* =========================
    問題取得
 ========================= */
+// 「間違えた問題だけ」「今日の復習」の出題順（問題ID）。セッション開始時に固定する。
+// 回答で dueAt が延びたり、卒業で wrong から外れたり、途中で別の問題の期限が来たりしても
+// セッション中の並びは変えない（リストが縮む・増えると state.index がずれて、問題が飛んだり
+// 画面と別の問題として採点されたりするため）。メモリ上だけの一時データで、保存・同期はしない。
+let reviewSessionIds = null;
+
+function reviewSessionList() {
+  if (!reviewSessionIds) return []; // セッション外（リロード後など）は動的リストに戻さず「問題なし」扱い
+  const qs = UNIT_META[state.unit].questions;
+  return reviewSessionIds.map((id) => qs.find((q) => q.id === id) || state.wrong.find((q) => q && q.id === id));
+}
+
 function currentList() {
-  if (state.mode === "review") return state.wrong;
-  if (state.mode === "dueReview") return dueReviewList();
+  if (state.mode === "review" || state.mode === "dueReview") return reviewSessionList();
   if (state.mode === "tips") return state.tipList;
   if (state.mode === "unanswered") return state.unansweredSnapshot;
   if (state.mode === "stage") {
@@ -650,6 +661,7 @@ function enterExamMode() {
 
 function exitExamMode() {
   clearInterval(state.timer);
+  reviewSessionIds = null; // TOPへ戻る・単元切替で復習セッションの固定リストを破棄
   document.body.classList.remove("exam-mode");
 
   if (el("examTopbar")) el("examTopbar").style.display = "none";
@@ -2566,6 +2578,7 @@ function nextQuestion() {
 ========================= */
 function finish() {
   clearInterval(state.timer);
+  reviewSessionIds = null; // 復習セッションの固定リストを破棄
 
   // すでに終了済みなら、履歴を二重追加しない
   if (!state.finished) {
@@ -2742,6 +2755,7 @@ function startWrongOnlyReview() {
     return;
   }
 
+  reviewSessionIds = state.wrong.map((q) => q.id);
   state.mode = "review";
   state.index = 0;
   state.correct = 0;
@@ -2768,6 +2782,7 @@ function startDueReview() {
     return;
   }
 
+  reviewSessionIds = due.map((q) => q.id);
   state.mode = "dueReview";
   state.index = 0;
   state.correct = 0;
