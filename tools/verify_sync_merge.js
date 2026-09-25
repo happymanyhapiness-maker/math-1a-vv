@@ -411,7 +411,7 @@ console.log("\n[13] ④-2 端末1台：local=卒業済み / remote=卒業前（s
   check("13-1 wrong へ戻らない", !ids(m.state.wrong).includes("k1"), ids(m.state.wrong));
   check("13-2 reviewMeta へ戻らない", !m.state.reviewMeta.k1, m.state.reviewMeta);
   check("13-3 graduatedAt が残る", m.state.graduatedAt.k1 === local.state.graduatedAt.k1);
-  check("13-4 tipList は従来どおり残る（卒業では消さない仕様）", ids(m.state.tipList).includes("k1"));
+  check("13-4 merge 結果に旧仕様の tipList は無い", !("tipList" in m.state));
   check("13-5 clearedCount は 1 のまま", m.stats.clearedCount === 1);
 
   console.log("\n[14] ④-2 マージ順序・冪等性");
@@ -528,7 +528,7 @@ console.log("\n[19] ④-2 卒業していない問題の merge は変わらな�
   const a2 = C(a.data), b2 = C(b.data);
   a2.state.graduatedAt = { k9: NOW };
   const m2 = mergeUnitData(a2, b2);
-  check("19-4 他の問題の graduatedAt は未卒業問題の wrong/reviewMeta/tipList/stats に影響しない",
+  check("19-4 他の問題の graduatedAt は未卒業問題の wrong/reviewMeta/stats に影響しない",
     same(m2.state.wrong, m.state.wrong) && same(m2.state.reviewMeta, m.state.reviewMeta) &&
     same(m2.state.tipList, m.state.tipList) && same(m2.stats, m.stats));
 }
@@ -558,7 +558,7 @@ console.log("\n[20] ④-2 卒業より後の新しい活動がある場合（既
   check("20-4 卒業後に lastSeenAt が更新された reviewMeta は残る", !!m3.state.reviewMeta.k3 && ids(m3.state.wrong).includes("k3"));
 }
 
-console.log("\n[21] startExam() の wrong/tipList 消去は従来どおり（graduatedAt で挙動を変えない）");
+console.log("\n[21] startExam() 後の merge（graduatedAt で挙動を変えない）");
 {
   // 未卒業の k2 が remote にあり、local で startExam → 次回起動の merge で従来どおり戻る
   const app = makeReviewApp();
@@ -567,9 +567,9 @@ console.log("\n[21] startExam() の wrong/tipList 消去は従来どおり（gra
   withClock(() => app.startExam());
   reviewAnswer(app, "k5", true, "normal");
   const m = mergeUnitData(C(app.data), remote);
-  check("21-1 未卒業の k2 は従来どおり wrong/tipList に戻る", ids(m.state.wrong).includes("k2") && ids(m.state.tipList).includes("k2"));
-  // 卒業済みの k1 の tipList（卒業では消えない）を startExam で消した場合。
-  // tipList は従来どおり「和集合の reviewMeta に k1 があるか」で戻すかが決まる：
+  check("21-1 未卒業の k2 は wrong に残る（Phase 4A 以降、試験開始で wrong は消えない）", ids(m.state.wrong).includes("k2") && !("tipList" in m.state));
+  // 卒業済みの k1 について、startExam 後の local と remote（卒業前／卒業後）を merge した場合
+  // （旧仕様の tipList は撤去済みなので、どちらでも merge 結果に出てこない）：
   //  (a) remote が卒業前（reviewMeta.k1 あり）→ 従来どおり戻る
   //  (b) remote も卒業後（どちらの reviewMeta にも k1 なし）→ 従来どおり戻らない
   const g = nearGraduation("k1");
@@ -580,9 +580,9 @@ console.log("\n[21] startExam() の wrong/tipList 消去は従来どおり（gra
   reviewAnswer(g, "k5", true, "normal");
   const mPre = mergeUnitData(C(g.data), remotePre);
   const mPost = mergeUnitData(C(g.data), remotePost);
-  check("21-2 (a) remote が卒業前: tipList の k1 は従来どおり戻る", ids(mPre.state.tipList).includes("k1"));
+  check("21-2 (a) remote が卒業前でも merge 結果に tipList は無い", !("tipList" in mPre.state));
   check("21-2 (a) remote が卒業前: wrong の k1 は戻らない（④-2 の修正）", !ids(mPre.state.wrong).includes("k1"));
-  check("21-3 (b) remote も卒業後: tipList の k1 は従来どおり戻らない", !ids(mPost.state.tipList).includes("k1"));
+  check("21-3 (b) remote も卒業後: merge 結果に tipList は無い", !("tipList" in mPost.state));
   check("21-4 startExam は graduatedAt に触れない", typeof g.data.state.graduatedAt.k1 === "number");
 }
 
@@ -685,7 +685,7 @@ console.log("\n[23] 境界条件");
   check("23-3 対象ログの後にもう一度卒業 → 戻らない", !k1View(m2).inWrong && !k1View(m2).meta && same(k1View(m2), k1View(m3)));
 }
 
-console.log("\n[24] 卒業と無関係な問題・tipList は変わらない");
+console.log("\n[24] 卒業と無関係な問題は変わらない");
 {
   // B で k1（卒業後の誤答）と k2（普通の誤答）
   const d = twoDevices();
@@ -701,7 +701,7 @@ console.log("\n[24] 卒業と無関係な問題・tipList は変わらない");
   const mNo = mergeUnitData(C(d2.B.data), C(d2.A.data));
   check("24-1 k2 の wrong/reviewMeta は k1 の救済と無関係", same(m.state.reviewMeta.k2, mNo.state.reviewMeta.k2) && ids(m.state.wrong).includes("k2"));
   check("24-2 stats は変わらない", same(m.stats, mNo.stats));
-  check("24-3 tipList は救済の有無に関係なく同じ（和集合 reviewMeta で判定のまま）", same(ids(m.state.tipList), ids(mNo.state.tipList)));
+  check("24-3 救済の有無に関係なく merge 結果に tipList は無い", !("tipList" in m.state) && !("tipList" in mNo.state));
   check("24-4 救済された k1 以外の reviewMeta は一致", same(noK1(m).state.reviewMeta, noK1(mNo).state.reviewMeta));
 }
 

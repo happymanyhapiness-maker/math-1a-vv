@@ -76,14 +76,13 @@ function check(name, cond, detail) {
   else { fail++; console.log("  NG   " + name + (detail !== undefined ? "  → " + J(detail) : "")); }
 }
 
-// 単元を選び、wrong / tipList / reviewMeta を仕込む（全問 streak を指定、dueAt は過去）
+// 単元を選び、wrong / reviewMeta を仕込む（全問 streak を指定、dueAt は過去）
 function setup(env, unit, wrongIds, streakOf, dueAtOf) {
   env.run(`localStorage.clear && 0; selectUnit(${J(unit)});`);
   env.ctx.__setup = { wrongIds, streaks: wrongIds.map(streakOf), dues: wrongIds.map(dueAtOf || (() => env.ctx.__NOW - 1000)) };
   env.run(`(function () {
     const s = __setup, qs = UNIT_META[state.unit].questions, byId = (id) => qs.find((q) => q.id === id);
     state.wrong = s.wrongIds.map(byId);
-    state.tipList = s.wrongIds.map(byId);
     state.reviewMeta = {};
     s.wrongIds.forEach((id, i) => { state.reviewMeta[id] = { streak: s.streaks[i], dueAt: s.dues[i], lastSeenAt: __NOW - 86400000 }; });
     state.graduatedAt = {};
@@ -274,7 +273,7 @@ console.log("\n[7] 通常試験で長期の wrong を消さない／結果画面
   const syncSrc = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
   const mergeUnitData = new Function(syncSrc.slice(syncSrc.indexOf("function freshness"),
     syncSrc.indexOf("/* =========================================================\n   Firestore 入出力")) + ";return mergeUnitData;")();
-  const view = () => env.run(`({ wrong: state.wrong.map((q) => q.id), tipList: state.tipList.map((q) => q.id),
+  const view = () => env.run(`({ wrong: state.wrong.map((q) => q.id), tipList: state.tipList,
     meta: Object.keys(state.reviewMeta), graduatedAt: J(state.graduatedAt), cleared: stats.clearedCount })`.replace("J(", "JSON.stringify("));
   const resultRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`el("startWrongOnlyReviewBtn2").onclick()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
   const topRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`(function () { const s = el("practiceModeSelect"); s.value = "wrong"; s.onchange.call(s); })()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
@@ -292,7 +291,7 @@ console.log("\n[7] 通常試験で長期の wrong を消さない／結果画面
   check("7-1 試験開始で長期の wrong（A・B）は消えない", J(afterStart.wrong) === J([A, B]), afterStart);
   check("7-2 reviewMeta / graduatedAt / clearedCount も変わらない",
     J(afterStart.meta) === J(before.meta) && afterStart.graduatedAt === before.graduatedAt && afterStart.cleared === before.cleared);
-  check("7-3 tipList は従来どおり試験開始で空（今回は変更しない）", J(afterStart.tipList) === J([]));
+  check("7-3 試験開始でも旧仕様の tipList は作られない", afterStart.tipList === undefined);
   play(env, ["c", "c", "w", "c"]);                                    // 通常試験で C だけ誤答
   check("7-4 試験後の長期 wrong は A・B・C", J(view().wrong) === J([A, B, C]), view().wrong);
   check("7-5 通常試験は最後まで進んで終了", env.run("state.finished") === true && env.run("state.mode") === "normal");
@@ -427,7 +426,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   check("8-B 卒業前: TIPS に A が出る", J(tipsRun().shown) === J([A]));
   for (let i = 0; i < 4; i++) { env.ctx.__NOW += 31 * 86400000; env.run("startDueReview()"); env.run("answer(currentQuestion().correct)"); env.run("nextQuestion()"); }
   check("8-B 前提: A は間隔復習で卒業して wrong から外れた", !env.run("state.wrong.map((q) => q.id)").includes(A) && env.run(`typeof state.graduatedAt[${J(A)}]`) === "number");
-  check("8-B 卒業後: legacy の tipList には A が残っている", env.run("state.tipList.map((q) => q.id)").includes(A));
+  check("8-B 卒業後も旧仕様の tipList は無い", env.run("state.tipList") === undefined);
   const b2 = tipsRun();
   check("8-B 卒業後: TIPS に A は出ない（「復習するTIPSがありません」）", b2.shown.length === 0 && b2.alert === "復習するTIPSがありません", b2);
 
@@ -443,7 +442,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   const remoteBefore = stored();
   env.run("startExam()"); env.run("exitExamMode()");
   check("8-D 試験開始後の TIPS は A・B（未ログイン）", J(tipsRun().shown) === J([A, B]));
-  check("8-D 前提: legacy tipList は試験開始で空（今回は変えていない）", env.run("state.tipList.length") === 0);
+  check("8-D 試験開始でも旧仕様の tipList は作られない", env.run("state.tipList") === undefined);
   const m = mergeUnitData(stored(), remoteBefore);                   // ログイン中の次回起動
   env.store["kyotsu_app_v14_kyokusen"] = J(m);
   env.run(`selectUnit("kyokusen")`);
@@ -452,7 +451,8 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   // E. tipList とは独立
   setup(env, "kyokusen", [A], () => 0);
   env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1], qs[2]]; save(); })()`);
-  check("8-E 前提: wrong=[A], tipList=[B,C]", J(env.run("state.tipList.map((q) => q.id)")) === J([B, C]));
+  check("8-E 前提: wrong=[A]、メモリに古い tipList=[B,C] を仕込んだ", J(env.run("state.tipList.map((q) => q.id)")) === J([B, C]));
+  check("8-E 保存データには tipList を書かない（save で落とす）", !("tipList" in JSON.parse(env.store["kyotsu_app_v14_kyokusen"]).state));
   check("8-E TIPS は A だけ（legacy tipList に引っ張られない）", J(tipsRun().shown) === J([A]));
   setup(env, "kyokusen", [], () => 0);
   env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1]]; save(); })()`);
@@ -464,7 +464,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   env.run(`(function () {
     const old = (q) => Object.assign(JSON.parse(JSON.stringify(q)), { explain: Object.assign({}, q.explain, { tip: "古いコツ（保存されたコピー）" }) });
     state.wrong = state.wrong.map(old);
-    state.tipList = state.tipList.map(old);
+    state.tipList = state.wrong.map(old);   // 古い tipList（古いコツ）をメモリに仕込む
     save();
   })()`);
   const f = tipsRun();
@@ -484,8 +484,8 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   const reloaded = makeContext();
   Object.assign(reloaded.store, env.store);
   reloaded.run(`selectUnit("kyokusen")`);
-  check("8-H リロード後: 保存された mode は tips、currentList は空（tipList に戻らない）",
-    reloaded.run("state.mode") === "tips" && reloaded.run("currentList().length") === 0 && reloaded.run("state.tipList.length") > 0);
+  check("8-H リロード後: 保存された mode は tips、currentList は空（tipList は無い）",
+    reloaded.run("state.mode") === "tips" && reloaded.run("currentList().length") === 0 && reloaded.run("state.tipList") === undefined);
   env.run("exitExamMode()");
 }
 

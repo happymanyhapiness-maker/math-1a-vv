@@ -61,7 +61,6 @@
         log: log,
         history: Array.isArray(st.history) ? st.history : [],
         wrongCount: Array.isArray(st.wrong) ? st.wrong.length : 0,
-        tipCount: Array.isArray(st.tipList) ? st.tipList.length : 0,
         stats: obj.stats || null,
         totalQuestions: (meta()[unit] && Array.isArray(meta()[unit].questions))
           ? meta()[unit].questions.length : null

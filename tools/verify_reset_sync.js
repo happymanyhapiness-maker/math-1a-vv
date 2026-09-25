@@ -237,7 +237,7 @@ function check(name, cond, detail) {
     check("1-1 前提: リセット前は学習データあり、resetGen 無し", before.log > 0 && before.wrong.length === 2 && before.gen === "(無し)", before);
     check("1-2 リセット後は resetGen 1 の空の状態", J(view(after)) === J({ gen: 1, wrong: [], meta: [], log: 0, hist: 0, ga: [], qh: 0, cleared: 0, stageT: 0 }), view(after));
     check("1-3 strict は保持", after.state.strict === true);
-    check("1-4 tipList・lastShuffle・unansweredSnapshot・mode も初期化", after.state.tipList.length === 0 &&
+    check("1-4 lastShuffle・unansweredSnapshot・mode も初期化（旧仕様の tipList は無い）", !("tipList" in after.state) &&
       Object.keys(after.state.lastShuffle).length === 0 && after.state.unansweredSnapshot.length === 0 && after.state.mode === "normal");
     check("1-5 メモリ上のセッション変数も破棄", A.run("reviewSessionIds === null && reviewSessionFromExam === false && examWrongIds === null"));
     check("1-6 resetGen 以外の state のキーは defaultState と同じ（resetGen は最後に付く）",
@@ -890,6 +890,122 @@ function check(name, cond, detail) {
     cloud.stats = { getDocs: 0, getDoc: 0, docReads: 0, missingReads: 0, bytes: 0, perPath: {} };
     await A.flush();
     check("35-1 pushDirty は getDocs を使わず、単元の getDoc 1回", cloud.stats.getDocs === 0 && cloud.stats.perPath[UNIT_PATH] === 1, cloud.stats);
+  }
+
+  // ---------------------------------------------------------------
+  // Phase 7A-2a：旧仕様の tipList の撤去（作らない・読まない・merge しない・保存しない）
+  const qObjs = (dev, ids) => dev.run(`UNIT_META.kyokusen.questions.filter((q) => ${J(ids)}.includes(q.id))`);
+  const hasTip = (d) => !!(d && d.state && "tipList" in d.state);
+  const withTip = (payloadObj, tip) => { const d = JSON.parse(J(payloadObj)); d.state.tipList = tip; return d; };
+
+  console.log("\n[36] 古い localStorage に tipList がある状態から新しいコードで起動");
+  {
+    const { clock, cloud, A } = await synced();
+    const [q0, q1] = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    answerOne(A, false); await A.flush();                           // wrong・reviewMeta を作る
+    const before = A.local();
+    const legacy = withTip(before, qObjs(A, [q0, q1]));
+    A.store[KEY] = J(legacy);
+    cloud.store[UNIT_PATH].payload = J(before);                     // remote は tipList なし（local だけ古い）
+    check("36-0 前提: 古い local に tipList（問題オブジェクト2件）", hasTip(A.local()) && A.local().state.tipList.length === 2);
+    A.run(`selectUnit(${J(UNIT)})`);
+    check("36-1 読み込んだ後のメモリに tipList が無い", A.run("'tipList' in state") === false);
+    A.run("save()");                                                // state を変えずに保存だけ
+    const after = A.local();
+    check("36-2 次の保存データにも tipList が無い", !hasTip(after));
+    const strip = (d) => { const x = JSON.parse(J(d)); delete x.state.tipList; return J(x); };
+    check("36-3 wrong・reviewMeta・answerLog など他の学習データは同じ", strip(after) === strip(legacy));
+  }
+
+  console.log("\n[37] 古い remote だけに tipList がある");
+  {
+    const { clock, cloud, A } = await synced();
+    const [q0] = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    clock.now += 1000; answerOne(A, false); await A.flush();
+    const remoteLegacy = withTip(cloud.unit(), qObjs(A, [q0]));
+    cloud.store[UNIT_PATH].payload = J(remoteLegacy);
+    const m = mergeUnitData(A.local(), remoteLegacy);
+    check("37-1 merge 結果に tipList が無い", !hasTip(m));
+    check("37-2 wrong・reviewMeta は通常どおり merge される", J(m.state.wrong.map((q) => q.id)) === J(A.local().state.wrong.map((q) => q.id)) &&
+      J(Object.keys(m.state.reviewMeta)) === J(Object.keys(A.local().state.reviewMeta)));
+    await A.launch({ noReload: true });                              // 起動時の syncAll
+    check("37-3 local に tipList を保存しない", !hasTip(A.local()));
+    check("37-4 次の正常な書き込みで remote からも消える", !hasTip(cloud.unit()));
+  }
+
+  console.log("\n[38] local と remote の両方に tipList（同じ／違う）");
+  {
+    const { A } = await synced();
+    const ids = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    const base = A.local();
+    const same1 = withTip(base, qObjs(A, [ids[0]])), same2 = withTip(base, qObjs(A, [ids[0]]));
+    const diff1 = withTip(base, qObjs(A, [ids[1]])), diff2 = withTip(base, qObjs(A, [ids[2], ids[3]]));
+    check("38-1 同じ tipList 同士でも merge 結果に無い", !hasTip(mergeUnitData(same1, same2)));
+    check("38-2 違う tipList 同士でも merge 結果に無い（どちらの順でも）", !hasTip(mergeUnitData(diff1, diff2)) && !hasTip(mergeUnitData(diff2, diff1)));
+    check("38-3 片方が無い（null）場合も tipList を返さない", !hasTip(mergeUnitData(diff1, null)) && !hasTip(mergeUnitData(null, diff2)));
+    const g1 = withTip(Object.assign({}, base, { state: Object.assign({}, base.state, { resetGen: 1 }) }), qObjs(A, [ids[1]]));
+    check("38-4 resetGen の世代が違う場合も、採用した側の tipList を返さない", !hasTip(mergeUnitData(g1, diff2)) && !hasTip(mergeUnitData(diff2, g1)));
+    check("38-5 tipList 以外は tipList が無い入力同士の merge と同じ",
+      J(mergeUnitData(diff1, diff2)) === J(mergeUnitData(JSON.parse(J(base)), JSON.parse(J(base)))));
+  }
+
+  console.log("\n[39] 古い端末が tipList 付きで書き戻しても、新しいコードは増やさない・残さない");
+  {
+    const { clock, cloud, A } = await synced();
+    const [q0] = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    check("39-1 新しいコードの同期後、remote に tipList は無い", !hasTip(cloud.unit()));
+    // 古い端末相当：remote に tipList 付きの payload を書き戻す
+    cloud.store[UNIT_PATH].payload = J(withTip(cloud.unit(), qObjs(A, [q0])));
+    check("39-2 前提: 古い端末が tipList を一時的に戻した", hasTip(cloud.unit()));
+    await A.launch({ noReload: true });
+    check("39-3 新しいコードの merge 結果（local）に tipList は無い", !hasTip(A.local()));
+    check("39-4 新しいコードの書き込みで remote から再び消える", !hasTip(cloud.unit()));
+    // もう一度戻されても同じ
+    cloud.store[UNIT_PATH].payload = J(withTip(cloud.unit(), qObjs(A, [q0])));
+    clock.now += 1000; answerOne(A, true); await A.flush();         // pushDirty 経由
+    check("39-5 pushDirty 経由でも remote から消える", !hasTip(cloud.unit()) && !hasTip(A.local()));
+  }
+
+  console.log("\n[40] デプロイ後の最初の同期で tipList を掃除した後、同じ理由のリロードは繰り返さない");
+  {
+    const { cloud, A } = await synced();
+    const [q0] = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    const legacy = withTip(A.local(), qObjs(A, [q0]));
+    A.store[KEY] = J(legacy);
+    cloud.store[UNIT_PATH].payload = J(legacy);                      // 古いコードで保存された local と remote
+    const r0 = A.reloads;
+    await A.launch();                                               // 新しいタブで起動（最初の同期で掃除）
+    const firstReloads = A.reloads - r0;
+    check("40-1 最初の同期で local・remote から tipList が消える", !hasTip(A.local()) && !hasTip(cloud.unit()));
+    check("40-2 最初の同期でのリロードは最大1回", firstReloads <= 1, firstReloads);
+    const r1 = A.reloads, w1 = cloud.writes.filter((p) => p === UNIT_PATH).length;
+    await A.launch();                                               // 次の起動
+    check("40-3 次の起動ではリロードも単元の書き込みも起きない", A.reloads === r1 && cloud.writes.filter((p) => p === UNIT_PATH).length === w1);
+  }
+
+  console.log("\n[41] TIPS・今日の復習・卒業・Phase 2 の救済は tipList 撤去後も同じ");
+  {
+    const { clock, cloud, A } = await synced();
+    const ids = A.run("UNIT_META.kyokusen.questions.map((q) => q.id)");
+    // メモリに古い tipList（別の問題・古いコツ）を仕込んでも、TIPS は wrong から最新のコツで出る
+    A.run(`state.tipList = UNIT_META.kyokusen.questions.slice(2).map((q) => Object.assign({}, q, { explain: Object.assign({}, q.explain, { tip: "古いコツ" }) }));`);
+    A.run("startTipReview()");
+    const tipsShown = [];
+    for (;;) { const q = A.run("currentQuestion()"); if (!q || A.run("state.mode") !== "tips") break;
+      tipsShown.push({ id: q.id, fb: A.run("el('feedback').innerHTML") }); A.run("nextQuestion()"); }
+    check("41-1 TIPS は wrong（ids0）だけ・最新のコツ（古い tipList に影響されない）",
+      J(tipsShown.map((x) => x.id)) === J(A.run("state.wrong.map((q) => q.id)")) && tipsShown.every((x) => !x.fb.includes("古いコツ")), tipsShown.map((x) => x.id));
+    check("41-2 その保存データにも tipList は無い", !hasTip(A.local()));
+    // 今日の復習 → 卒業
+    for (let i = 0; i < 4; i++) { clock.now += 31 * DAY; A.run(`startDueReview(); answer(currentQuestion().correct); nextQuestion();`); }
+    check("41-3 今日の復習で卒業（wrong から外れて graduatedAt に記録）",
+      !A.run("state.wrong.some((q) => q.id === " + J(ids[0]) + ")") && A.run(`typeof state.graduatedAt[${J(ids[0])}]`) === "number");
+    await A.flush();
+    // 卒業後の再誤答（同じ端末）→ wrong に戻る
+    clock.now += DAY; A.run(`startExam(); answer((currentQuestion().correct + 1) % currentQuestion().a.length); exitExamMode();`);
+    check("41-4 卒業後にまた間違えたら wrong に戻る（今までの仕様）", A.run("state.wrong.some((q) => q.id === " + J(ids[0]) + ")"));
+    await A.flush();
+    check("41-5 remote にも反映され、tipList は無い", cloud.unit().state.wrong.some((q) => q.id === ids[0]) && !hasTip(cloud.unit()));
   }
 
   console.log("\n結果: " + pass + " OK / " + fail + " NG");

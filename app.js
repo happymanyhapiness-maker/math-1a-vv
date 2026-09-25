@@ -300,7 +300,6 @@ function defaultState(unit) {
     correct: 0,
     total: 0,
     wrong: [],
-    tipList: [],
     mode: "normal",
     strict: false,
     timer: null,
@@ -523,7 +522,10 @@ function save(opts) {
   try {
     // state.timer はこのページ内だけで有効な setInterval のID。保存するコピーだけ null にする
     // （メモリ上の state.timer は触らないので、実行中タイマーの clearInterval はこれまでどおり効く）
-    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: { ...state, timer: null }, stats }));
+    // 旧仕様の tipList は万一メモリにあっても保存しない
+    const stateToSave = { ...state, timer: null };
+    delete stateToSave.tipList;
+    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: stateToSave, stats }));
   } catch (e) {
     console.error("[save] 学習データを保存できませんでした", e);
     const quota = !!e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22 || e.code === 1014);
@@ -615,7 +617,7 @@ function loadUnit(unit) {
 
   if (!Array.isArray(state.history)) state.history = [];
   if (!Array.isArray(state.wrong)) state.wrong = [];
-  if (!Array.isArray(state.tipList)) state.tipList = [];
+  delete state.tipList; // 旧仕様の tipList（使っていない）は読み捨てる
   if (!Array.isArray(state.answerLog)) state.answerLog = [];
   if (typeof state.finished !== "boolean") state.finished = false;
 
@@ -1362,10 +1364,6 @@ function addReviewTarget(q) {
 
   if (!state.wrong.find((qq) => qq.id === q.id)) {
     state.wrong.push(q);
-  }
-
-  if (!state.tipList.find((qq) => qq.id === q.id)) {
-    state.tipList.push(q);
   }
 
   // 間隔復習用メタ情報：初めて間違えた問題は「今すぐ復習対象」として登録する
@@ -2740,7 +2738,6 @@ function startExam() {
   state.total = 0;
   // state.wrong（長期の復習対象）は消さない。今回の試験の誤答は examWrongIds で別に持つ
   examWrongIds = [];
-  state.tipList = [];
   state.mode = "normal";
   state.stopHintShown = false;
   state.routeMiss = 0;
@@ -2856,7 +2853,7 @@ function startDueReview() {
 }
 
 // TIPSだけ復習：長期の復習対象（state.wrong）に残っている問題のコツを読み返す。
-// 卒業して wrong から外れた問題は対象外。state.tipList（旧仕様のリスト）は表示には使わない。
+// 卒業して wrong から外れた問題は対象外。
 function startTipReview() {
   if (!state.wrong.length) {
     alert("復習するTIPSがありません");
