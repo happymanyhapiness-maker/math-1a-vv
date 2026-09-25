@@ -148,7 +148,7 @@ function mergeUnitData(a, b) {
   //   「もう片方の端末でまだ一度も解いていないだけ」と区別がつかず、
   //   誤判定すると復習の進捗が消える（＝取り返しがつかない）ため、
   //   安全側に倒して和集合を取る。
-  //   副作用: 片方で卒業した問題が、もう片方の古いデータから一度だけ復活することがある。
+  //   卒業（＝削除）だけは graduatedAt で別に伝える（下の liveRM を参照）。
   Object.keys(oRM).forEach(id => { rm[id] = oRM[id]; });
   Object.keys(nRM).forEach(id => {
     const ne = nRM[id], oe = rm[id];
@@ -158,12 +158,57 @@ function mergeUnitData(a, b) {
     rm[id] = (nt >= ot) ? ne : oe;
   });
 
+  // --- graduatedAt: 問題ID→卒業時刻。IDごとに新しい方を採用（引数順に依存せず、何度マージしても同じ）---
+  const nGA = nS.graduatedAt || {}, oGA = oS.graduatedAt || {};
+  const hasGA = !!(nS.graduatedAt || oS.graduatedAt);
+  const ga = {};
+  Object.keys(nGA).concat(Object.keys(oGA)).forEach(id => {
+    const x = typeof nGA[id] === "number" ? nGA[id] : -Infinity;
+    const y = typeof oGA[id] === "number" ? oGA[id] : -Infinity;
+    const t = Math.max(x, y);
+    if (t !== -Infinity) ga[id] = t;
+  });
+  const isGraduated = id => Object.prototype.hasOwnProperty.call(ga, id);
+
+  // --- 卒業前の古いreviewMetaを捨てる ---
+  //  活動時刻 = lastSeenAt（まだ一度も復習していなければ dueAt）。上のLWWと同じ基準。
+  //  活動時刻 <= 卒業時刻 なら卒業前のデータとみなして捨てる（同時刻も卒業側を優先）。
+  //  卒業より後に新しく作られたreviewMeta（再度の誤答など）は、これまでどおり残る。
+  //
+  //  ただし、卒業を知らない古い端末で卒業後に間違えた場合、app.js の addReviewTarget は
+  //  既存のreviewMetaを更新しないので、reviewMeta上は「卒業前の古いデータ」に見えてしまう。
+  //  そこで answerLog から「卒業後に addReviewTarget が呼ばれた回答」を拾い、あれば
+  //  同じ端末で卒業後に間違えたときと同じ reviewMeta（streak 0 / dueAt=その時刻）に作り直す。
+  //  addReviewTarget が呼ばれるのは: 誤答(answered かつ isCorrect:false) / timeout（正誤を問わない）/ skip
+  //  卒業と同時刻のログは卒業側を優先して対象外。複数あれば卒業後で最初のもの（logAll は時刻順）。
+  const reAddedAt = {};
+  logAll.forEach(r => {
+    if (!r || !isGraduated(r.questionId) || typeof r.timestamp !== "number") return;
+    if (r.timestamp <= ga[r.questionId]) return;
+    const reAdd = r.outcome === "timeout" || r.outcome === "skip" ||
+      (r.outcome === "answered" && r.isCorrect === false);
+    if (reAdd && !Object.prototype.hasOwnProperty.call(reAddedAt, r.questionId)) reAddedAt[r.questionId] = r.timestamp;
+  });
+  const liveRM = {};
+  Object.keys(rm).forEach(id => {
+    const e = rm[id];
+    if (isGraduated(id) && ((e && (e.lastSeenAt || e.dueAt)) || 0) <= ga[id]) {
+      if (Object.prototype.hasOwnProperty.call(reAddedAt, id)) {
+        liveRM[id] = { streak: 0, dueAt: reAddedAt[id], lastSeenAt: null };
+      }
+      return;
+    }
+    liveRM[id] = e;
+  });
+
   // --- wrong / tipList: 問題オブジェクトの配列 ---
   //  ・新しい側にあるものは全部残す
   //  ・古い側にしか無いものは、マージ後のreviewMetaにidが残っている場合だけ採用
-  //    （＝どちらかの端末で「卒業」して消えた問題は復活させない。
-  //      逆に、古い端末でだけ新しく間違えた問題はちゃんと拾える）
-  function mergeQList(nList, oList) {
+  //    （古い端末でだけ新しく間違えた問題はちゃんと拾える）
+  //  ・wrong は liveRM で判定し、さらに「卒業済みで有効なreviewMetaが無い」問題は新しい側からも外す
+  //    （＝remoteに残った卒業前のwrongで卒業が取り消されない）
+  //  ・tipList は卒業では消さない仕様なので、従来どおり和集合のreviewMeta(rm)で判定する
+  function mergeQList(nList, oList, meta) {
     const n = Array.isArray(nList) ? nList : [];
     const o = Array.isArray(oList) ? oList : [];
     const nIds = new Set(n.map(q => q && q.id));
@@ -171,10 +216,12 @@ function mergeUnitData(a, b) {
     o.forEach(q => {
       if (!q || !q.id) return;
       if (nIds.has(q.id)) return;
-      if (rm[q.id]) out.push(q);
+      if (meta[q.id]) out.push(q);
     });
     return out;
   }
+  const wrong = mergeQList(nS.wrong, oS.wrong, liveRM)
+    .filter(q => !(q && q.id && isGraduated(q.id) && !liveRM[q.id]));
 
   // --- history: 合体して重複除去、直近5件 ---
   const hSeen = new Set();
@@ -189,15 +236,18 @@ function mergeUnitData(a, b) {
     });
 
   // --- 進行状況（index / correct / total / mode など）は新しい側をそのまま採用 ---
-  const state = Object.assign({}, oS, nS, {
+  const mergedFields = {
     answerLog: logAll,
-    wrong: mergeQList(nS.wrong, oS.wrong),
-    tipList: mergeQList(nS.tipList, oS.tipList),
-    reviewMeta: rm,
+    wrong: wrong,
+    tipList: mergeQList(nS.tipList, oS.tipList, rm),
+    reviewMeta: liveRM,
     history: hist.slice(0, 5),
     lastShuffle: Object.assign({}, oS.lastShuffle || {}, nS.lastShuffle || {}),
     timer: null // タイマーIDは端末固有なので必ず捨てる
-  });
+  };
+  // どちらにも graduatedAt が無ければキーを作らない（graduatedAt導入前のデータでは出力を変えない）
+  if (hasGA) mergedFields.graduatedAt = ga;
+  const state = Object.assign({}, oS, nS, mergedFields);
 
   // --- stats: 累積カウンタなので「大きい方」を採用（足すと二重計上になる） ---
   const nT = newer.stats || {}, oT = older.stats || {};

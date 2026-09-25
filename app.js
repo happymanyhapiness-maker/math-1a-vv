@@ -317,6 +317,7 @@ function defaultState(unit) {
     candidateIndex: null, // 早合点防止：確定前の「仮選択」状態
     reviewMeta: {}, // questionId -> {streak, dueAt, lastSeenAt} 間隔復習(スペースドリピティション)用
     unansweredSnapshot: [], // 「未挑戦の問題だけ」モード用の出題リスト(開始時に固定し、回答中に動かさない)
+    graduatedAt: {}, // questionId -> 卒業した時刻。同期で古いwrong/reviewMetaが卒業を取り消さないための記録（最大で問題数ぶん）
   };
 }
 
@@ -596,6 +597,9 @@ function loadUnit(unit) {
       state.reviewMeta[q.id] = { streak: 0, dueAt: Date.now(), lastSeenAt: null };
     }
   });
+
+  // graduatedAt導入前のデータには無いので、空として扱う
+  if (!state.graduatedAt || typeof state.graduatedAt !== "object") state.graduatedAt = {};
 }
 
 /* =========================
@@ -1366,6 +1370,8 @@ function markReviewResult(q, isCorrect) {
       // 卒業：復習リストから完全に除去
       state.wrong = state.wrong.filter((qq) => qq.id !== q.id);
       delete state.reviewMeta[q.id];
+      if (!state.graduatedAt) state.graduatedAt = {};
+      state.graduatedAt[q.id] = meta.lastSeenAt; // 卒業時刻（同期マージで卒業前の古いデータを捨てる基準）
       stats.clearedCount = (stats.clearedCount || 0) + 1;
       return;
     }
