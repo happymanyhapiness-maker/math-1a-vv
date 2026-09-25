@@ -11,4 +11,5 @@ tools/*
 !tools/verify_unanswered_session.js
 !tools/verify_log_archive.js
 !tools/verify_rescue_log.js
+!tools/verify_compact.js
 模試分析/

@@ -172,7 +172,10 @@ function cleanLegacyFields(d) {
     state.index = 0;
     state.finished = true;
   }
-  return Object.assign({}, d, { state });
+  const out = Object.assign({}, d, { state });
+  // 生ログの削減（最新300件・180日。古いものは archive へ。save と同じ log-archive.js の関数）。
+  // merge では Phase 2 救済の判定が終わったあと（mergeUnitData の最後）にここを通る
+  return globalThis.LogArchive ? globalThis.LogArchive.compactUnitData(out) : out;
 }
 
 function mergeUnitData(a, b) {

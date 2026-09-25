@@ -254,6 +254,108 @@
     return Array.from(parseRescueTimes(log[id])).sort(function (a, b) { return a - b; });
   }
 
+  /* ---------- 生ログの削減（Phase 7B-2） ----------
+     1単元の生ログ（answerLog）に残すのは、生ログと archive を合わせた重複なしの全 event を
+     「timestamp の新しい順 → 同じなら event ID（日付キー＋17文字）の大きい順」に並べて、
+       ・上から RAW_KEEP_MAX 件以内
+       ・かつ、その集合の最新 timestamp から RAW_KEEP_DAYS 日以内（ちょうど180日前は残す、1ms でも古ければ archive）
+     の両方を満たすものだけ。基準は端末の時計ではなく集合内の最新 timestamp。
+     次の生ログは archive へ移す（移す前に questionHistory の補完と rescueLog への回収をする）：
+       ・同じ event がすでに archive にある（stale 端末から戻ってきた生ログ）
+       ・上の保持条件から外れた
+     timestamp が無効な古い生ログは event ID を作れないので、そのまま生ログに残す。
+     local の save と firebase-sync の merge の両方から、この1つの関数で同じ変換をする。 */
+  var RAW_KEEP_MAX = 300;
+  var RAW_KEEP_DAYS = 180;
+
+  // Phase 2 救済の対象になる失敗（app.js で addReviewTarget が呼ばれる回答。firebase-sync.js の判定と同じ）
+  function isRescueFailure(r) {
+    return !!r && (r.outcome === "timeout" || r.outcome === "skip" || (r.outcome === "answered" && r.isCorrect === false));
+  }
+  // questionHistory の補完（Phase 1 と同じ：新しい時刻を採用、同じ時刻なら誤答を優先）
+  function historyWins(ts, isCorrect, e) {
+    if (!e || typeof e.date !== "number") return true;
+    if (ts > e.date) return true;
+    return ts === e.date && isCorrect === false && e.isCorrect !== false;
+  }
+
+  // {state, stats} を受け取り、削減後の新しいオブジェクトを返す（入力は変更しない）。
+  // 移す生ログが無ければ入力をそのまま返す。
+  function compactUnitData(d) {
+    if (!d || !d.state || typeof d.state !== "object") return d;
+    var st = d.state;
+    var raw = Array.isArray(st.answerLog) ? st.answerLog : [];
+    if (!raw.length) return d;
+    var arc = normalizeArchive(st.logArchive);
+
+    // 重複なしの全 event（archive ＋ 生ログ）
+    var archKeys = new Set();
+    var events = [];
+    Object.keys(arc).forEach(function (k) {
+      var s = arc[k];
+      for (var i = 0; i < s.length; i += TOKEN_LEN) {
+        var key = k + s.slice(i, i + ID_LEN);
+        archKeys.add(key);
+        events.push({ ts: tsFromDayOffset(k, parseInt(s.slice(i, i + TIME_LEN), 36)), key: key });
+      }
+    });
+    var seen = new Set(archKeys);
+    var rawKeys = raw.map(function (r) {
+      var id = eventId(r);
+      if (id === null) return null;
+      var key = jstDayKey(r.timestamp) + id;
+      if (!seen.has(key)) { seen.add(key); events.push({ ts: r.timestamp, key: key }); }
+      return key;
+    });
+    if (!events.length) return d;
+    events.sort(function (a, b) { return b.ts - a.ts || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0); });
+    var oldest = events[0].ts - RAW_KEEP_DAYS * DAY_MS;
+    var keep = new Set();
+    for (var i = 0; i < events.length && keep.size < RAW_KEEP_MAX; i++) {
+      if (events[i].ts < oldest) break;
+      keep.add(events[i].key);
+    }
+
+    var kept = [], moved = [], keptKeys = new Set();
+    raw.forEach(function (r, idx) {
+      var key = rawKeys[idx];
+      if (key === null) { kept.push(r); return; }
+      if (archKeys.has(key) || !keep.has(key) || keptKeys.has(key)) { moved.push(r); return; }
+      keptKeys.add(key);
+      kept.push(r);
+    });
+    if (!moved.length) return d;
+
+    // 移す生ログ → rescueLog への回収・questionHistory の補完・archive への追加
+    var qhIn = d.stats && d.stats.questionHistory && typeof d.stats.questionHistory === "object" ? d.stats.questionHistory : {};
+    var qh = Object.assign({}, qhIn);
+    var addArc = {}, addRescue = {};
+    moved.forEach(function (r) {
+      var qid = r.questionId;
+      var hasQid = (typeof qid === "string" && qid !== "") || typeof qid === "number";
+      if (hasQid) {
+        qid = String(qid);
+        if (isRescueFailure(r)) {
+          var rt = rescueTsToken(r.timestamp);
+          if (rt) addRescue[qid] = (addRescue[qid] || "") + rt;
+        }
+        var ok = r.isCorrect === true;
+        if (historyWins(r.timestamp, ok, qh[qid])) qh[qid] = { date: r.timestamp, isCorrect: ok };
+      }
+      var t = tokenOf(r);
+      var k = jstDayKey(r.timestamp);
+      addArc[k] = (addArc[k] || "") + t;
+    });
+
+    var state = Object.assign({}, st, { answerLog: kept });
+    var newArc = unionArchives(arc, addArc);
+    if (Object.keys(newArc).length) state.logArchive = newArc; else delete state.logArchive;
+    var newRescue = pruneRescueLog(unionRescueLogs(st.rescueLog, addRescue), st.graduatedAt);
+    if (Object.keys(newRescue).length) state.rescueLog = newRescue; else delete state.rescueLog;
+    var stats = Object.assign({}, d.stats || {}, { questionHistory: qh });
+    return Object.assign({}, d, { state: state, stats: stats });
+  }
+
   var api = {
     TOKEN_LEN: TOKEN_LEN,
     ID_LEN: ID_LEN,
@@ -279,7 +381,11 @@
     unionRescueLogs: unionRescueLogs,
     normalizeRescueLog: normalizeRescueLog,
     pruneRescueLog: pruneRescueLog,
-    rescueTimes: rescueTimes
+    rescueTimes: rescueTimes,
+    RAW_KEEP_MAX: RAW_KEEP_MAX,
+    RAW_KEEP_DAYS: RAW_KEEP_DAYS,
+    isRescueFailure: isRescueFailure,
+    compactUnitData: compactUnitData
   };
   root.LogArchive = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

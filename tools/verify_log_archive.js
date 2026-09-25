@@ -24,7 +24,8 @@ const LA = require(path.join(DIR, "log-archive.js"));
 const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8").replace(/\r\n/g, "\n");
 let headOk = true;
 const head = (f) => {
-  try { return execSync("git show HEAD:" + f, { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).replace(/\r\n/g, "\n"); }
+  // 比較の基準は archive 導入前の本番版（Phase 7A-2c = 31fed99）に固定する
+  try { return execSync("git show 31fed99:" + f, { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).replace(/\r\n/g, "\n"); }
   catch (e) { headOk = false; return null; }
 };
 
@@ -417,20 +418,24 @@ const mergeNew = loadMerge(read("firebase-sync.js"))({ LogArchive: LA });
     const remote = mergeOld(C(oldLocal), C(newDev));
     check("10-1 旧コードの merge では archive が古いタブの版に巻き戻る（前提）", countArc(remote.state.logArchive) === 5);
     const back = mergeNew(C(newDev), C(remote));
-    check("10-2 新コードの端末が次に merge すると、自分の archive との和集合で 0〜19 に戻る", countArc(back.state.logArchive) === 20 && J(back.state.logArchive) === J(archiveOf(logs.slice(0, 20))));
+    // 7B-2 以降は merge の最後に生ログの削減も走るので、archive は 0〜19 を含む（さらに古い生ログも archive へ移る）
+    const want = archiveOf(logs.slice(0, 20));
+    const covered = Object.keys(want).every((k) => { const have = LA.parseDay(back.state.logArchive[k]); return [...LA.parseDay(want[k]).keys()].every((id) => have.has(id)); });
+    check("10-2 新コードの端末が次に merge すると、自分の archive との和集合で 0〜19 が戻る", covered);
     const cnt = LA.countableLog(back.state);
     check("10-3 旧コードが書き戻した生ログ（archive 済みのもの）は二重に数えない（0〜29 と 99 の 31件）", cnt.length === 31, cnt.length);
     const bOld = mergeOld(C(newDev), null);
     check("10-4 旧コードの片側 null でも archive は保持される（知らないフィールドとして残る）", J(bOld.state.logArchive) === J(newDev.state.logArchive));
   });
 
-  section("[11] Phase 7B-1 では archive を作らない・生ログを削らない", () => {
+  section("[11] archive の生成は log-archive.js の compactUnitData だけ（save と merge から呼ぶ）", () => {
     const srcs = ["app.js", "firebase-sync.js", "crossunit.js", "calendar.js", "progress.js", "unit-strength.js"].map(read).join("\n");
     check("11-1 tokenOf（archive 生成）はテスト以外から呼ばれない", !/tokenOf\(/.test(srcs));
-    check("11-2 logArchive へ書き込むのは merge の和集合と正規化だけ", (srcs.match(/logArchive\s*=/g) || []).length === 2, srcs.match(/.*logArchive\s*=.*/g));
+    check("11-2 compactUnitData を呼ぶのは app.js の save と firebase-sync.js の cleanLegacyFields の1か所ずつ",
+      (read("app.js").match(/compactUnitData\(/g) || []).length === 1 && (read("firebase-sync.js").match(/compactUnitData\(/g) || []).length === 1);
     const logs = Array.from({ length: 10 }, (_, i) => rawLog("keiryo", i));
     const m = mergeNew(C(unitData("keiryo", logs.slice(0, 6))), C(unitData("keiryo", logs.slice(4))));
-    check("11-3 merge は生ログを削らない（和集合 10件）・archive を作らない", m.state.answerLog.length === 10 && !("logArchive" in m.state));
+    check("11-3 保持条件の内側（10件）なら merge は生ログを削らず、archive も作らない", m.state.answerLog.length === 10 && !("logArchive" in m.state));
   });
 
   console.log("\n結果: " + pass + " OK / " + fail + " NG");

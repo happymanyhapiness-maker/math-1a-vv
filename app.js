@@ -526,7 +526,16 @@ function save(opts) {
     delete stateToSave.tipList;
     stateToSave.wrong = normalizeWrong(state.wrong); // 保存は常に [{id}] だけ
     endUnansweredSessionForSave(stateToSave); // 未挑戦セッションの対象・途中位置は保存しない（メモリ上の state はそのまま）
-    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: stateToSave, stats }));
+    // 生ログの削減（最新300件・180日。古いものは archive へ移し、questionHistory・rescueLog も補う）。merge と同じ関数
+    const toSave = typeof LogArchive !== "undefined" ? LogArchive.compactUnitData({ state: stateToSave, stats }) : { state: stateToSave, stats };
+    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify(toSave));
+    // 保存できたら、メモリ上も同じ形にそろえる（保存に失敗したときはメモリの生ログをそのまま残し、次の保存で再挑戦）
+    if (toSave.state !== stateToSave) {
+      state.answerLog = toSave.state.answerLog;
+      if ("logArchive" in toSave.state) state.logArchive = toSave.state.logArchive; else delete state.logArchive;
+      if ("rescueLog" in toSave.state) state.rescueLog = toSave.state.rescueLog; else delete state.rescueLog;
+      stats.questionHistory = toSave.stats.questionHistory;
+    }
   } catch (e) {
     console.error("[save] 学習データを保存できませんでした", e);
     const quota = !!e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22 || e.code === 1014);

@@ -21,7 +21,8 @@ const C = (o) => JSON.parse(J(o));
 const LA = require(path.join(DIR, "log-archive.js"));
 const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8").replace(/\r\n/g, "\n");
 let OLD_SYNC = null;
-try { OLD_SYNC = execSync("git show HEAD:firebase-sync.js", { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).replace(/\r\n/g, "\n"); } catch (e) { /* git 無し */ }
+// 比較の基準は rescueLog を知らない 7B-1 本番版（50eeb32）に固定する
+try { OLD_SYNC = execSync("git show 50eeb32:firebase-sync.js", { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).replace(/\r\n/g, "\n"); } catch (e) { /* git 無し */ }
 
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
@@ -241,12 +242,12 @@ section("[11] rescueLog が無いデータでは HEAD（7B-1 本番版）と mer
   check("11-1 ランダム 20000 ケース：merge 結果（answerLog・wrong・reviewMeta・graduatedAt・救済を含む全体）が完全一致", diff === 0, first);
 });
 
-section("[12] 7B-1.5 では rescueLog を作らない", () => {
+section("[12] rescueLog の生成は log-archive.js の compactUnitData だけ", () => {
   const srcs = ["app.js", "firebase-sync.js", "crossunit.js", "calendar.js", "progress.js", "unit-strength.js"].map(read).join("\n");
   check("12-1 rescueTsToken（rescueLog の生成）は本番コードから呼ばれない", !/rescueTsToken\(/.test(srcs));
-  check("12-2 rescueLog へ書き込むのは merge の和集合と刈り込みだけ", (srcs.match(/\.rescueLog\s*=/g) || []).length === 2 && (srcs.match(/mergedFields\.rescueLog\s*=/g) || []).length === 1, srcs.match(/.*rescueLog\s*=.*/g));
+  check("12-2 merge で rescueLog を足すのは和集合（mergedFields）の1か所だけ", (srcs.match(/mergedFields\.rescueLog\s*=/g) || []).length === 1);
   const m = mergeNew(unit({ answerLog: [fail_(X, T2)], graduatedAt: { [X]: T1 }, reviewMeta: { [X]: { streak: 2, dueAt: T0, lastSeenAt: T0 } } }), unit({ answerLog: [ok_(Y, T0)] }));
-  check("12-3 生ログの失敗で救済しても rescueLog は作らない", !("rescueLog" in m.state) && m.state.reviewMeta[X].dueAt === T2);
+  check("12-3 保持条件の内側の生ログの失敗で救済しても rescueLog は作らない", !("rescueLog" in m.state) && m.state.reviewMeta[X].dueAt === T2);
 });
 
 console.log("\n結果: " + pass + " OK / " + fail + " NG");
