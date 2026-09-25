@@ -361,6 +361,8 @@ function makeReviewApp() {
   return new Function("UNIT_META", "el", "show", "save",
     extract(appSrc, "function defaultState", "let state = defaultState(null);") +
     "\nlet state = defaultState('keiryo'); let stats = defaultStats();\n" +
+    // app.js のモジュール変数（切り出した関数が参照する。null なら通常試験の誤答記録は行わない）
+    "let examWrongIds = null;\n" +
     extract(appSrc, "function addReviewTarget", "function addHistory") +
     extract(appSrc, "function startExam", "function resumeExam") +
     "\nreturn { addReviewTarget, markReviewResult, dueReviewList, startExam," +

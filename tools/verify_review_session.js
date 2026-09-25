@@ -269,5 +269,126 @@ console.log("\n[6] 固定リストはメモリだけ・破棄のタイミング"
   check("6-8 リロード後の「途中から再開」は従来どおり通常モード", reloaded.run("state.mode") === "normal");
 }
 
+console.log("\n[7] 通常試験で長期の wrong を消さない／結果画面の再挑戦は今回の試験の誤答だけ");
+{
+  const syncSrc = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
+  const mergeUnitData = new Function(syncSrc.slice(syncSrc.indexOf("function freshness"),
+    syncSrc.indexOf("/* =========================================================\n   Firestore 入出力")) + ";return mergeUnitData;")();
+  const view = () => env.run(`({ wrong: state.wrong.map((q) => q.id), tipList: state.tipList.map((q) => q.id),
+    meta: Object.keys(state.reviewMeta), graduatedAt: J(state.graduatedAt), cleared: stats.clearedCount })`.replace("J(", "JSON.stringify("));
+  const resultRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`el("startWrongOnlyReviewBtn2").onclick()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
+  const topRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`(function () { const s = el("practiceModeSelect"); s.value = "wrong"; s.onchange.call(s); })()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
+  const stored = () => JSON.parse(env.store["kyotsu_app_v14_kyokusen"]);
+  const pre = () => {
+    setup(env, "kyokusen", [A, B], () => 1, (id) => (id === A ? env.ctx.__NOW - 1000 : env.ctx.__NOW + 86400000));
+    env.run(`state.graduatedAt = { "ky9-9": 123 }; stats.clearedCount = 5; save();`);
+  };
+
+  pre();
+  const before = view();
+  const remoteBefore = stored();
+  env.run("startExam()");
+  const afterStart = view();
+  check("7-1 試験開始で長期の wrong（A・B）は消えない", J(afterStart.wrong) === J([A, B]), afterStart);
+  check("7-2 reviewMeta / graduatedAt / clearedCount も変わらない",
+    J(afterStart.meta) === J(before.meta) && afterStart.graduatedAt === before.graduatedAt && afterStart.cleared === before.cleared);
+  check("7-3 tipList は従来どおり試験開始で空（今回は変更しない）", J(afterStart.tipList) === J([]));
+  play(env, ["c", "c", "w", "c"]);                                    // 通常試験で C だけ誤答
+  check("7-4 試験後の長期 wrong は A・B・C", J(view().wrong) === J([A, B, C]), view().wrong);
+  check("7-5 通常試験は最後まで進んで終了", env.run("state.finished") === true && env.run("state.mode") === "normal");
+  const r1 = resultRetry();
+  check("7-6 結果画面の「間違えた問題だけ再挑戦」は C だけ", J(r1.list) === J([C]), r1);
+  const p1 = play(env, ["w"]);
+  check("7-7 再挑戦で C を出題して終了（Phase 3 の固定リスト）", J(p1.shown) === J([C]) && p1.finishedAfter === true);
+  const r2 = resultRetry();
+  check("7-8 再挑戦の結果画面からもう一度押しても C だけ（今回の試験の流れが続く）", J(r2.list) === J([C]), r2);
+  play(env, ["w"]);
+  env.run("exitExamMode()");                                         // TOP へ戻る
+  const t1 = topRetry();
+  check("7-9 TOP の「間違えた問題だけ」は長期の A・B・C", J(t1.list) === J([A, B, C]), t1);
+  play(env, ["w", "w", "w"]);
+
+  // ログイン中を模擬：試験後の local と、試験前の remote を merge しても同じ結果
+  const m = mergeUnitData(stored(), remoteBefore);
+  check("7-10 ログイン中（merge 後）も長期 wrong は A・B・C", J(m.state.wrong.map((q) => q.id).sort()) === J([A, B, C].sort()));
+  check("7-11 保存データに examWrongIds などのセッション変数は入らない",
+    J(Object.keys(stored().state)) === J(env.run("Object.keys(defaultState('kyokusen'))")) &&
+    !J(stored()).includes("examWrongIds") && !J(stored()).includes("reviewSessionFromExam"));
+
+  // 正解だけの試験 → 結果画面の再挑戦は0件（長期 wrong があっても出さない）
+  pre();
+  env.run("startExam()");
+  play(env, ["c", "c", "c", "c"]);
+  const r3 = resultRetry();
+  check("7-12 正解だけの試験: 結果画面の再挑戦は「復習問題がありません」", r3.alert === "復習問題がありません" && r3.list === null, r3);
+  check("7-13 正解だけの試験でも長期 wrong は A・B のまま", J(view().wrong) === J([A, B]));
+
+  // timeout / skip も今回の試験の誤答に入る
+  pre();
+  env.run("startExam()");
+  play(env, ["t", "c", "s", "c"]);
+  const r4 = resultRetry();
+  check("7-14 timeout / skip の問題が結果画面の再挑戦に入る（A:timeout, C:skip）", J(r4.list) === J([A, C]), r4);
+  play(env, ["w", "w"]);
+
+  // ほかのモードの結果画面からは、従来どおり長期 wrong 全体
+  pre();
+  env.run("startExam()");
+  play(env, ["c", "c", "w", "c"]);
+  env.run(`startStageOnly(UNIT_META.kyokusen.questions[0].stage)`);
+  play(env, ["c", "c", "c", "c"]);
+  const r5 = resultRetry();
+  check("7-15 ステージ限定の結果画面からは長期の A・B・C", J(r5.list) === J([A, B, C]), r5);
+  play(env, ["w", "w", "w"]);
+
+  // TOP へ戻って「途中から再開」→ 終了：今回の試験の誤答は引き継がれる
+  pre();
+  env.run("startExam()");
+  play(env, ["c", "w"]);                                            // B を誤答した時点で中断
+  env.run("exitExamMode()");
+  env.run("resumeExam()");
+  play(env, ["w", "c"]);                                            // 再開後に C を誤答
+  const r6 = resultRetry();
+  check("7-16 TOP→途中から再開→終了: 再挑戦は今回の試験の B・C", J(r6.list) === J([B, C]), r6);
+  play(env, ["w", "w"]);
+
+  // 単元を切り替えたら「今回の試験の誤答」は引き継がない（戻って再開しても長期 wrong 全体）
+  pre();
+  env.run("startExam()");
+  play(env, ["c", "w"]);
+  env.run(`selectUnit("keiryo")`);
+  check("7-17 単元切替で examWrongIds は破棄", env.run("examWrongIds") === null);
+  env.run(`selectUnit("kyokusen")`);
+  env.run("resumeExam()");
+  play(env, ["c", "c"]);
+  const r7 = resultRetry();
+  check("7-18 単元切替後に再開した試験の結果画面は、長期 wrong 全体（今回の記録が無いため）", J(r7.list) === J([A, B]), r7);
+  play(env, ["w", "w"]);
+
+  // 再挑戦で卒業した問題は、次の再挑戦から外れる（卒業は Phase 2 のまま）
+  pre();
+  env.run(`state.reviewMeta[${J(A)}].streak = 3; save();`);         // A はあと1回で卒業
+  env.run("startExam()");
+  play(env, ["w", "c", "w", "c"]);                                  // A・C を誤答（A の reviewMeta は既存なので streak 3 のまま）
+  const r8 = resultRetry();
+  check("7-19 再挑戦の対象は A・C", J(r8.list) === J([A, C]), r8);
+  play(env, ["c", "w"]);                                            // A 卒業、C 不正解
+  check("7-20 A は卒業（wrong / reviewMeta から外れ、graduatedAt に記録、clearedCount +1）",
+    !view().wrong.includes(A) && !view().meta.includes(A) && env.run(`typeof state.graduatedAt[${J(A)}]`) === "number" && view().cleared === 6);
+  const r9 = resultRetry();
+  check("7-21 次の再挑戦は C だけ（卒業した A は外れる）", J(r9.list) === J([C]), r9);
+  play(env, ["w"]);
+
+  // リロード相当：今回の試験の記録はメモリだけなので消え、結果画面の再挑戦は長期 wrong 全体
+  pre();
+  env.run("startExam()");
+  play(env, ["c", "w"]);
+  const reloaded = makeContext();
+  Object.assign(reloaded.store, env.store);
+  reloaded.run(`selectUnit("kyokusen")`);
+  check("7-22 リロード後も長期 wrong は A・B のまま", J(reloaded.run("state.wrong.map((q) => q.id)")) === J([A, B]));
+  check("7-23 リロード後は examWrongIds が無い", reloaded.run("examWrongIds") === null);
+}
+
 console.log("\n結果: " + pass + " OK / " + fail + " NG");
 process.exit(fail ? 1 : 0);

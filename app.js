@@ -557,6 +557,7 @@ function shuffleWithHistory(q){
 function loadUnit(unit) {
   state = defaultState(unit);
   stats = defaultStats();
+  examWrongIds = null; // 単元が変わったら「今回の試験の誤答」は引き継がない
 
   // 旧バージョン(単元分離前)のデータを、図形と計量のデータとして1回だけ引き継ぐ
   if (unit === "keiryo" && !localStorage.getItem(STORAGE_PREFIX + unit)) {
@@ -610,6 +611,12 @@ function loadUnit(unit) {
 // セッション中の並びは変えない（リストが縮む・増えると state.index がずれて、問題が飛んだり
 // 画面と別の問題として採点されたりするため）。メモリ上だけの一時データで、保存・同期はしない。
 let reviewSessionIds = null;
+
+// 通常試験（「試験開始」）で今回間違えた問題のID（誤答・時間切れ・スキップ＝addReviewTarget が呼ばれた問題）。
+// 結果画面の「間違えた問題だけ再挑戦」で「今回の試験の誤答だけ」を出題するために使う。
+// 長期の復習対象（state.wrong）とは別の、メモリ上だけの一時データで、保存・同期はしない。
+let examWrongIds = null;
+let reviewSessionFromExam = false; // 今の「間違えた問題だけ」セッションが、結果画面からの今回試験の再挑戦か
 
 function reviewSessionList() {
   if (!reviewSessionIds) return []; // セッション外（リロード後など）は動的リストに戻さず「問題なし」扱い
@@ -1321,6 +1328,9 @@ function logFillinAnswer(q, results, overallTag, isCorrect, outcome) {
 
 function addReviewTarget(q) {
   if (!q) return;
+
+  // 通常試験中なら「今回の試験の誤答」にも記録する（結果画面の再挑戦用）
+  if (examWrongIds && state.mode === "normal" && !examWrongIds.includes(q.id)) examWrongIds.push(q.id);
 
   if (!state.wrong.find((qq) => qq.id === q.id)) {
     state.wrong.push(q);
@@ -2700,7 +2710,8 @@ function startExam() {
   state.index = 0;
   state.correct = 0;
   state.total = 0;
-  state.wrong = [];
+  // state.wrong（長期の復習対象）は消さない。今回の試験の誤答は examWrongIds で別に持つ
+  examWrongIds = [];
   state.tipList = [];
   state.mode = "normal";
   state.stopHintShown = false;
@@ -2749,13 +2760,31 @@ function startStageOnly(stageName) {
   save();
 }
 
+// TOP の「間違えた問題だけ」：長期の復習対象（state.wrong）全体を出題する
 function startWrongOnlyReview() {
-  if (!state.wrong.length) {
+  startWrongReviewSession(state.wrong.map((q) => q.id), false);
+}
+
+// 結果画面の「間違えた問題だけ再挑戦」。通常試験（とその再挑戦）の直後は、今回の試験で間違えた問題のうち
+// まだ復習対象（state.wrong）に残っているものだけを出題する。それ以外のモードの結果画面や、
+// リロードで今回の試験の記録が無い場合は、従来どおり長期の state.wrong 全体。
+function retryWrongFromResult() {
+  const fromExam = examWrongIds && (state.mode === "normal" || (state.mode === "review" && reviewSessionFromExam));
+  if (!fromExam) {
+    startWrongOnlyReview();
+    return;
+  }
+  startWrongReviewSession(examWrongIds.filter((id) => state.wrong.some((q) => q && q.id === id)), true);
+}
+
+function startWrongReviewSession(ids, fromExam) {
+  if (!ids.length) {
     alert("復習問題がありません");
     return;
   }
 
-  reviewSessionIds = state.wrong.map((q) => q.id);
+  reviewSessionIds = ids;
+  reviewSessionFromExam = fromExam;
   state.mode = "review";
   state.index = 0;
   state.correct = 0;
@@ -2889,7 +2918,7 @@ function resetStatsOnly() {
 ========================= */
 if (el("startExamBtn")) el("startExamBtn").onclick = startExam;
 if (el("resumeExamBtn")) el("resumeExamBtn").onclick = resumeExam;
-if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = startWrongOnlyReview;
+if (el("startWrongOnlyReviewBtn2")) el("startWrongOnlyReviewBtn2").onclick = retryWrongFromResult;
 
 // 「今日の復習だけ／間違えた問題だけ／TIPSだけ復習／未挑戦の問題だけ」は
 // ボタンを並べると数が多くなりすぎるため、1つのプルダウンにまとめてある。
