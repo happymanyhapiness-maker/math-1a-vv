@@ -8,4 +8,5 @@ tools/*
 !tools/verify_review_session.js
 !tools/verify_reset_sync.js
 !tools/verify_wrong_id.js
+!tools/verify_unanswered_session.js
 模試分析/

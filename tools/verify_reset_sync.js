@@ -237,8 +237,8 @@ function check(name, cond, detail) {
     check("1-1 前提: リセット前は学習データあり、resetGen 無し", before.log > 0 && before.wrong.length === 2 && before.gen === "(無し)", before);
     check("1-2 リセット後は resetGen 1 の空の状態", J(view(after)) === J({ gen: 1, wrong: [], meta: [], log: 0, hist: 0, ga: [], qh: 0, cleared: 0, stageT: 0 }), view(after));
     check("1-3 strict は保持", after.state.strict === true);
-    check("1-4 lastShuffle・unansweredSnapshot・mode も初期化（旧仕様の tipList は無い）", !("tipList" in after.state) &&
-      Object.keys(after.state.lastShuffle).length === 0 && after.state.unansweredSnapshot.length === 0 && after.state.mode === "normal");
+    check("1-4 lastShuffle・mode も初期化（旧仕様の tipList・unansweredSnapshot は無い）", !("tipList" in after.state) &&
+      !("unansweredSnapshot" in after.state) && Object.keys(after.state.lastShuffle).length === 0 && after.state.mode === "normal");
     check("1-5 メモリ上のセッション変数も破棄", A.run("reviewSessionIds === null && reviewSessionFromExam === false && examWrongIds === null"));
     check("1-6 resetGen 以外の state のキーは defaultState と同じ（resetGen は最後に付く）",
       J(Object.keys(after.state)) === J(A.run("Object.keys(defaultState('x'))").concat(["resetGen"])), Object.keys(after.state));

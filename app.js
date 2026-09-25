@@ -315,7 +315,6 @@ function defaultState(unit) {
     questionStartTs: null,
     candidateIndex: null, // 早合点防止：確定前の「仮選択」状態
     reviewMeta: {}, // questionId -> {streak, dueAt, lastSeenAt} 間隔復習(スペースドリピティション)用
-    unansweredSnapshot: [], // 「未挑戦の問題だけ」モード用の出題リスト(開始時に固定し、回答中に動かさない)
     graduatedAt: {}, // questionId -> 卒業した時刻。同期で古いwrong/reviewMetaが卒業を取り消さないための記録（最大で問題数ぶん）
   };
 }
@@ -526,6 +525,7 @@ function save(opts) {
     const stateToSave = { ...state, timer: null };
     delete stateToSave.tipList;
     stateToSave.wrong = normalizeWrong(state.wrong); // 保存は常に [{id}] だけ
+    endUnansweredSessionForSave(stateToSave); // 未挑戦セッションの対象・途中位置は保存しない（メモリ上の state はそのまま）
     localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: stateToSave, stats }));
   } catch (e) {
     console.error("[save] 学習データを保存できませんでした", e);
@@ -589,6 +589,7 @@ function loadUnit(unit) {
   state = defaultState(unit);
   stats = defaultStats();
   examWrongIds = null; // 単元が変わったら「今回の試験の誤答」は引き継がない
+  unansweredSessionIds = []; // 未挑戦セッションの固定リストも引き継がない
 
   // 旧バージョン(単元分離前)のデータを、図形と計量のデータとして1回だけ引き継ぐ
   if (unit === "keiryo" && !localStorage.getItem(STORAGE_PREFIX + unit)) {
@@ -619,6 +620,7 @@ function loadUnit(unit) {
   if (!Array.isArray(state.history)) state.history = [];
   state.wrong = normalizeWrong(state.wrong); // 旧形式（問題オブジェクト丸ごと）は {id} だけにする
   delete state.tipList; // 旧仕様の tipList（使っていない）は読み捨てる
+  endUnansweredSessionForSave(state); // 旧データの未挑戦セッション（unansweredSnapshot・途中位置）は読み捨てる
   if (!Array.isArray(state.answerLog)) state.answerLog = [];
   if (typeof state.finished !== "boolean") state.finished = false;
 
@@ -642,6 +644,24 @@ function loadUnit(unit) {
 // セッション中の並びは変えない（リストが縮む・増えると state.index がずれて、問題が飛んだり
 // 画面と別の問題として採点されたりするため）。メモリ上だけの一時データで、保存・同期はしない。
 let reviewSessionIds = null;
+
+// 「未挑戦の問題だけ」の出題順（問題ID）。セッション開始時に固定し、回答で questionHistory が埋まっても縮めない。
+// そのページで開始したセッションの間だけ有効なメモリ上のデータで、保存・同期はしない
+// （リロード・単元切替・別端末では未挑戦セッションは終わり、TOPから開始し直す）。
+let unansweredSessionIds = [];
+
+// 保存用の state から未挑戦セッションを外す（渡したオブジェクトを書き換える。メモリ上の state には使わない）。
+//  ・旧仕様の unansweredSnapshot（問題オブジェクト丸ごと）は持たない
+//  ・mode が未挑戦のままだと、リロード後の「再開」が未挑戦用の index を通常の問題リストに当てて
+//    別の問題から始まってしまうので、終了済みの通常モードとして残す（「再開」は「終了済み」になる）
+function endUnansweredSessionForSave(s) {
+  delete s.unansweredSnapshot;
+  if (s.mode === "unanswered") {
+    s.mode = "normal";
+    s.index = 0;
+    s.finished = true;
+  }
+}
 
 // wrong（長期の復習対象）を [{id}] の形にそろえる。旧形式（問題オブジェクト丸ごと）や文字列IDも受け付け、
 // IDの無い要素は捨て、同じIDは最初の1つだけ残す（順番は維持、元の配列は変更しない）。
@@ -686,7 +706,11 @@ function reviewSessionList() {
 function currentList() {
   // TIPSだけ復習も、開始時点の state.wrong（まだ苦手な問題）を固定リストにして最新の問題データから表示する
   if (state.mode === "review" || state.mode === "dueReview" || state.mode === "tips") return reviewSessionList();
-  if (state.mode === "unanswered") return state.unansweredSnapshot;
+  if (state.mode === "unanswered") {
+    // 開始時に固定したIDを、最新の問題データ（UNIT_META）から引き直す
+    const qs = UNIT_META[state.unit].questions;
+    return unansweredSessionIds.map((id) => qs.find((q) => q.id === id)).filter(Boolean);
+  }
   if (state.mode === "stage") {
     return UNIT_META[state.unit].questions.filter((q) => q.stage === state.stageFilter);
   }
@@ -728,6 +752,7 @@ function enterExamMode() {
 function exitExamMode() {
   clearInterval(state.timer);
   reviewSessionIds = null; // TOPへ戻る・単元切替で復習セッションの固定リストを破棄
+  unansweredSessionIds = []; // 未挑戦セッションの固定リストも破棄
   document.body.classList.remove("exam-mode");
 
   if (el("examTopbar")) el("examTopbar").style.display = "none";
@@ -2645,6 +2670,7 @@ function nextQuestion() {
 function finish() {
   clearInterval(state.timer);
   reviewSessionIds = null; // 復習セッションの固定リストを破棄
+  unansweredSessionIds = []; // 未挑戦セッションの固定リストも破棄
 
   // すでに終了済みなら、履歴を二重追加しない
   if (!state.finished) {
@@ -2915,7 +2941,7 @@ function startUnansweredOnly() {
     return;
   }
 
-  state.unansweredSnapshot = list;
+  unansweredSessionIds = list.map((q) => q.id); // IDだけを開始時の順番で固定（メモリのみ）
   state.mode = "unanswered";
   state.index = 0;
   state.correct = 0;

@@ -234,10 +234,12 @@ console.log("\n[5] ほかのモードの出題順は変わらない");
   check("5-3 TIPS（開始時の wrong の順）", J(play(env, ["c", "w", "s"]).shown) === J([A, B, C]));
   setup(env, "kyokusen", [], due0);
   env.run("startUnansweredOnly()");
-  const snap = env.run("state.unansweredSnapshot.map((q) => q.id)");
+  const snap = env.run("unansweredSessionIds.slice()");
+  const savedMid = JSON.parse(env.store["kyotsu_app_v14_kyokusen"]).state;
   const r = play(env, ["c", "w", "c", "c"]);
-  check("5-4 未挑戦（unansweredSnapshot の順・内容のまま）", J(r.shown) === J(all) && J(snap) === J(all));
-  check("5-5 未挑戦：unansweredSnapshot は従来どおり state に保存される", J(env.run("state.unansweredSnapshot.map((q) => q.id)")) === J(all));
+  check("5-4 未挑戦（開始時に固定した unansweredSessionIds の順のまま）", J(r.shown) === J(all) && J(snap) === J(all));
+  check("5-5 未挑戦：対象リストは保存しない（Phase 7A-2c でメモリだけ）", !("unansweredSnapshot" in savedMid) && savedMid.mode === "normal" &&
+    J(env.run("unansweredSessionIds")) === "[]");
 }
 
 console.log("\n[6] 固定リストはメモリだけ・破棄のタイミング");

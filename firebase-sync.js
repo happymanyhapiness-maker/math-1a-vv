@@ -146,12 +146,20 @@ function normalizeWrong(list) {
   return out;
 }
 
-// 旧仕様の tipList（使っていない）を取り除き、wrong を [{id}] にそろえたコピーを返す
+// 旧仕様の tipList（使っていない）を取り除き、wrong を [{id}] にそろえたコピーを返す。
+// 未挑戦セッション（旧仕様の unansweredSnapshot と、mode が未挑戦のままの途中位置）も持ち越さない
+// （app.js の endUnansweredSessionForSave と同じ正規化。別端末やリロード後に未挑戦セッションを再開しない）
 function cleanLegacyFields(d) {
   if (!d || !d.state) return d;
   const state = Object.assign({}, d.state);
   delete state.tipList;
   if ("wrong" in state) state.wrong = normalizeWrong(state.wrong);
+  delete state.unansweredSnapshot;
+  if (state.mode === "unanswered") {
+    state.mode = "normal";
+    state.index = 0;
+    state.finished = true;
+  }
   return Object.assign({}, d, { state });
 }
 
@@ -334,7 +342,7 @@ function mergeUnitData(a, b) {
     stats.questionHistory = qh;
   }
 
-  return { state, stats };
+  return cleanLegacyFields({ state, stats });
 }
 
 /* =========================================================
