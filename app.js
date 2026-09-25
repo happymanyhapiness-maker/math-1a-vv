@@ -525,6 +525,7 @@ function save(opts) {
     // 旧仕様の tipList は万一メモリにあっても保存しない
     const stateToSave = { ...state, timer: null };
     delete stateToSave.tipList;
+    stateToSave.wrong = normalizeWrong(state.wrong); // 保存は常に [{id}] だけ
     localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: stateToSave, stats }));
   } catch (e) {
     console.error("[save] 学習データを保存できませんでした", e);
@@ -616,7 +617,7 @@ function loadUnit(unit) {
   state.timer = null; // 過去に保存された古いページのタイマーIDは無効（別タイマーを誤って止めないよう捨てる）
 
   if (!Array.isArray(state.history)) state.history = [];
-  if (!Array.isArray(state.wrong)) state.wrong = [];
+  state.wrong = normalizeWrong(state.wrong); // 旧形式（問題オブジェクト丸ごと）は {id} だけにする
   delete state.tipList; // 旧仕様の tipList（使っていない）は読み捨てる
   if (!Array.isArray(state.answerLog)) state.answerLog = [];
   if (typeof state.finished !== "boolean") state.finished = false;
@@ -642,6 +643,33 @@ function loadUnit(unit) {
 // 画面と別の問題として採点されたりするため）。メモリ上だけの一時データで、保存・同期はしない。
 let reviewSessionIds = null;
 
+// wrong（長期の復習対象）を [{id}] の形にそろえる。旧形式（問題オブジェクト丸ごと）や文字列IDも受け付け、
+// IDの無い要素は捨て、同じIDは最初の1つだけ残す（順番は維持、元の配列は変更しない）。
+// 問題文・正解・解説などは保存せず、表示・採点は常に最新の UNIT_META から取る。
+function normalizeWrong(list) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach((x) => {
+    const id = typeof x === "string" ? x : x && typeof x === "object" ? x.id : null;
+    if (typeof id !== "string" || !id || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id });
+  });
+  return out;
+}
+
+// 今の問題データ（UNIT_META）に存在するIDか。問題データから消えたIDは wrong に残しておく（消さない）が、
+// 出題・件数表示には使わない。
+function isActiveQuestionId(id) {
+  const meta = UNIT_META[state.unit];
+  return !!(meta && Array.isArray(meta.questions) && meta.questions.some((q) => q.id === id));
+}
+
+// いま出題できる wrong のID（保存上の state.wrong の順番どおり）
+function activeWrongIds() {
+  return state.wrong.map((q) => q && q.id).filter((id) => id && isActiveQuestionId(id));
+}
+
 // 通常試験（「試験開始」）で今回間違えた問題のID（誤答・時間切れ・スキップ＝addReviewTarget が呼ばれた問題）。
 // 結果画面の「間違えた問題だけ再挑戦」で「今回の試験の誤答だけ」を出題するために使う。
 // 長期の復習対象（state.wrong）とは別の、メモリ上だけの一時データで、保存・同期はしない。
@@ -651,7 +679,8 @@ let reviewSessionFromExam = false; // 今の「間違えた問題だけ」セッ
 function reviewSessionList() {
   if (!reviewSessionIds) return []; // セッション外（リロード後など）は動的リストに戻さず「問題なし」扱い
   const qs = UNIT_META[state.unit].questions;
-  return reviewSessionIds.map((id) => qs.find((q) => q.id === id) || state.wrong.find((q) => q && q.id === id));
+  // 問題の正本は最新の UNIT_META だけ（開始時に存在するIDだけに絞ってある。念のため見つからないものは除く）
+  return reviewSessionIds.map((id) => qs.find((q) => q.id === id)).filter(Boolean);
 }
 
 function currentList() {
@@ -1362,8 +1391,8 @@ function addReviewTarget(q) {
   // 通常試験中なら「今回の試験の誤答」にも記録する（結果画面の再挑戦用）
   if (examWrongIds && state.mode === "normal" && !examWrongIds.includes(q.id)) examWrongIds.push(q.id);
 
-  if (!state.wrong.find((qq) => qq.id === q.id)) {
-    state.wrong.push(q);
+  if (!state.wrong.find((qq) => qq && qq.id === q.id)) {
+    state.wrong.push({ id: q.id }); // 問題の中身は保存しない（表示は最新の UNIT_META から）
   }
 
   // 間隔復習用メタ情報：初めて間違えた問題は「今すぐ復習対象」として登録する
@@ -1393,6 +1422,7 @@ function reviewClearStreakFor(unit) {
 function dueReviewList() {
   const now = Date.now();
   return state.wrong.filter((q) => {
+    if (!q || !isActiveQuestionId(q.id)) return false; // 問題データに無いIDは出さない
     const meta = state.reviewMeta[q.id];
     if (!meta) return true; // メタ情報がない古いデータは、念のため復習対象に含める
     return meta.dueAt <= now;
@@ -1416,7 +1446,7 @@ function markReviewResult(q, isCorrect) {
 
     if (meta.streak >= reviewClearStreakFor(state.unit)) {
       // 卒業：復習リストから完全に除去
-      state.wrong = state.wrong.filter((qq) => qq.id !== q.id);
+      state.wrong = state.wrong.filter((qq) => qq && qq.id !== q.id);
       delete state.reviewMeta[q.id];
       if (!state.graduatedAt) state.graduatedAt = {};
       state.graduatedAt[q.id] = meta.lastSeenAt; // 卒業時刻（同期マージで卒業前の古いデータを捨てる基準）
@@ -2787,7 +2817,7 @@ function startStageOnly(stageName) {
 
 // TOP の「間違えた問題だけ」：長期の復習対象（state.wrong）全体を出題する
 function startWrongOnlyReview() {
-  startWrongReviewSession(state.wrong.map((q) => q.id), false);
+  startWrongReviewSession(activeWrongIds(), false);
 }
 
 // 結果画面の「間違えた問題だけ再挑戦」。通常試験（とその再挑戦）の直後は、今回の試験で間違えた問題のうち
@@ -2799,7 +2829,8 @@ function retryWrongFromResult() {
     startWrongOnlyReview();
     return;
   }
-  startWrongReviewSession(examWrongIds.filter((id) => state.wrong.some((q) => q && q.id === id)), true);
+  const active = activeWrongIds();
+  startWrongReviewSession(examWrongIds.filter((id) => active.includes(id)), true);
 }
 
 function startWrongReviewSession(ids, fromExam) {
@@ -2829,7 +2860,7 @@ function startDueReview() {
   const due = dueReviewList();
   if (!due.length) {
     alert(
-      state.wrong.length
+      activeWrongIds().length
         ? "今復習すべき問題はまだありません。間隔をあけて出題する仕組みなので、少し時間を置いてから来てください。"
         : "復習対象の問題がありません。"
     );
@@ -2855,12 +2886,13 @@ function startDueReview() {
 // TIPSだけ復習：長期の復習対象（state.wrong）に残っている問題のコツを読み返す。
 // 卒業して wrong から外れた問題は対象外。
 function startTipReview() {
-  if (!state.wrong.length) {
+  const tipIds = activeWrongIds();
+  if (!tipIds.length) {
     alert("復習するTIPSがありません");
     return;
   }
 
-  reviewSessionIds = state.wrong.map((q) => q.id);
+  reviewSessionIds = tipIds;
   state.mode = "tips";
   state.index = 0;
   state.correct = 0;

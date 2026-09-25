@@ -504,7 +504,8 @@ console.log("\n[18] ④-2 graduatedAt が無い既存データ");
   check("18-2 wrong/reviewMeta は従来どおり読み込まれる", ids(app.state.wrong).includes("k1") && app.state.reviewMeta.k1.streak === 1);
   const m = mergeUnitData(legacy, C(legacy));
   check("18-3 両側に graduatedAt が無ければ merge 結果にもキーを作らない", !("graduatedAt" in m.state));
-  check("18-4 legacy 同士の merge は入力と完全一致", J(m) === J(legacy));
+  const legacyIdForm = C(legacy); legacyIdForm.state.wrong = legacy.state.wrong.map((q) => ({ id: q.id }));
+  check("18-4 legacy 同士の merge は入力と一致（wrong だけ Phase 7A-2b で {id} 形式になる）", J(m) === J(legacyIdForm), m.state.wrong);
   // 新しい端末（graduatedAt あり）と legacy remote の merge
   const newer = C(legacy); newer.state.graduatedAt = {};
   answer(newer, "k2", 2000, true);

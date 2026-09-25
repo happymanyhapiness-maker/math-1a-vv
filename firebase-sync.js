@@ -132,24 +132,39 @@ function freshness(data) {
    local / remote のどちらか片方しか無ければそれを返す。
    両方あれば「追記系は合体・進行状況は新しい方優先」で統合する。
    ========================================================= */
-// 旧仕様の tipList（使っていない）を取り除いたコピーを返す（無ければそのまま返す）
-function withoutTipList(d) {
-  if (!d || !d.state || !("tipList" in d.state)) return d;
+// wrong（長期の復習対象）を [{id}] の形にそろえる。旧形式（問題オブジェクト丸ごと）や文字列IDも受け付け、
+// IDの無い要素は捨て、同じIDは最初の1つだけ残す（順番は維持、元の配列は変更しない）
+function normalizeWrong(list) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach(x => {
+    const id = typeof x === "string" ? x : (x && typeof x === "object" ? x.id : null);
+    if (typeof id !== "string" || !id || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id });
+  });
+  return out;
+}
+
+// 旧仕様の tipList（使っていない）を取り除き、wrong を [{id}] にそろえたコピーを返す
+function cleanLegacyFields(d) {
+  if (!d || !d.state) return d;
   const state = Object.assign({}, d.state);
   delete state.tipList;
+  if ("wrong" in state) state.wrong = normalizeWrong(state.wrong);
   return Object.assign({}, d, { state });
 }
 
 function mergeUnitData(a, b) {
-  if (!a) return withoutTipList(b);
-  if (!b) return withoutTipList(a);
+  if (!a) return cleanLegacyFields(b);
+  if (!b) return cleanLegacyFields(a);
 
   // --- resetGen: 単元の「リセット世代」（学習データをリセットするたびに +1。無ければ 0）---
   //  世代が違えば、新しい世代の側をまるごと採用し、古い世代の学習データは一切 merge しない
   //  （リセットより前のデータが remote や別端末から復活しないように）。同じ世代なら通常の merge。
   const genOf = d => (d.state && typeof d.state.resetGen === "number" && d.state.resetGen > 0) ? Math.floor(d.state.resetGen) : 0;
   const genA = genOf(a), genB = genOf(b);
-  if (genA !== genB) return withoutTipList(genA > genB ? a : b);
+  if (genA !== genB) return cleanLegacyFields(genA > genB ? a : b);
 
   // newer / older を決める
   const fa = freshness(a), fb = freshness(b);
@@ -233,15 +248,15 @@ function mergeUnitData(a, b) {
     liveRM[id] = e;
   });
 
-  // --- wrong: 問題オブジェクトの配列 ---
+  // --- wrong: [{id}] の配列（旧形式の問題オブジェクトも入口で {id} にそろえる） ---
   //  ・新しい側にあるものは全部残す
   //  ・古い側にしか無いものは、マージ後のreviewMetaにidが残っている場合だけ採用
   //    （古い端末でだけ新しく間違えた問題はちゃんと拾える）
   //  ・wrong は liveRM で判定し、さらに「卒業済みで有効なreviewMetaが無い」問題は新しい側からも外す
   //    （＝remoteに残った卒業前のwrongで卒業が取り消されない）
   function mergeQList(nList, oList, meta) {
-    const n = Array.isArray(nList) ? nList : [];
-    const o = Array.isArray(oList) ? oList : [];
+    const n = normalizeWrong(nList);
+    const o = normalizeWrong(oList);
     const nIds = new Set(n.map(q => q && q.id));
     const out = n.slice();
     o.forEach(q => {

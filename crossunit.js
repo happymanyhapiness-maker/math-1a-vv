@@ -60,7 +60,7 @@
         exists: true,
         log: log,
         history: Array.isArray(st.history) ? st.history : [],
-        wrongCount: Array.isArray(st.wrong) ? st.wrong.length : 0,
+        wrongCount: activeWrongCount(st.wrong, meta()[unit]),
         stats: obj.stats || null,
         totalQuestions: (meta()[unit] && Array.isArray(meta()[unit].questions))
           ? meta()[unit].questions.length : null
@@ -68,6 +68,21 @@
     });
 
     return out;
+  }
+
+  // 誤答リストの件数（今の問題データに存在するIDだけ数える。旧形式の問題オブジェクトも {id} 形式も同じ扱い）
+  function activeWrongCount(wrong, m) {
+    if (!Array.isArray(wrong)) return 0;
+    var qs = (m && Array.isArray(m.questions)) ? m.questions : [];
+    var seen = {};
+    var n = 0;
+    wrong.forEach(function (x) {
+      var id = typeof x === "string" ? x : (x && typeof x === "object" ? x.id : null);
+      if (typeof id !== "string" || !id || seen[id]) return;
+      seen[id] = true;
+      if (qs.some(function (q) { return q && q.id === id; })) n++;
+    });
+    return n;
   }
 
   /* ---------- 小道具 ---------- */
