@@ -322,12 +322,16 @@ function unitDocRef(unit) {
   return doc(db, "users", targetUid(), "units", unit);
 }
 
+// 単元ドキュメントの中身（payload の JSON 文字列）を取り出す。無い・壊れている場合は null
+function parsePayload(d) {
+  if (!d || !d.payload) return null;
+  try { return JSON.parse(d.payload); } catch (e) { return null; }
+}
+
 async function fetchRemote(unit) {
   const snap = await getDoc(unitDocRef(unit));
   if (!snap.exists()) return null;
-  const d = snap.data();
-  if (!d || !d.payload) return null;
-  try { return JSON.parse(d.payload); } catch (e) { return null; }
+  return parsePayload(snap.data());
 }
 
 async function writeRemote(unit, data) {
@@ -535,11 +539,15 @@ async function syncAll(opts) {
   const units = new Set(unitKeys());
   console.log("[sync] ローカル既知の単元数:", units.size);
 
-  // サーバー側にしか無い単元も拾う
+  // サーバー側にしか無い単元も拾う。一覧で受け取ったドキュメントの中身は、そのまま remote として使う
+  // （単元ごとに getDoc で取り直さない＝同じ payload を2回ダウンロードしない）。一覧に無い単元は remote なし
   let listFailed = false;
+  let remoteMap = null;   // 一覧の取得に成功したときだけ使う（unit → payload）
   try {
     const snap = await getDocs(collection(db, "users", targetUid(), "units"));
-    snap.forEach(d => units.add(d.id));
+    const map = new Map();
+    snap.forEach(d => { units.add(d.id); map.set(d.id, parsePayload(d.data())); });
+    remoteMap = map;
   } catch (e) {
     // 一覧が取れなくても既知の単元だけで続行するが、原因が見えないと詰むので必ずログに出す
     console.error("[sync] unit一覧の取得に失敗:", e);
@@ -552,7 +560,8 @@ async function syncAll(opts) {
   for (const unit of units) {
     try {
       const local = readLocal(unit);
-      const remote = await fetchRemote(unit);
+      // 一覧が取れたらその中身を使う。一覧の取得に失敗したときだけ、単元ごとに取りに行く（従来の方法）
+      const remote = remoteMap ? (remoteMap.has(unit) ? remoteMap.get(unit) : null) : await fetchRemote(unit);
       if (!local && !remote) continue;
 
       const merged = mergeUnitData(local, remote);

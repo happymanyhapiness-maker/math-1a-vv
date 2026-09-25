@@ -261,7 +261,7 @@ function makeApp() {
     consts + "\n" +
     extract(appSrc, "function defaultState", "let state = defaultState(null);") +
     "\nlet state = defaultState(null); let stats = defaultStats();\n" +
-    extract(appSrc, "function save()", "function shuffleArray") +
+    extract(appSrc, "let saveFailing", "function shuffleArray") +
     extract(appSrc, "function loadUnit", "function currentList") +
     "\nreturn { save, loadUnit, STORAGE_PREFIX," +
     " get state() { return state; }, get stats() { return stats; } };");

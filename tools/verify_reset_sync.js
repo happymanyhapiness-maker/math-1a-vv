@@ -5,6 +5,8 @@
 // 同じ世代同士は今までどおり merge されることを確認する。
 // [14] 以降は、同期の失敗（読み取り・書き込み）で未送信の単元が dirty に残り、
 // 通信の復帰（online）・次の保存・画面を隠す・次回起動で送り直されることを確認する（Phase 6）。
+// [26] 以降は、localStorage への保存失敗（容量オーバーなど）で学習が止まらず・完了と誤表示しないこと、
+// 起動時の syncAll が単元ドキュメントを1回しかダウンロードしないことを確認する（Phase 7A-1）。
 //
 // 本物の questions_*.js / app.js / firebase-sync.js を node の vm に読み込み、
 // firebase-sync.js の import（Firebase SDK）だけをメモリ上の偽 Firestore に差し替える。
@@ -30,7 +32,13 @@ const J = JSON.stringify;
 function makeCloud() {
   const store = {};
   const writes = [];
-  const cloud = { offline: false, failRead: false, failWrite: false };
+  // stats: 読み取りの計測（getDocs / getDoc の回数、読み取ったドキュメント数、ダウンロードしたバイト数、パスごとの回数）
+  const cloud = { offline: false, failRead: false, failWrite: false,
+    stats: { getDocs: 0, getDoc: 0, docReads: 0, missingReads: 0, bytes: 0, perPath: {} } };
+  const countRead = (p) => {
+    if (store[p]) { cloud.stats.docReads++; cloud.stats.bytes += Buffer.byteLength(J(store[p])); cloud.stats.perPath[p] = (cloud.stats.perPath[p] || 0) + 1; }
+    else cloud.stats.missingReads++;
+  };
   const hit = (f, p) => (typeof f === "function" ? f(p) : !!f);
   const net = (op, p) => {
     if (cloud.offline) throw new Error("offline");
@@ -45,12 +53,13 @@ function makeCloud() {
     onAuthStateChanged: () => {},                       // 端末ごとに差し替える
     doc: (_db, ...seg) => ({ path: seg.join("/") }),
     collection: (_db, ...seg) => ({ path: seg.join("/") }),
-    getDoc: async (ref) => { net("read", ref.path); return snap(store[ref.path]); },
+    getDoc: async (ref) => { net("read", ref.path); cloud.stats.getDoc++; countRead(ref.path); return snap(store[ref.path]); },
     getDocs: async (col) => {
       net("read", col.path);
+      cloud.stats.getDocs++;
       const depth = col.path.split("/").length + 1;
       const docs = Object.keys(store).filter((p) => p.startsWith(col.path + "/") && p.split("/").length === depth)
-        .map((p) => ({ id: p.split("/").pop() }));
+        .map((p) => { countRead(p); const d = JSON.parse(J(store[p])); return { id: p.split("/").pop(), data: () => d }; });
       return { forEach: (f) => docs.forEach(f) };
     },
     setDoc: async (ref, data, opts) => {
@@ -87,11 +96,12 @@ function makeDevice(cloud, clock) {
     const session = dev.session;
     const els = {};
     dev.listeners = {};
+    dev.alerts = [];
     const timers = [];
     const ctx = {
       // オフラインや失敗を再現している間の、想定どおりの失敗ログは出さない
-      console: { log() {}, warn() {}, error: (...a) => { if (!cloud.offline && !cloud.failRead && !cloud.failWrite) console.error(...a); } },
-      alert: () => {}, confirm: () => true, scrollTo: () => {},
+      console: { log() {}, warn() {}, error: (...a) => { if (!cloud.offline && !cloud.failRead && !cloud.failWrite && !dev.quota) console.error(...a); } },
+      alert: (m) => { dev.alerts.push(m); }, confirm: () => true, scrollTo: () => {},
       addEventListener: (ev, fn) => { (dev.listeners[ev] = dev.listeners[ev] || []).push(fn); },
       setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
       clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
@@ -102,7 +112,11 @@ function makeDevice(cloud, clock) {
       sessionStorage: { getItem: (k) => (k in session ? session[k] : null), setItem: (k, v) => { session[k] = String(v); }, removeItem: (k) => { delete session[k]; } },
       localStorage: {
         getItem: (k) => (k in store ? store[k] : null),
-        setItem: (k, v) => { store[k] = String(v); },
+        // dev.quota = true の間は、容量オーバー（または dev.quotaName の例外）を再現する
+        setItem: (k, v) => {
+          if (dev.quota) { const e = new Error("storage write failed"); e.name = dev.quotaName || "QuotaExceededError"; if (e.name === "QuotaExceededError") e.code = 22; throw e; }
+          store[k] = String(v);
+        },
         removeItem: (k) => { delete store[k]; },
         key: (i) => Object.keys(store)[i],
         get length() { return Object.keys(store).length; }
@@ -133,8 +147,9 @@ function makeDevice(cloud, clock) {
     dev.authCb({ uid: CHILD_UID, email: "child@example.com" });      // ログイン → 起動時 syncAll
     await settle();
     // 起動時 syncAll が予約したリロード（0.9 秒後）を実行し、起きたら同じタブで読み込み直す
+    // launch({ noReload: true }) は、起動時の syncAll 1回ぶんだけを見たいとき用（リロードは追わない）
     const reloadTimer = timers.find((t) => t.fn && t.ms === 900);
-    if (reloadTimer) {
+    if (reloadTimer && !(opts && opts.noReload)) {
       const before = dev.reloads;
       reloadTimer.fn(); reloadTimer.fn = null;
       if (dev.reloads > before) return dev.launch({ reload: true });
@@ -678,6 +693,203 @@ function check(name, cond, detail) {
       !inRemoteWrong() && !!(cloud.unit().state.graduatedAt || {})[id]);
     await A.launch();
     check("25-3 次回起動しても wrong に戻らない", !A.local().state.wrong.some((q) => q.id === id) && !inRemoteWrong());
+  }
+
+  // ---------------------------------------------------------------
+  // Phase 7A-1：localStorage への保存失敗（容量オーバーなど）と、起動時の読み取り
+  const SAVE_NG_QUOTA = "保存状態: 保存できていません（端末の保存容量がいっぱいです）";
+  const SAVE_NG_OTHER = "保存状態: 学習データを保存できませんでした";
+  const saveStatus = (dev) => dev.run("el('saveStatus').innerText");
+  const memLog = (dev) => dev.run("state.answerLog.length");
+  const tryRun = (dev, code) => { try { dev.run(code); return null; } catch (e) { return e.name + ": " + e.message; } };
+
+  console.log("\n[26] A: 容量オーバーで保存に失敗（1回目）");
+  {
+    const { cloud, A } = await synced();
+    A.run("startExam()"); await A.flush();
+    const stored0 = localLog(A);
+    A.quota = true;
+    const ops = [["正解", "answer(currentQuestion().correct)"], ["誤答", "answer((currentQuestion().correct + 1) % currentQuestion().a.length)"],
+      ["時間切れ", "timeoutQuestion()"], ["スキップ", "skipQuestion()"]];
+    const errs = [];
+    ops.forEach(([name, code], i) => {
+      const e = tryRun(A, code); if (e) errs.push(name + " " + e);
+      if (i === 0) {
+        check("26-1 例外は外に出ない", e === null, e);
+        check("26-2 メモリには回答が残る", memLog(A) === stored0 + 1);
+        check("26-3 localStorage には入らない", localLog(A) === stored0);
+        check("26-4 解説と「次へ」は出る（画面は進められる）", A.run("el('feedback').style.display") === "block" && A.run("el('nextBtn').style.display") === "inline-block");
+        check("26-5 saveStatus は未保存（容量不足）", saveStatus(A) === SAVE_NG_QUOTA, saveStatus(A));
+        check("26-6 alert は1回", A.alerts.length === 1 && A.alerts[0].includes("保存できませんでした") && A.alerts[0].includes("失われる可能性"), A.alerts);
+      }
+      tryRun(A, "nextQuestion()");
+    });
+    check("26-7 誤答・時間切れ・スキップでも例外は外に出ない", errs.length === 0, errs);
+    // [27] B: 失敗が続いている間
+    console.log("\n[27] B: 保存失敗中に続けて回答");
+    check("27-1 alert は最初の1回だけ", A.alerts.length === 1, A.alerts.length);
+    check("27-2 メモリには4件とも残る", memLog(A) === stored0 + 4);
+    check("27-3 saveStatus は未保存のまま", saveStatus(A) === SAVE_NG_QUOTA);
+    check("27-4 保存できていない分は dirty にも積まれない（送る元が無い）", A.dirty().length === 0);
+    await A.flush();
+    check("27-5 Firestore にも届いていない", remoteLog(cloud) === stored0);
+    // [28] C: 容量が戻る
+    console.log("\n[28] C: 容量が戻った後の保存");
+    A.quota = false;
+    tryRun(A, "startExam()");
+    check("28-1 次の保存で未保存だった分もまとめて保存される", localLog(A) === stored0 + 4);
+    check("28-2 saveStatus は「保存済み」に戻る", /^保存状態: 保存済み（/.test(saveStatus(A)), saveStatus(A));
+    check("28-3 dirty になり、送信が予約される", J(A.dirty()) === J([UNIT]) && A.timers.some((t) => t.fn && t.ms === 4000));
+    await A.flush();
+    check("28-4 Firestore に届く", remoteLog(cloud) === stored0 + 4);
+    A.quota = true;
+    tryRun(A, "answer(currentQuestion().correct)");
+    check("28-5 一度成功した後にまた失敗したら、新しい失敗として alert をもう一度出す", A.alerts.length === 2);
+    A.quota = false;
+  }
+
+  console.log("\n[29] 穴埋めの採点で保存に失敗");
+  {
+    const { A } = await synced();
+    A.run(`selectUnit("nijikansuu"); startExam();`);
+    const i = A.run(`UNIT_META.nijikansuu.questions.findIndex((q) => q.type === "fillin")`);
+    A.run(`state.index = ${i}; show();`);
+    const before = A.run("state.answerLog.length");
+    A.quota = true;
+    const e = tryRun(A, "submitFillin()");
+    A.quota = false;
+    check("29-1 例外は外に出ず、メモリに残り、解説が出る", e === null && A.run("state.answerLog.length") === before + 1 && A.run("el('feedback').style.display") === "block", e);
+  }
+
+  console.log("\n[30] D: 「前回正解済み→スキップ」で保存に失敗");
+  {
+    const { A } = await synced();
+    A.run("startExam()");
+    const first = A.run("currentQuestion().id");
+    A.quota = true;
+    const e = tryRun(A, "skipKnownQuestion()");
+    A.quota = false;
+    check("30-1 例外は外に出ない", e === null, e);
+    check("30-2 次の問題へ進み、画面も次の問題になる", A.run("currentQuestion().id") !== first && A.run("state.index") === 1 &&
+      A.run("el('progressLabel').innerText") === "2 / " + A.run("currentList().length"), A.run("el('progressLabel').innerText"));
+    check("30-3 未保存の表示は残る", saveStatus(A) === SAVE_NG_QUOTA);
+  }
+
+  console.log("\n[31] E: リセットの保存に失敗");
+  {
+    const { cloud, A } = await synced();
+    const before = { log: memLog(A), gen: A.run("state.resetGen"), total: A.run("stats.stage['第1問'].t"), stored: localLog(A) };
+    A.alerts.length = 0;
+    A.quota = true;
+    const e = tryRun(A, "resetStatsOnly()");
+    A.quota = false;
+    check("31-1 例外は外に出ない", e === null, e);
+    check("31-2 メモリの state・stats・resetGen はリセット前のまま",
+      memLog(A) === before.log && A.run("state.resetGen") === before.gen && A.run("stats.stage['第1問'].t") === before.total && before.log > 0);
+    check("31-3 保存データも変わらない", localLog(A) === before.stored);
+    check("31-4 「リセットしました」は出ず、リセットできなかったと表示",
+      !A.alerts.some((m) => m.includes("リセットしました")) && A.alerts.some((m) => m.includes("リセットできませんでした")) &&
+      saveStatus(A).includes("リセットできませんでした"), { alerts: A.alerts, status: saveStatus(A) });
+    check("31-5 alert はリセット用の1回だけ（保存失敗の汎用 alert と重ならない）", A.alerts.length === 1, A.alerts);
+    await A.flush();
+    check("31-6 Firestore も変わらない", remoteLog(cloud) === before.stored && cloud.unit().state.resetGen === undefined);
+    // 容量が戻れば、通常どおりリセットできる（Phase 5 の仕様どおり）
+    A.run("resetStatsOnly()");
+    check("31-7 容量が戻った後のリセットは成功（gen1・空・完了 alert）",
+      A.local().state.resetGen === 1 && localLog(A) === 0 && A.alerts.some((m) => m === "学習データをリセットしました"));
+  }
+
+  console.log("\n[32] F: 容量オーバー以外の保存失敗（SecurityError）");
+  {
+    const { A } = await synced();
+    A.run("startExam()");
+    A.quota = true; A.quotaName = "SecurityError";
+    const e = tryRun(A, "answer(currentQuestion().correct)");
+    A.quota = false; A.quotaName = null;
+    check("32-1 例外は外に出ない", e === null, e);
+    check("32-2 一般的な保存失敗の表示", saveStatus(A) === SAVE_NG_OTHER, saveStatus(A));
+    check("32-3 alert は容量の話をしない", A.alerts.length === 1 && !A.alerts[0].includes("容量"), A.alerts);
+  }
+
+  console.log("\n[33] 起動時の syncAll：一覧（getDocs）の中身をそのまま使い、単元ごとに取り直さない");
+  async function worldWithUnits(n) {
+    const clock = { now: Date.UTC(2026, 9, 1) };
+    const cloud = makeCloud();
+    const A = makeDevice(cloud, clock);
+    await A.launch();
+    const units = A.run("Object.keys(UNIT_META)").slice(0, n);
+    for (const u of units) { clock.now += 1000; answerOne(A, false, u); await A.flush(); }
+    // 別の端末 B で各単元をもう1問ずつ解いて push（A の起動時に取り込む差分を作る）
+    const B = makeDevice(cloud, clock); await B.launch();
+    for (const u of units) { clock.now += 1000; answerOne(B, true, u); await B.flush(); }
+    return { clock, cloud, A, units };
+  }
+  const P_UNITS = "users/" + CHILD_UID + "/units/";
+  for (const n of [1, 5, 17]) {
+    const w = await worldWithUnits(n);
+    const docBytes = w.units.reduce((s, u) => s + Buffer.byteLength(J(w.cloud.store[P_UNITS + u])), 0);
+    w.cloud.stats = { getDocs: 0, getDoc: 0, docReads: 0, missingReads: 0, bytes: 0, perPath: {} };
+    const r0 = w.A.reloads;
+    await w.A.launch({ noReload: true });                            // 起動時の syncAll 1回ぶん
+    const unitGetDoc = Object.entries(w.cloud.stats.perPath).filter(([p]) => p.startsWith(P_UNITS)).map(([, c]) => c);
+    const unitBytes = Object.keys(w.cloud.stats.perPath).filter((p) => p.startsWith(P_UNITS)).reduce((s, p) => s + Buffer.byteLength(J(w.cloud.store[p])) * w.cloud.stats.perPath[p], 0);
+    check(`33-${n} ${n}単元: getDocs 1回・単元ごとの取得は1回ずつ（取り直しなし）`,
+      w.cloud.stats.getDocs === 1 && unitGetDoc.length === n && unitGetDoc.every((c) => c === 1), { getDocs: w.cloud.stats.getDocs, perUnit: unitGetDoc });
+    check(`33-${n} ${n}単元: 単元の payload のダウンロードは合計の1倍（${(unitBytes / 1024).toFixed(1)}KB / ${(docBytes / 1024).toFixed(1)}KB）`, unitBytes === docBytes);
+    // B の分を取り込んで local が変わったので、既存の仕様どおり「取り込みました。画面を更新します…」→ リロード予約
+    check(`33-${n} ${n}単元: B の回答も取り込まれて local は2件ずつ（取り込み → リロードの表示）`,
+      w.units.every((u) => localLog(w.A, u) === 2) && w.A.status() === "他の端末のデータを取り込みました。画面を更新します…" && w.A.reloads >= r0, w.A.status());
+    check(`33-${n} ${n}単元: まだ remote に無い単元のために getDoc しない（単元の getDoc 0回）`,
+      w.cloud.stats.getDoc === 1 /* dailyquest の今日の記録の読み取りだけ */, w.cloud.stats.getDoc);
+  }
+
+  console.log("\n[34] 一覧の取得に失敗したときは、単元ごとの getDoc に戻る（Phase 6 の動きを維持）");
+  {
+    // 一覧経由と、一覧失敗時の単元ごとの取得で、merge 結果が同じになること（同じ状態から両方を流して比べる）
+    const same5 = [];
+    const w5 = await worldWithUnits(5);
+    const snapCloud = J(w5.cloud.store), snapLocal = J(w5.A.store);
+    const restore = () => {
+      Object.keys(w5.cloud.store).forEach((k) => delete w5.cloud.store[k]); Object.assign(w5.cloud.store, JSON.parse(snapCloud));
+      Object.keys(w5.A.store).forEach((k) => delete w5.A.store[k]); Object.assign(w5.A.store, JSON.parse(snapLocal));
+    };
+    for (const mode of ["list", "fallback"]) {
+      restore();
+      w5.cloud.stats = { getDocs: 0, getDoc: 0, docReads: 0, missingReads: 0, bytes: 0, perPath: {} };
+      if (mode === "fallback") w5.cloud.failRead = (p) => p.endsWith("/units");
+      await w5.A.launch({ noReload: true });
+      w5.cloud.failRead = false;
+      same5.push({ mode, local: w5.units.map((u) => w5.A.store["kyotsu_app_v14_" + u]), remote: w5.units.map((u) => w5.cloud.store[P_UNITS + u].payload),
+        getDoc: w5.cloud.stats.getDoc, status: w5.A.status() });
+    }
+    check("34-1 一覧に失敗すると単元ごとに getDoc する（UNIT_META の全単元＋dailyquest）", same5[1].getDoc > 5, same5[1].getDoc);
+    check("34-2 一覧経由でも単元ごとの取得でも、local と remote の merge 結果は同じ",
+      J(same5[0].local) === J(same5[1].local) && J(same5[0].remote) === J(same5[1].remote));
+    check("34-3 一覧に失敗したときは「同期済み」で上書きしない", !OK_RE.test(same5[1].status), same5[1].status);
+    check("34-3b 一覧に失敗して、取り込むものも無ければ「単元一覧の取得に失敗」が残る", await (async () => {
+      restore(); await w5.A.launch({ noReload: true });              // 一度取り込んで local と remote をそろえる
+      w5.cloud.failRead = (p) => p.endsWith("/units"); await w5.A.launch({ noReload: true }); w5.cloud.failRead = false;
+      return w5.A.status().includes("単元一覧の取得に失敗");
+    })(), w5.A.status());
+    // 一覧も一部の単元の読み取りも失敗 → 取れた単元は同期、失敗した単元は dirty・未送信表示・online で再送
+    const w = await worldWithUnits(3);
+    const bad = w.units[1];
+    w.cloud.failRead = (p) => p.endsWith("/units") || p === P_UNITS + bad;
+    await w.A.launch();
+    w.cloud.failRead = false;
+    check("34-4 取れた単元は同期される", localLog(w.A, w.units[0]) === 2 && localLog(w.A, w.units[2]) === 2);
+    check("34-5 読み取りに失敗した単元は dirty に残り、未送信の表示", J(w.A.dirty()) === J([bad]) && w.A.status() === UNSENT, { dirty: w.A.dirty(), status: w.A.status() });
+    await w.A.fire("online");
+    check("34-6 online で失敗した単元も送られ、dirty は空・「同期済み」", w.A.dirty().length === 0 && OK_RE.test(w.A.status()));
+  }
+
+  console.log("\n[35] pushDirty は今までどおり送る直前に単元ごとの getDoc で最新の remote を取る");
+  {
+    const { cloud, A } = await synced();
+    answerOne(A, true);
+    cloud.stats = { getDocs: 0, getDoc: 0, docReads: 0, missingReads: 0, bytes: 0, perPath: {} };
+    await A.flush();
+    check("35-1 pushDirty は getDocs を使わず、単元の getDoc 1回", cloud.stats.getDocs === 0 && cloud.stats.perPath[UNIT_PATH] === 1, cloud.stats);
   }
 
   console.log("\n結果: " + pass + " OK / " + fail + " NG");

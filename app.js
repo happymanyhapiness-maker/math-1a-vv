@@ -511,18 +511,46 @@ function normalizeAnswer(v) {
 /* =========================
    保存 / 読み込み（単元ごと）
 ========================= */
-function save() {
-  if (!state.unit) return;
+// 保存に失敗している間は true（この間の最初の1回だけ alert を出す。保存に成功したら false に戻る）
+let saveFailing = false;
 
-  // state.timer はこのページ内だけで有効な setInterval のID。保存するコピーだけ null にする
-  // （メモリ上の state.timer は触らないので、実行中タイマーの clearInterval はこれまでどおり効く）
-  localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: { ...state, timer: null }, stats }));
-  localStorage.setItem(UNIT_KEY, state.unit);
+// 成功したら true、失敗したら false を返す。失敗しても例外は外に出さない（学習の操作は続けられる）。
+// 失敗した回答はメモリの state に残り、次に保存が成功したときにまとめて保存される。
+// opts.quiet: 失敗時の alert を出さない（リセットのように呼び出し側で専用の警告を出す場合）
+function save(opts) {
+  if (!state.unit) return false;
+
+  try {
+    // state.timer はこのページ内だけで有効な setInterval のID。保存するコピーだけ null にする
+    // （メモリ上の state.timer は触らないので、実行中タイマーの clearInterval はこれまでどおり効く）
+    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: { ...state, timer: null }, stats }));
+  } catch (e) {
+    console.error("[save] 学習データを保存できませんでした", e);
+    const quota = !!e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22 || e.code === 1014);
+    if (el("saveStatus")) {
+      el("saveStatus").innerText = quota
+        ? "保存状態: 保存できていません（端末の保存容量がいっぱいです）"
+        : "保存状態: 学習データを保存できませんでした";
+    }
+    if (!saveFailing && !(opts && opts.quiet)) {
+      alert(
+        (quota ? "端末の保存容量がいっぱいのため、" : "") +
+        "学習データを端末に保存できませんでした。\nこのままページを閉じたり再読み込みしたりすると、保存できていない回答が失われる可能性があります。"
+      );
+    }
+    if (!(opts && opts.quiet)) saveFailing = true;
+    return false;
+  }
+  saveFailing = false;
+
+  // 最後に開いた単元の記録（学習データではないので、失敗しても保存の成否には含めない）
+  try { localStorage.setItem(UNIT_KEY, state.unit); } catch (e) { /* 次の保存で再挑戦 */ }
 
   if (el("saveStatus")) {
     const now = new Date().toLocaleTimeString("ja-JP");
     el("saveStatus").innerText = `保存状態: 保存済み（${now}）`;
   }
+  return true;
 }
 function shuffleArray(array){
   const arr = array.map((v,i)=>({value:v, index:i}));
@@ -2902,12 +2930,27 @@ function resetStatsOnly() {
   try { storedGen = genOf((JSON.parse(localStorage.getItem(STORAGE_PREFIX + unit)) || {}).state); } catch (e) {}
   const resetGen = Math.max(genOf(state), storedGen) + 1;
 
+  // 保存に失敗したら元に戻せるよう、リセット前の state / stats を持っておく
+  const prevState = state;
+  const prevStats = stats;
+
   state = defaultState(unit);
   stats = defaultStats();
   state.resetGen = resetGen;
 
   // 時間制限の設定は学習データではないので維持する
   state.strict = strict;
+
+  // 保存できなかったリセットは成立させない（メモリも resetGen もリセット前に戻し、完了とは表示しない）
+  if (!save({ quiet: true })) {
+    state = prevState;
+    stats = prevStats;
+    if (el("saveStatus")) {
+      el("saveStatus").innerText = "保存状態: リセットできませんでした（端末の保存容量を確認してください）";
+    }
+    alert("学習データをリセットできませんでした。\n端末の保存容量を確認してください。");
+    return;
+  }
 
   // この単元のメモリ上のセッション情報（復習の固定リスト・今回の試験の誤答）も破棄する
   reviewSessionIds = null;
@@ -2917,7 +2960,6 @@ function resetStatsOnly() {
   applyUnitUI(unit);
   update();
   renderHistory();
-  save();
 
   if (el("toggleStrictTimeBtn")) {
     el("toggleStrictTimeBtn").innerText =
