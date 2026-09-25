@@ -161,6 +161,12 @@ function cleanLegacyFields(d) {
     if (Object.keys(arc).length) state.logArchive = arc;
     else delete state.logArchive;
   }
+  // Phase 2 救済用の失敗時刻（log-archive.js）は正規形にし、卒業時刻以前のものを消す。空ならキーを消す
+  if ("rescueLog" in state && globalThis.LogArchive) {
+    const rl = globalThis.LogArchive.pruneRescueLog(state.rescueLog, state.graduatedAt);
+    if (Object.keys(rl).length) state.rescueLog = rl;
+    else delete state.rescueLog;
+  }
   if (state.mode === "unanswered") {
     state.mode = "normal";
     state.index = 0;
@@ -250,6 +256,19 @@ function mergeUnitData(a, b) {
       (r.outcome === "answered" && r.isCorrect === false);
     if (reAdd && !Object.prototype.hasOwnProperty.call(reAddedAt, r.questionId)) reAddedAt[r.questionId] = r.timestamp;
   });
+  //  生ログから消えた（archive へ移った）失敗は rescueLog に時刻だけ残る。生ログの失敗と合わせて、
+  //  卒業時刻より厳密に後で最初のものを使う（同じ時刻は同じものとして扱うので二重にならない）。
+  const hasRescueLog = ("rescueLog" in nS || "rescueLog" in oS) && !!globalThis.LogArchive;
+  const rescueLog = hasRescueLog ? globalThis.LogArchive.unionRescueLogs(oS.rescueLog, nS.rescueLog) : null;
+  if (rescueLog) {
+    Object.keys(rescueLog).forEach(id => {
+      if (!isGraduated(id)) return;
+      globalThis.LogArchive.rescueTimes(rescueLog, id).forEach(t => {
+        if (t <= ga[id]) return;
+        if (!Object.prototype.hasOwnProperty.call(reAddedAt, id) || t < reAddedAt[id]) reAddedAt[id] = t;
+      });
+    });
+  }
   const liveRM = {};
   Object.keys(rm).forEach(id => {
     const e = rm[id];
@@ -306,6 +325,8 @@ function mergeUnitData(a, b) {
   };
   // どちらにも graduatedAt が無ければキーを作らない（graduatedAt導入前のデータでは出力を変えない）
   if (hasGA) mergedFields.graduatedAt = ga;
+  // Phase 2 救済用の失敗時刻：同じ世代なら問題ごとの和集合（卒業時刻以前の刈り込みは cleanLegacyFields）
+  if (rescueLog) mergedFields.rescueLog = rescueLog;
   // 古い回答の archive：同じ世代なら event の和集合（どちらにも無ければキーを作らない）
   if (("logArchive" in nS || "logArchive" in oS) && globalThis.LogArchive) {
     mergedFields.logArchive = globalThis.LogArchive.unionArchives(oS.logArchive, nS.logArchive);

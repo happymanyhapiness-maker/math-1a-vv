@@ -185,6 +185,75 @@
     return events.concat(rest);
   }
 
+  /* ---------- rescueLog（Phase 2 救済用の失敗時刻）schema v1 ----------
+     state.rescueLog = { "<questionId>": "<9文字><9文字>..." }
+     ・各9文字は epoch ミリ秒の base36（0埋め固定長。36^9 未満＝西暦5000年代まで）
+     ・入っているのは「卒業後に addReviewTarget が呼ばれる失敗」（誤答・timeout・skip）の時刻だけ
+     ・問題ごとに重複除去・昇順・区切りなしで連結したものが正規形。空になった問題はキーごと消す */
+  var RESCUE_TS_LEN = 9;
+  var RESCUE_TS_MAX = Math.pow(36, RESCUE_TS_LEN); // これ未満だけ表せる（Number の安全な整数範囲内）
+  var RESCUE_TS_RE = /^[0-9a-z]{9}$/;
+
+  function rescueTsToken(ts) {
+    if (typeof ts !== "number" || !isFinite(ts) || ts <= 0 || Math.floor(ts) !== ts || ts >= RESCUE_TS_MAX) return null;
+    return pad36(ts, RESCUE_TS_LEN);
+  }
+  // 1問ぶんの文字列 → 時刻の配列（重複なし・昇順）。壊れた token は読み飛ばす
+  function parseRescueTimes(s, into) {
+    var set = into || new Set();
+    if (typeof s !== "string") return set;
+    for (var i = 0; i + RESCUE_TS_LEN <= s.length; i += RESCUE_TS_LEN) {
+      var t = s.slice(i, i + RESCUE_TS_LEN);
+      if (!RESCUE_TS_RE.test(t)) continue;
+      var n = parseInt(t, 36);
+      if (!(n > 0) || n >= RESCUE_TS_MAX || !Number.isSafeInteger(n)) continue;
+      set.add(n);
+    }
+    return set;
+  }
+  function canonicalRescueTimes(set) {
+    return Array.from(set).sort(function (a, b) { return a - b; }).map(function (n) { return pad36(n, RESCUE_TS_LEN); }).join("");
+  }
+  // 複数の rescueLog を問題ごとの時刻の和集合にして正規形で返す（入力は変更しない）
+  function unionRescueLogs() {
+    var byId = {};
+    for (var a = 0; a < arguments.length; a++) {
+      var log = arguments[a];
+      if (!log || typeof log !== "object" || Array.isArray(log)) continue;
+      Object.keys(log).forEach(function (id) {
+        if (!id) return;
+        byId[id] = parseRescueTimes(log[id], byId[id]);
+      });
+    }
+    var out = {};
+    Object.keys(byId).sort().forEach(function (id) {
+      var s = canonicalRescueTimes(byId[id]);
+      if (s) out[id] = s;
+    });
+    return out;
+  }
+  function normalizeRescueLog(log) {
+    return unionRescueLogs(log);
+  }
+  // 卒業時刻以前の失敗を消す（T <= graduatedAt[問題] のものだけ。reviewMeta は根拠にしない）
+  function pruneRescueLog(log, graduatedAt) {
+    var norm = normalizeRescueLog(log);
+    var ga = graduatedAt && typeof graduatedAt === "object" ? graduatedAt : {};
+    var out = {};
+    Object.keys(norm).forEach(function (id) {
+      var g = typeof ga[id] === "number" ? ga[id] : null;
+      var times = Array.from(parseRescueTimes(norm[id])).filter(function (t) { return g === null || t > g; });
+      var s = canonicalRescueTimes(new Set(times));
+      if (s) out[id] = s;
+    });
+    return out;
+  }
+  // 問題の失敗時刻（昇順）
+  function rescueTimes(log, id) {
+    if (!log || typeof log !== "object" || typeof log[id] !== "string") return [];
+    return Array.from(parseRescueTimes(log[id])).sort(function (a, b) { return a - b; });
+  }
+
   var api = {
     TOKEN_LEN: TOKEN_LEN,
     ID_LEN: ID_LEN,
@@ -203,7 +272,14 @@
     normalizeArchive: normalizeArchive,
     hasArchive: hasArchive,
     archiveEvents: archiveEvents,
-    countableLog: countableLog
+    countableLog: countableLog,
+    RESCUE_TS_LEN: RESCUE_TS_LEN,
+    rescueTsToken: rescueTsToken,
+    parseRescueTimes: parseRescueTimes,
+    unionRescueLogs: unionRescueLogs,
+    normalizeRescueLog: normalizeRescueLog,
+    pruneRescueLog: pruneRescueLog,
+    rescueTimes: rescueTimes
   };
   root.LogArchive = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

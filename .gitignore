@@ -10,4 +10,5 @@ tools/*
 !tools/verify_wrong_id.js
 !tools/verify_unanswered_session.js
 !tools/verify_log_archive.js
+!tools/verify_rescue_log.js
 模試分析/
