@@ -155,6 +155,12 @@ function cleanLegacyFields(d) {
   delete state.tipList;
   if ("wrong" in state) state.wrong = normalizeWrong(state.wrong);
   delete state.unansweredSnapshot;
+  // 古い回答の archive（log-archive.js）は正規形にそろえ、中身が無ければキーを消す
+  if ("logArchive" in state && globalThis.LogArchive) {
+    const arc = globalThis.LogArchive.normalizeArchive(state.logArchive);
+    if (Object.keys(arc).length) state.logArchive = arc;
+    else delete state.logArchive;
+  }
   if (state.mode === "unanswered") {
     state.mode = "normal";
     state.index = 0;
@@ -300,6 +306,10 @@ function mergeUnitData(a, b) {
   };
   // どちらにも graduatedAt が無ければキーを作らない（graduatedAt導入前のデータでは出力を変えない）
   if (hasGA) mergedFields.graduatedAt = ga;
+  // 古い回答の archive：同じ世代なら event の和集合（どちらにも無ければキーを作らない）
+  if (("logArchive" in nS || "logArchive" in oS) && globalThis.LogArchive) {
+    mergedFields.logArchive = globalThis.LogArchive.unionArchives(oS.logArchive, nS.logArchive);
+  }
   const state = Object.assign({}, oS, nS, mergedFields);
   delete state.tipList;   // 旧仕様の tipList（使っていない）は、古い local / remote / 端末から来ても出力しない
 
@@ -385,6 +395,13 @@ function todayKeyJST() {
   return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
 }
 
+// 回答数の集計用：古い回答の archive（log-archive.js）＋生ログ（archive が無ければ生ログそのもの）
+function countableLog(local) {
+  if (!local || !local.state) return [];
+  if (globalThis.LogArchive) return globalThis.LogArchive.countableLog(local.state);
+  return Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
+}
+
 function buildSummary() {
   let lastStudiedAt = 0;
   let todayCount = 0;
@@ -393,7 +410,7 @@ function buildSummary() {
 
   unitKeys().forEach(unit => {
     const local = readLocal(unit);
-    const log = local && local.state && Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
+    const log = countableLog(local);
     log.forEach(r => {
       if (!r || typeof r.timestamp !== "number") return;
       totalCount++;
@@ -488,7 +505,7 @@ async function backfillDailyQuestLogs() {
   const perDay = {};
   unitKeys().forEach(unit => {
     const local = readLocal(unit);
-    const log = local && local.state && Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
+    const log = countableLog(local);
     log.forEach(r => {
       const t = r && typeof r.timestamp === "number" ? r.timestamp : 0;
       if (!t) return;

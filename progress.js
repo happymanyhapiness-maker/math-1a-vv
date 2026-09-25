@@ -52,12 +52,17 @@
       var obj = null;
       if (raw) { try { obj = JSON.parse(raw); } catch (e) { obj = null; } }
 
-      var log = (obj && obj.state && Array.isArray(obj.state.answerLog)) ? obj.state.answerLog : [];
+      // 集計用：古い回答の archive（log-archive.js）＋生ログ。archive が無ければ生ログそのもの
+      var log = (obj && obj.state) ? (window.LogArchive ? LogArchive.countableLog(obj.state) : (Array.isArray(obj.state.answerLog) ? obj.state.answerLog : [])) : [];
 
+      // 解いたことのある問題：生ログの問題ID ＋ questionHistory（archive には問題IDが無いので questionHistory が正本）
       var seen = {};
-      log.forEach(function (r) {
+      var rawLog = (obj && obj.state && Array.isArray(obj.state.answerLog)) ? obj.state.answerLog : [];
+      rawLog.forEach(function (r) {
         if (r && r.questionId != null) seen[r.questionId] = true;
       });
+      var qh = (obj && obj.stats && obj.stats.questionHistory && typeof obj.stats.questionHistory === "object") ? obj.stats.questionHistory : {};
+      Object.keys(qh).forEach(function (id) { seen[id] = true; });
       var answeredCount = Object.keys(seen).length;
       var correct = log.filter(function (r) { return r && r.isCorrect; }).length;
 

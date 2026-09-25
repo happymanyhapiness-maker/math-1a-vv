@@ -52,13 +52,16 @@
         return;
       }
       var st = obj.state || {};
-      var log = Array.isArray(st.answerLog) ? st.answerLog : [];
+      var log = Array.isArray(st.answerLog) ? st.answerLog : []; // 分析用（生ログだけ）
+      // 回答数・正答率・最終学習日の集計用：古い回答の archive（log-archive.js）＋生ログ
+      var countLog = window.LogArchive ? LogArchive.countableLog(st) : log;
 
       out.push({
         unit: unit,
         label: unitLabel(unit),
         exists: true,
         log: log,
+        countLog: countLog,
         history: Array.isArray(st.history) ? st.history : [],
         wrongCount: activeWrongCount(st.wrong, meta()[unit]),
         stats: obj.stats || null,
@@ -128,32 +131,37 @@
       });
     });
 
-    var played = units.filter(function (u) { return u.log.length > 0; });
+    // 全体サマリ・単元別の回答数と正答率は archive＋生ログ、ここから下の分析（タグ・弱点・時間など）は生ログだけ
+    var sumAll = [];
+    units.forEach(function (u) { sumAll = sumAll.concat(u.countLog || u.log); });
+    var played = units.filter(function (u) { return (u.countLog || u.log).length > 0; });
+    var sumCorrect = sumAll.filter(function (r) { return r.isCorrect; }).length;
     var allCorrect = all.filter(function (r) { return r.isCorrect; }).length;
 
     L.push("【全体サマリ】");
     L.push("  取り組んだ単元: " + played.length + " / " + units.length);
-    L.push("  総回答数: " + all.length + " 回");
-    L.push("  通算正答率: " + pctText(allCorrect, all.length));
-    if (all.length === 0) {
+    L.push("  総回答数: " + sumAll.length + " 回");
+    L.push("  通算正答率: " + pctText(sumCorrect, sumAll.length));
+    if (sumAll.length === 0) {
       L.push("");
       L.push("  ※まだ回答ログがありません。");
       L.push("==== ここまで ====");
       return L.join("\n");
     }
-    var lastTs = Math.max.apply(null, all.map(function (r) { return r.timestamp || 0; }));
+    var lastTs = Math.max.apply(null, sumAll.map(function (r) { return r.timestamp || 0; }));
     L.push("  最終学習日: " + fmtDate(lastTs));
     L.push("");
 
     /* --- 単元別ランキング --- */
     L.push("【単元別の状況（正答率が低い順）】");
     var rows = units.map(function (u) {
-      var c = u.log.filter(function (r) { return r.isCorrect; }).length;
+      var cl = u.countLog || u.log;
+      var c = cl.filter(function (r) { return r.isCorrect; }).length;
       return {
         label: u.label,
-        n: u.log.length,
+        n: cl.length,
         c: c,
-        rate: pct(c, u.log.length),
+        rate: pct(c, cl.length),
         total: u.totalQuestions,
         wrong: u.wrongCount || 0
       };

@@ -63,7 +63,7 @@ function makeContext() {
   vm.createContext(ctx);
   vm.runInContext("Date.now = () => __NOW;", ctx);
   const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
-  const scripts = html.match(/questions_[a-z_0-9]+\.js|app\.js(?=\?)/g);
+  const scripts = html.match(/questions_[a-z_0-9]+\.js|log-archive\.js(?=\?)|app\.js(?=\?)/g);
   scripts.forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
   return { ctx, els, store, run: (code) => vm.runInContext(code, ctx) };
 }

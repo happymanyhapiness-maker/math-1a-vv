@@ -1570,7 +1570,9 @@ function update() {
 
   if (el("todayReviewCount")) el("todayReviewCount").innerText = dueReviewCount();
   if (el("reviewRate")) {
-    const reviewLogs = state.answerLog.filter((r) => r.mode === "review" || r.mode === "dueReview");
+    // 古い回答の archive（log-archive.js）＋生ログで数える（archive が無ければ生ログそのもの）
+    const countLog = window.LogArchive ? LogArchive.countableLog(state) : state.answerLog;
+    const reviewLogs = countLog.filter((r) => r.mode === "review" || r.mode === "dueReview");
     const reviewCorrect = reviewLogs.filter((r) => r.isCorrect).length;
     const rr = safeRate(reviewCorrect, reviewLogs.length);
     el("reviewRate").innerText = rr === null ? "―" : rr + "%";

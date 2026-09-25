@@ -1,0 +1,210 @@
+/* =========================================================
+   log-archive.js  —  古い回答ログの compact event archive（schema v1）
+   ---------------------------------------------------------
+   ・state.logArchive = { "YYYY-MM-DD"(JST): "<18文字token><18文字token>..." }
+   ・1 token = 18文字固定
+       6文字 : JST 0時からのミリ秒（base36, 0埋め）
+      11文字 : answerLog の重複判定キーの cyrb53（53bit, base36, 0埋め）
+       1文字 : flag（bit0 = 正解 / bit1 = review・dueReview）"0"〜"3"
+     先頭17文字が event ID（日付キーと合わせて一意）。
+   ・この形式と cyrb53 の実装は「保存データの schema」なので変えないこと
+     （archive 済みの event と、端末に残っている生ログを同一判定するのに使う）。
+     tools/verify_log_archive.js のテストベクタが変わったら schema 変更になる。
+   ・Phase 7B-1 では読む・merge する・集計するだけで、archive は作らない。
+   ・index.html（app.js / crossunit.js / firebase-sync.js）、calendar.html、progress.html で、
+     それぞれのスクリプトより前に読み込む。
+   ========================================================= */
+(function (root) {
+  "use strict";
+
+  var TOKEN_LEN = 18;
+  var ID_LEN = 17;
+  var TIME_LEN = 6;
+  var HASH_LEN = 11;
+  var DAY_MS = 86400000;
+  var JST_MS = 9 * 3600000;
+  var DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var TIME_RE = /^[0-9a-z]{6}$/;
+  var HASH_RE = /^[0-9a-z]{11}$/;
+  var FLAG_RE = /^[0-3]$/;
+  // 同じ event ID で flag だけ違う異常データのときの優先順（前ほど優先）：
+  //  誤答を正解より優先し、正誤が同じなら review でない方を優先する（数値の大小ではない）
+  //  "0"=誤答・通常 > "2"=誤答・review > "1"=正解・通常 > "3"=正解・review
+  var FLAG_PRIORITY = "0213";
+  function preferFlag(a, b) {
+    return FLAG_PRIORITY.indexOf(a) <= FLAG_PRIORITY.indexOf(b) ? a : b;
+  }
+
+  // cyrb53（53bit）。schema の一部なので実装を変えないこと
+  function cyrb53(str) {
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+  }
+
+  function pad36(n, len) {
+    var s = n.toString(36);
+    while (s.length < len) s = "0" + s;
+    return s;
+  }
+
+  // firebase-sync.js の answerLog 重複判定キーと同じ（テストで一致を確認している）
+  function dedupeKey(r) {
+    return [r.questionId, r.timestamp, r.outcome, r.selectedIndex, r.selectedText].join("|");
+  }
+
+  function validTs(ts) {
+    return typeof ts === "number" && isFinite(ts) && ts > 0;
+  }
+
+  // JST の日付キー（端末のタイムゾーンに依存しない）
+  function jstDayKey(ts) {
+    return new Date(ts + JST_MS).toISOString().slice(0, 10);
+  }
+  function jstOffset(ts) {
+    return ((ts + JST_MS) % DAY_MS + DAY_MS) % DAY_MS;
+  }
+  // 日付キー + 時刻部分 → 元の timestamp
+  function tsFromDayOffset(dayKey, offset) {
+    return Date.parse(dayKey + "T00:00:00Z") - JST_MS + offset;
+  }
+
+  function isReviewMode(mode) {
+    return mode === "review" || mode === "dueReview";
+  }
+  function flagOf(r) {
+    return String((r.isCorrect ? 1 : 0) + (isReviewMode(r.mode) ? 2 : 0));
+  }
+
+  // 生ログ1件の event ID（17文字）。timestamp が無効なら null
+  function eventId(r) {
+    if (!r || !validTs(r.timestamp)) return null;
+    return pad36(jstOffset(r.timestamp), TIME_LEN) + pad36(cyrb53(dedupeKey(r)), HASH_LEN);
+  }
+  function tokenOf(r) {
+    var id = eventId(r);
+    return id === null ? null : id + flagOf(r);
+  }
+
+  // 1日分の文字列 → Map(event ID → flag)。壊れた token は読み飛ばす（throw しない）
+  //  ・文字列でない → 空
+  //  ・18の倍数でない末尾の端数 → 無視
+  //  ・時刻が6桁の base36 でない / 1日の範囲外、hash が11桁の base36 でない、flag が 0〜3 でない → その token を無視
+  //  ・同じ ID で flag が違う → preferFlag（誤答優先、次に review でない方を優先）
+  function parseDay(s, into) {
+    var m = into || new Map();
+    if (typeof s !== "string") return m;
+    for (var i = 0; i + TOKEN_LEN <= s.length; i += TOKEN_LEN) {
+      var t = s.slice(i, i + TOKEN_LEN);
+      var time = t.slice(0, TIME_LEN), hash = t.slice(TIME_LEN, ID_LEN), f = t.charAt(ID_LEN);
+      if (!TIME_RE.test(time) || !HASH_RE.test(hash) || !FLAG_RE.test(f)) continue;
+      if (parseInt(time, 36) >= DAY_MS) continue;
+      var id = time + hash;
+      var cur = m.get(id);
+      m.set(id, cur === undefined ? f : preferFlag(cur, f));
+    }
+    return m;
+  }
+
+  // Map → 正規形の文字列（ID 順・区切りなし）
+  function canonicalDay(m) {
+    return Array.from(m.keys()).sort().map(function (id) { return id + m.get(id); }).join("");
+  }
+
+  // 複数の archive を1つの正規形にまとめる（和集合）。入力は変更しない。
+  // 日付キーが YYYY-MM-DD でないもの・中身が空になった日は捨てる。
+  function unionArchives() {
+    var days = {};
+    for (var a = 0; a < arguments.length; a++) {
+      var arc = arguments[a];
+      if (!arc || typeof arc !== "object" || Array.isArray(arc)) continue;
+      Object.keys(arc).forEach(function (k) {
+        if (!DAY_KEY_RE.test(k)) return;
+        days[k] = parseDay(arc[k], days[k]);
+      });
+    }
+    var out = {};
+    Object.keys(days).sort().forEach(function (k) {
+      var s = canonicalDay(days[k]);
+      if (s) out[k] = s;
+    });
+    return out;
+  }
+  function normalizeArchive(arc) {
+    return unionArchives(arc);
+  }
+  function hasArchive(arc) {
+    return Object.keys(normalizeArchive(arc)).length > 0;
+  }
+
+  // archive の event を1件ずつ { timestamp, isCorrect, mode } にして返す（集計用）
+  function archiveEvents(arc) {
+    var norm = normalizeArchive(arc);
+    var out = [];
+    Object.keys(norm).forEach(function (k) {
+      var s = norm[k];
+      for (var i = 0; i < s.length; i += TOKEN_LEN) {
+        var f = Number(s.charAt(i + ID_LEN));
+        out.push({
+          timestamp: tsFromDayOffset(k, parseInt(s.slice(i, i + TIME_LEN), 36)),
+          isCorrect: (f & 1) === 1,
+          mode: (f & 2) ? "review" : "normal",
+          archived: true
+        });
+      }
+    });
+    return out;
+  }
+
+  // 集計用のログ：archive の event ＋ archive に無い生ログ。
+  // 同じ event が両方にあれば archive 側を正とし、生ログは数えない。
+  // archive が無ければ生ログの配列そのもの（今までと完全に同じ）を返す。
+  // AI分析・Phase 2 rescue などは、これではなく生の answerLog を使うこと。
+  function countableLog(state) {
+    var raw = state && Array.isArray(state.answerLog) ? state.answerLog : [];
+    var arc = state ? state.logArchive : null;
+    if (!arc || typeof arc !== "object") return raw;
+    var events = archiveEvents(arc);
+    if (!events.length) return raw;
+    var ids = new Set();
+    var norm = normalizeArchive(arc);
+    Object.keys(norm).forEach(function (k) {
+      var s = norm[k];
+      for (var i = 0; i < s.length; i += TOKEN_LEN) ids.add(k + s.slice(i, i + ID_LEN));
+    });
+    var rest = raw.filter(function (r) {
+      var id = eventId(r);
+      return !(id !== null && ids.has(jstDayKey(r.timestamp) + id));
+    });
+    return events.concat(rest);
+  }
+
+  var api = {
+    TOKEN_LEN: TOKEN_LEN,
+    ID_LEN: ID_LEN,
+    cyrb53: cyrb53,
+    dedupeKey: dedupeKey,
+    jstDayKey: jstDayKey,
+    jstOffset: jstOffset,
+    tsFromDayOffset: tsFromDayOffset,
+    flagOf: flagOf,
+    preferFlag: preferFlag,
+    eventId: eventId,
+    tokenOf: tokenOf,
+    parseDay: parseDay,
+    canonicalDay: canonicalDay,
+    unionArchives: unionArchives,
+    normalizeArchive: normalizeArchive,
+    hasArchive: hasArchive,
+    archiveEvents: archiveEvents,
+    countableLog: countableLog
+  };
+  root.LogArchive = api;
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+})(typeof window !== "undefined" ? window : globalThis);

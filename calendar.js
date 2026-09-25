@@ -64,7 +64,8 @@
       if (!raw) return;
       var obj;
       try { obj = JSON.parse(raw); } catch (e) { return; }
-      var log = (obj && obj.state && Array.isArray(obj.state.answerLog)) ? obj.state.answerLog : [];
+      // 集計用：古い回答の archive（log-archive.js）＋生ログ。archive が無ければ生ログそのもの
+      var log = (obj && obj.state) ? (window.LogArchive ? LogArchive.countableLog(obj.state) : (Array.isArray(obj.state.answerLog) ? obj.state.answerLog : [])) : [];
 
       log.forEach(function (r) {
         if (!r || !r.timestamp) return;

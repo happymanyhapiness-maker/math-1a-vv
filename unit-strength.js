@@ -48,7 +48,8 @@
       var obj = null;
       if (raw) { try { obj = JSON.parse(raw); } catch (e) { obj = null; } }
 
-      var log = (obj && obj.state && Array.isArray(obj.state.answerLog)) ? obj.state.answerLog : [];
+      // 集計用：古い回答の archive（log-archive.js）＋生ログ。archive が無ければ生ログそのもの
+      var log = (obj && obj.state) ? (window.LogArchive ? LogArchive.countableLog(obj.state) : (Array.isArray(obj.state.answerLog) ? obj.state.answerLog : [])) : [];
       var correct = log.filter(function (r) { return r && r.isCorrect; }).length;
 
       return {

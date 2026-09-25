@@ -134,7 +134,7 @@ function makeDevice(cloud, clock) {
     vm.createContext(ctx);
     vm.runInContext("Date.now = () => __NOW;", ctx);
     const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
-    html.match(/questions_[a-z_0-9]+\.js|app\.js(?=\?)/g)
+    html.match(/questions_[a-z_0-9]+\.js|log-archive\.js(?=\?)|app\.js(?=\?)/g)
       .forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
     // firebase-sync.js：import 文だけを偽 Firestore に差し替え、あとはそのまま実行
     const sync = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8")

@@ -9,4 +9,5 @@ tools/*
 !tools/verify_reset_sync.js
 !tools/verify_wrong_id.js
 !tools/verify_unanswered_session.js
+!tools/verify_log_archive.js
 模試分析/
