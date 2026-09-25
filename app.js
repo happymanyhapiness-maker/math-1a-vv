@@ -513,7 +513,9 @@ function normalizeAnswer(v) {
 function save() {
   if (!state.unit) return;
 
-  localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state, stats }));
+  // state.timer はこのページ内だけで有効な setInterval のID。保存するコピーだけ null にする
+  // （メモリ上の state.timer は触らないので、実行中タイマーの clearInterval はこれまでどおり効く）
+  localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify({ state: { ...state, timer: null }, stats }));
   localStorage.setItem(UNIT_KEY, state.unit);
 
   if (el("saveStatus")) {
@@ -579,6 +581,7 @@ function loadUnit(unit) {
   }
 
   state.unit = unit; // 念のため固定
+  state.timer = null; // 過去に保存された古いページのタイマーIDは無効（別タイマーを誤って止めないよう捨てる）
 
   if (!Array.isArray(state.history)) state.history = [];
   if (!Array.isArray(state.wrong)) state.wrong = [];

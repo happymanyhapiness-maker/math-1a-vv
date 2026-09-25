@@ -245,12 +245,111 @@ console.log("\n[9] 起動時 syncAll の changedLocal（＝リロード）判定
   const r3 = startupSync(l3, rem);
   check("(c) remote が古いだけなら changedLocal=false", r3.changedLocal === false);
 
-  // (参考) questionHistory とは無関係な既存のリロード要因: state.timer
-  const l4 = C(l2);
-  l4.state.timer = 17; // app.js は clearInterval 後も state.timer に ID を残したまま save する
-  const r4 = startupSync(l4, rem);
-  console.log("  参考 state.timer が数値で保存されていると changedLocal=" + r4.changedLocal +
-    "（今回の対象外。timer:null への正規化による既存の差分）");
+}
+
+// ---------------------------------------------------------------
+// [10] 以降は app.js の本物の save() / loadUnit() を抜き出して、偽の localStorage 上で動かす
+function makeApp() {
+  const store = {};
+  const ls = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; }
+  };
+  const consts = appSrc.match(/^const (STORAGE_PREFIX|LEGACY_STORAGE_KEY|UNIT_KEY) = .*$/gm).join("\n");
+  const factory = new Function("localStorage", "el",
+    consts + "\n" +
+    extract(appSrc, "function defaultState", "let state = defaultState(null);") +
+    "\nlet state = defaultState(null); let stats = defaultStats();\n" +
+    extract(appSrc, "function save()", "function shuffleArray") +
+    extract(appSrc, "function loadUnit", "function currentList") +
+    "\nreturn { save, loadUnit, STORAGE_PREFIX," +
+    " get state() { return state; }, get stats() { return stats; } };");
+  return { app: factory(ls, () => null), store };
+}
+// 実行中の app（メモリ上の state/stats）に1回答を記録する（logAnswer 相当＋回答時の clearInterval 後に save）
+function answerLive(app, qid, ts, isCorrect, timerId) {
+  app.state.timer = timerId;           // startQuestionTimer: state.timer = setInterval(...)
+  answer({ state: app.state, stats: app.stats }, qid, ts, isCorrect);
+  app.save();                          // clearInterval(state.timer) の後の save()
+}
+
+console.log("\n[10] state.timer を永続化しない（Phase 1.5）");
+{
+  // 10-1 古いデータに数値 timer が残っていても、load 後のメモリでは null
+  const { app, store } = makeApp();
+  const old = fresh("keiryo");
+  old.state.timer = 17;
+  store[app.STORAGE_PREFIX + "keiryo"] = J(old);
+  app.loadUnit("keiryo");
+  check("10-1 古い timer:17 は load 後のメモリで null", app.state.timer === null, app.state.timer);
+
+  // 10-2 / 10-3 実行中の数値 timer は save 後もメモリでは数値のまま、保存コピーだけ null
+  app.state.timer = 42;
+  app.save();
+  const saved = JSON.parse(store[app.STORAGE_PREFIX + "keiryo"]);
+  check("10-2 save 後もメモリ上の state.timer は 42 のまま", app.state.timer === 42, app.state.timer);
+  check("10-3 localStorage の state.timer は null", saved.state.timer === null, saved.state.timer);
+  const mem = C({ state: app.state, stats: app.stats });
+  mem.state.timer = null;
+  check("10-3 timer 以外は保存内容とメモリが完全一致（キー順含む）", J(saved) === J(mem));
+  check("10-3 state のキー順は defaultState と同じ（timer の位置も据え置き）",
+    J(Object.keys(saved.state)) === J(Object.keys(defaultState("keiryo"))));
+}
+
+console.log("\n[11] 起動 → 複数回答 → push → 次回起動 のシミュレーション（本物の save/loadUnit）");
+{
+  // 端末1台で3日間。毎日: loadUnit → 起動 syncAll（localStorage を直接読む）→ 5問回答（毎回 save→pushDirty）
+  const { app, store } = makeApp();
+  const key = app.STORAGE_PREFIX + "keiryo";
+  let remote = null, tid = 100;
+  const days = [];
+  for (let day = 0; day < 3; day++) {
+    app.loadUnit("keiryo");
+    const local = store[key] ? JSON.parse(store[key]) : null;
+    if (local) {
+      const r = startupSync(local, remote);
+      days.push(r.changedLocal);
+      if (r.changedLocal) store[key] = J(r.merged);   // setItemRaw
+      if (r.writeRemote) remote = r.merged;
+    }
+    for (let i = 0; i < 5; i++) {
+      answerLive(app, "k" + ((day * 5 + i) % 7), 1e12 + day * 1e6 + i * 1000, i % 2 === 0, ++tid);
+      remote = mergeUnitData(JSON.parse(store[key]), remote);  // pushDirty
+    }
+  }
+  check("2日目・3日目の起動で changedLocal=false（不要リロードなし）", days.length === 2 && days.every((c) => c === false), days);
+}
+
+console.log("\n[12] 修正前に数値 timer で保存された既存データからの起動");
+{
+  // 修正前の app.js で保存されたデータ（timer:17）が localStorage と remote に残っている状態
+  const { app, store } = makeApp();
+  const key = app.STORAGE_PREFIX + "keiryo";
+  const old = fresh("keiryo");
+  answer(old, "k1", 1000, true);
+  old.state.timer = 17;
+  store[key] = J(old);
+  const remote = C(old);
+  remote.state.timer = null;              // remote は旧版マージ済みなので null
+  // 1回目の起動: loadUnit はメモリだけ無害化。syncAll は localStorage を直接読む
+  app.loadUnit("keiryo");
+  check("12-1 メモリ上は null", app.state.timer === null);
+  const r1 = startupSync(JSON.parse(store[key]), remote);
+  console.log("  情報 12-2 デプロイ後の初回起動（まだ save 前）: changedLocal=" + r1.changedLocal +
+    "（localStorage に残った timer:17 が差分になる）");
+  if (r1.changedLocal) store[key] = J(r1.merged);   // syncAll の setItemRaw で null に置き換わる
+  // 2回目の起動
+  app.loadUnit("keiryo");
+  const r2 = startupSync(JSON.parse(store[key]), remote);
+  check("12-3 2回目以降の起動では changedLocal=false", r2.changedLocal === false);
+  // 初回起動の前に1問でも解いて save されていれば、その単元は初回から差分なし
+  const b = makeApp();
+  b.store[key] = J(old);
+  b.app.loadUnit("keiryo");
+  answerLive(b.app, "k2", 2000, true, 55);
+  const saved = JSON.parse(b.store[key]);
+  check("12-4 save 済みの単元は localStorage も null", saved.state.timer === null);
 }
 
 console.log("\n結果: " + pass + " OK / " + fail + " NG");
