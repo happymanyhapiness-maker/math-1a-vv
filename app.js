@@ -527,10 +527,12 @@ function save(opts) {
     stateToSave.wrong = normalizeWrong(state.wrong); // 保存は常に [{id}] だけ
     endUnansweredSessionForSave(stateToSave); // 未挑戦セッションの対象・途中位置は保存しない（メモリ上の state はそのまま）
     // 生ログの削減（最新300件・180日。古いものは archive へ移し、questionHistory・rescueLog も補う）。merge と同じ関数
-    const toSave = typeof LogArchive !== "undefined" ? LogArchive.compactUnitData({ state: stateToSave, stats }) : { state: stateToSave, stats };
+    // questionHistory の欠けている分も生ログから補う（Phase 7C。state は同じまま stats だけ変わることもある）
+    const payload = { state: stateToSave, stats };
+    const toSave = typeof LogArchive !== "undefined" ? LogArchive.compactUnitData(payload) : payload;
     localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify(toSave));
-    // 保存できたら、メモリ上も同じ形にそろえる（保存に失敗したときはメモリの生ログをそのまま残し、次の保存で再挑戦）
-    if (toSave.state !== stateToSave) {
+    // 保存できたら、メモリ上も同じ形にそろえる（保存に失敗したときはメモリをそのまま残し、次の保存で再挑戦）
+    if (toSave !== payload) {
       state.answerLog = toSave.state.answerLog;
       if ("logArchive" in toSave.state) state.logArchive = toSave.state.logArchive; else delete state.logArchive;
       if ("rescueLog" in toSave.state) state.rescueLog = toSave.state.rescueLog; else delete state.rescueLog;

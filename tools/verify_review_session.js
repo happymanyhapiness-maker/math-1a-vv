@@ -87,6 +87,10 @@ function setup(env, unit, wrongIds, streakOf, dueAtOf) {
     s.wrongIds.forEach((id, i) => { state.reviewMeta[id] = { streak: s.streaks[i], dueAt: s.dues[i], lastSeenAt: __NOW - 86400000 }; });
     state.graduatedAt = {};
     state.history = [];
+    // Phase 7C 以降は生ログから questionHistory が補われるので、「まだ答えていない」状態は生ログも空にする
+    state.answerLog = [];
+    delete state.logArchive;
+    delete state.rescueLog;
     stats.questionHistory = {};
     save();
   })();`);

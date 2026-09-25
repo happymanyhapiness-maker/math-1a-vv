@@ -12,4 +12,5 @@ tools/*
 !tools/verify_log_archive.js
 !tools/verify_rescue_log.js
 !tools/verify_compact.js
+!tools/verify_qh_backfill.js
 模試分析/

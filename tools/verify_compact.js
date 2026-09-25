@@ -183,9 +183,13 @@ function launchApp(store, opts) {
     const moved = all.slice(0, 10);
     const expectQh = {};
     moved.forEach((r) => { const e = expectQh[r.questionId]; if (!e || r.timestamp > e.date) expectQh[r.questionId] = { date: r.timestamp, isCorrect: r.isCorrect === true }; });
-    check("4-1 archive に移した 10件ぶんの questionHistory を補完（新しい方）", J(d.stats.questionHistory) === J(expectQh), d.stats.questionHistory);
-    const existing = unitData(all, {}, { [all[0].questionId]: { date: all[0].timestamp + 1, isCorrect: true } });
-    check("4-2 既存の questionHistory の方が新しければ変えない", J(compact(existing).stats.questionHistory[all[0].questionId]) === J({ date: all[0].timestamp + 1, isCorrect: true }));
+    // Phase 7C 以降は、移す分だけでなく生ログ全体から補う（各問題の最新の回答）
+    const expectAll = {};
+    all.forEach((r) => { const e = expectAll[r.questionId]; if (!e || r.timestamp > e.date) expectAll[r.questionId] = { date: r.timestamp, isCorrect: r.isCorrect === true }; });
+    check("4-1 questionHistory を生ログ全体から補完（移した10件の問題も含む・新しい方）", J(d.stats.questionHistory) === J(expectAll) && Object.keys(expectQh).every((q) => q in d.stats.questionHistory), d.stats.questionHistory);
+    const newer = all[all.length - 1].timestamp + 1;
+    const existing = unitData(all, {}, { [all[0].questionId]: { date: newer, isCorrect: true } });
+    check("4-2 既存の questionHistory の方が新しければ変えない", J(compact(existing).stats.questionHistory[all[0].questionId]) === J({ date: newer, isCorrect: true }));
     const tie = unitData(all, {}, { [all[3].questionId]: { date: all[3].timestamp, isCorrect: true } }); // all[3] は timeout（誤答扱い）
     check("4-3 同じ時刻なら誤答を優先", compact(tie).stats.questionHistory[all[3].questionId].isCorrect === false);
     const fails = moved.filter(LA.isRescueFailure);

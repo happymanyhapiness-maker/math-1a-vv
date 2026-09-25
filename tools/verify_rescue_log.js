@@ -236,10 +236,14 @@ section("[11] rescueLog が無いデータでは HEAD（7B-1 本番版）と mer
   for (let i = 0; i < 20000; i++) {
     const x = rnd(8) === 0 ? null : randData(), y = rnd(8) === 0 ? null : randData();
     if (!x && !y) continue;
-    const a = J(mergeNew(C(x), C(y))), b = J(mergeOld(C(x), C(y)));
+    // Phase 7C 以降は、生ログから欠けている questionHistory を補う。7B-1 の結果に同じ補完をかけたものと比べる
+    const old = mergeOld(C(x), C(y));
+    const qhF = LA.backfillQuestionHistory(old.stats.questionHistory, old.state.answerLog);
+    if (qhF !== old.stats.questionHistory) old.stats.questionHistory = qhF;
+    const a = J(mergeNew(C(x), C(y))), b = J(old);
     if (a !== b) { diff++; if (!first) first = { x, y, a, b }; }
   }
-  check("11-1 ランダム 20000 ケース：merge 結果（answerLog・wrong・reviewMeta・graduatedAt・救済を含む全体）が完全一致", diff === 0, first);
+  check("11-1 ランダム 20000 ケース：merge 結果（answerLog・wrong・reviewMeta・graduatedAt・救済を含む全体）が 7B-1＋questionHistory 補完と完全一致", diff === 0, first);
 });
 
 section("[12] rescueLog の生成は log-archive.js の compactUnitData だけ", () => {

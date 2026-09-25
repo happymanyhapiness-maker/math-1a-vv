@@ -272,20 +272,49 @@
   function isRescueFailure(r) {
     return !!r && (r.outcome === "timeout" || r.outcome === "skip" || (r.outcome === "answered" && r.isCorrect === false));
   }
-  // questionHistory の補完（Phase 1 と同じ：新しい時刻を採用、同じ時刻なら誤答を優先）
-  function historyWins(ts, isCorrect, e) {
-    if (!e || typeof e.date !== "number") return true;
-    if (ts > e.date) return true;
-    return ts === e.date && isCorrect === false && e.isCorrect !== false;
+  // questionHistory の1問ぶんの統合（firebase-sync.js の Phase 1 merge の pick と同じ）：
+  //  date が新しい方、同じなら isCorrect:false の方、それも同じなら x（既存）を残す
+  function pickHistory(x, y) {
+    if (!y) return x;
+    if (!x) return y;
+    var dx = typeof x.date === "number" ? x.date : 0;
+    var dy = typeof y.date === "number" ? y.date : 0;
+    if (dx !== dy) return dx > dy ? x : y;
+    if (x.isCorrect !== y.isCorrect) return x.isCorrect === false ? x : y;
+    return x;
+  }
+  // 生ログから questionHistory の欠けている分を補う（Phase 7C）。各ログは { date: timestamp, isCorrect: isCorrect === true }
+  // として既存の値と pickHistory で統合する。timestamp が無効・問題 ID が無いログは無視。
+  // 何も変わらなければ入力（qh）をそのまま返す。入力は変更しない。
+  function backfillQuestionHistory(qh, answerLog) {
+    var src = qh && typeof qh === "object" && !Array.isArray(qh) ? qh : null;
+    var out = null;
+    (Array.isArray(answerLog) ? answerLog : []).forEach(function (r) {
+      if (!r || !validTs(r.timestamp)) return;
+      var qid = r.questionId;
+      if (!((typeof qid === "string" && qid !== "") || typeof qid === "number")) return;
+      qid = String(qid);
+      var cand = { date: r.timestamp, isCorrect: r.isCorrect === true };
+      var cur = (out || src || {})[qid];
+      if (pickHistory(cur, cand) === cand) {
+        if (!out) out = Object.assign({}, src || {});
+        out[qid] = cand;
+      }
+    });
+    return out || qh;
   }
 
   // {state, stats} を受け取り、削減後の新しいオブジェクトを返す（入力は変更しない）。
-  // 移す生ログが無ければ入力をそのまま返す。
+  // 最初に生ログ全体から questionHistory を補い（archive へ移す前に問題 ID の情報を残す）、
+  // そのあと生ログを削減する。何も変わらなければ入力をそのまま返す。
   function compactUnitData(d) {
     if (!d || !d.state || typeof d.state !== "object") return d;
     var st = d.state;
     var raw = Array.isArray(st.answerLog) ? st.answerLog : [];
     if (!raw.length) return d;
+    var qhIn = d.stats && typeof d.stats === "object" ? d.stats.questionHistory : undefined;
+    var qhFilled = backfillQuestionHistory(qhIn, raw);
+    var base = qhFilled === qhIn ? d : Object.assign({}, d, { stats: Object.assign({}, d.stats || {}, { questionHistory: qhFilled }) });
     var arc = normalizeArchive(st.logArchive);
 
     // 重複なしの全 event（archive ＋ 生ログ）
@@ -307,7 +336,7 @@
       if (!seen.has(key)) { seen.add(key); events.push({ ts: r.timestamp, key: key }); }
       return key;
     });
-    if (!events.length) return d;
+    if (!events.length) return base;
     events.sort(function (a, b) { return b.ts - a.ts || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0); });
     var oldest = events[0].ts - RAW_KEEP_DAYS * DAY_MS;
     var keep = new Set();
@@ -324,11 +353,9 @@
       keptKeys.add(key);
       kept.push(r);
     });
-    if (!moved.length) return d;
+    if (!moved.length) return base;
 
-    // 移す生ログ → rescueLog への回収・questionHistory の補完・archive への追加
-    var qhIn = d.stats && d.stats.questionHistory && typeof d.stats.questionHistory === "object" ? d.stats.questionHistory : {};
-    var qh = Object.assign({}, qhIn);
+    // 移す生ログ → rescueLog への回収・archive への追加（questionHistory は上で生ログ全体から補完済み）
     var addArc = {}, addRescue = {};
     moved.forEach(function (r) {
       var qid = r.questionId;
@@ -339,8 +366,6 @@
           var rt = rescueTsToken(r.timestamp);
           if (rt) addRescue[qid] = (addRescue[qid] || "") + rt;
         }
-        var ok = r.isCorrect === true;
-        if (historyWins(r.timestamp, ok, qh[qid])) qh[qid] = { date: r.timestamp, isCorrect: ok };
       }
       var t = tokenOf(r);
       var k = jstDayKey(r.timestamp);
@@ -352,8 +377,7 @@
     if (Object.keys(newArc).length) state.logArchive = newArc; else delete state.logArchive;
     var newRescue = pruneRescueLog(unionRescueLogs(st.rescueLog, addRescue), st.graduatedAt);
     if (Object.keys(newRescue).length) state.rescueLog = newRescue; else delete state.rescueLog;
-    var stats = Object.assign({}, d.stats || {}, { questionHistory: qh });
-    return Object.assign({}, d, { state: state, stats: stats });
+    return Object.assign({}, base, { state: state });
   }
 
   var api = {
@@ -385,6 +409,8 @@
     RAW_KEEP_MAX: RAW_KEEP_MAX,
     RAW_KEEP_DAYS: RAW_KEEP_DAYS,
     isRescueFailure: isRescueFailure,
+    pickHistory: pickHistory,
+    backfillQuestionHistory: backfillQuestionHistory,
     compactUnitData: compactUnitData
   };
   root.LogArchive = api;
