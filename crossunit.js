@@ -10,7 +10,9 @@
 (function () {
   "use strict";
 
-  var PREFIX = "kyotsu_app_v14_";
+  // 読むのは今の context の領域だけ（本人 / 未ログイン session / 保護者が見る子どもの閲覧用。storage-ns.js が決める）。
+  // 確認中・未設定のときは何も読まない。旧キー kyotsu_app_v14_ は読まない（Phase 8A）
+  function prefixNow() { return (window.KyotsuNS && window.KyotsuNS.readPrefix()) || null; }
 
   /* app.js 側の定数を参照（無ければ安全にフォールバック） */
   function meta() {
@@ -30,9 +32,10 @@
   function readAllUnits() {
     var out = [];
     var keys = Object.keys(meta());
+    var PREFIX = prefixNow();
 
     // UNIT_META が取れない場合は localStorage を走査して単元キーを拾う
-    if (keys.length === 0) {
+    if (keys.length === 0 && PREFIX) {
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
         if (k && k.indexOf(PREFIX) === 0) keys.push(k.slice(PREFIX.length));
@@ -40,7 +43,7 @@
     }
 
     keys.forEach(function (unit) {
-      var raw = localStorage.getItem(PREFIX + unit);
+      var raw = PREFIX ? localStorage.getItem(PREFIX + unit) : null;
       if (!raw) {
         out.push({ unit: unit, label: unitLabel(unit), exists: false, log: [], stats: null });
         return;

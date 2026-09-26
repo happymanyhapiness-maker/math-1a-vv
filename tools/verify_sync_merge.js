@@ -256,7 +256,9 @@ function makeApp() {
     setItem: (k, v) => { store[k] = String(v); },
     removeItem: (k) => { delete store[k]; }
   };
-  const consts = appSrc.match(/^const (STORAGE_PREFIX|LEGACY_STORAGE_KEY|UNIT_KEY) = .*$/gm).join("\n");
+  // Phase 8A 以降、学習データのキーは storage-ns.js が context ごとに作る。ここではテスト用アカウント t の領域に固定する
+  const consts = appSrc.match(/^const (UNIT_KEY) = .*$/gm).join("\n") +
+    '\nconst STORAGE_PREFIX = "kyotsu_app_v15_u_t_"; function storageKey(unit) { return STORAGE_PREFIX + unit; }';
   const factory = new Function("localStorage", "el",
     consts + "\n" +
     extract(appSrc, "function defaultState", "let state = defaultState(null);") +

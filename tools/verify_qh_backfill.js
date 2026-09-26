@@ -152,18 +152,20 @@ function unit(answerLog, extra, statsExtra) {
     const ls = fakeLS(store);
     const flags = { fail: false };
     const origSet = ls.setItem;
-    ls.setItem = (k, v) => { if (flags.fail && k.startsWith("kyotsu_app_v14_")) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } origSet(k, v); };
+    ls.setItem = (k, v) => { if (flags.fail && k.startsWith("kyotsu_app_v15_")) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } origSet(k, v); };
     const ctx = { console: { log() {}, error() {}, warn() {} }, alert: (m) => alerts.push(m), confirm: () => true, scrollTo() {}, setTimeout, clearTimeout, setInterval, clearInterval,
       getComputedStyle: (e) => e.style, localStorage: ls,
       document: { getElementById: (id) => (els[id] || (els[id] = mkEl())), querySelector: () => null, querySelectorAll: () => [], createElement: () => mkEl(), addEventListener() {}, body: mkEl(), readyState: "loading" } };
     ctx.window = ctx;
     vm.createContext(ctx);
     read("index.html").match(/questions_[a-z_0-9]+\.js/g).forEach((f) => vm.runInContext(read(f), ctx));
+    vm.runInContext(read("storage-ns.js"), ctx);
     vm.runInContext(read("log-archive.js"), ctx);
     vm.runInContext(read("app.js"), ctx);
+    require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx)); // Phase 8A：テスト用アカウントで確定
     return { ctx, els, alerts, flags, store, run: (c) => vm.runInContext(c, ctx) };
   }
-  const KEY = "kyotsu_app_v14_kyokusen";
+  const KEY = "kyotsu_app_v15_u_t_kyokusen";
   function storeWith(fn) {
     const probe = launchApp({});
     const qs = probe.run("UNIT_META.kyokusen.questions.map((q) => ({ id: q.id, correct: q.correct, group: q.group || null }))");
@@ -213,18 +215,18 @@ function unit(answerLog, extra, statsExtra) {
   await section("[9] 学習実績の数字は補完前後で同じ", async () => {
     const UNIT_META_MINI = { keiryo: { label: "keiryo", questions: Array.from({ length: 12 }, (_, i) => ({ id: "q" + i })) } };
     const pageTotals = async (store, now) => {
-      const mk = (f, start, end, ret) => new Function("localStorage", "window", "UNIT_META", "LogArchive", slice(read(f), start, end) + "\nreturn " + ret + ";")(fakeLS(store), { LogArchive: LA }, UNIT_META_MINI, LA);
-      const ctx = { console, localStorage: fakeLS(store), UNIT_META: UNIT_META_MINI, TAG_LABELS: {}, LogArchive: LA, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
+      const mk = (f, start, end, ret) => new Function("localStorage", "window", "UNIT_META", "LogArchive", slice(read(f), start, end) + "\nreturn " + ret + ";")(fakeLS(store), require("./test-context.js").readerWindow(LA), UNIT_META_MINI, LA);
+      const ctx = { console, localStorage: fakeLS(store), UNIT_META: UNIT_META_MINI, TAG_LABELS: {}, LogArchive: LA, KyotsuNS: require("./test-context.js").readerWindow(LA).KyotsuNS, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
       ctx.window = ctx;
       vm.createContext(ctx);
       vm.runInContext(read("crossunit.js"), ctx);
       let written = null;
-      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date",
+      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
         slice(SYNC, "function unitKeys", "/* データの「新しさ」") + slice(SYNC, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
         slice(SYNC, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
         fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => "x",
         async () => ({ exists: () => true, data: () => ({ data: J({ days: {}, appStartDate: "2020-01-01" }) }) }), async (_d, v) => { written = JSON.parse(v.data); }, () => ({}), {}, () => 0,
-        class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } });
+        class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
       const summary = f.buildSummary();
       await f.backfillDailyQuestLogs();
       return {
@@ -239,7 +241,7 @@ function unit(answerLog, extra, statsExtra) {
     const d0 = unit(logs);
     const d1 = compact(d0);
     const now = BASE + 200 * DAY;
-    const p0 = await pageTotals({ kyotsu_app_v14_keiryo: J(d0) }, now), p1 = await pageTotals({ kyotsu_app_v14_keiryo: J(d1) }, now);
+    const p0 = await pageTotals({ ["kyotsu_app_v15_u_t_keiryo"]: J(d0) }, now), p1 = await pageTotals({ ["kyotsu_app_v15_u_t_keiryo"]: J(d1) }, now);
     check("9-1 calendar・progress（回答回数・解いた問題数を含む）・unit-strength・crossunit 全文・buildSummary・dailyquest がすべて同じ",
       J(p0) === J(p1) && Object.keys(d1.stats.questionHistory).length === 12, Object.keys(p0).filter((k) => J(p0[k]) !== J(p1[k])));
   });

@@ -83,11 +83,11 @@ function fakeLS(store) {
 }
 const UNIT_META_MINI = { keiryo: { label: "keiryo", questions: QIDS.map((id) => ({ id })) } };
 function pageTotals(store, now) {
-  const mk = (f, start, end, ret) => new Function("localStorage", "window", "UNIT_META", "LogArchive", slice(read(f), start, end) + "\nreturn " + ret + ";")(fakeLS(store), { LogArchive: LA }, UNIT_META_MINI, LA);
+  const mk = (f, start, end, ret) => new Function("localStorage", "window", "UNIT_META", "LogArchive", slice(read(f), start, end) + "\nreturn " + ret + ";")(fakeLS(store), require("./test-context.js").readerWindow(LA), UNIT_META_MINI, LA);
   const calendar = mk("calendar.js", '"use strict";', "var dayMap = buildDayMap();", "buildDayMap()");
   const progress = mk("progress.js", '"use strict";', "/* ---------- 日付表示", "collectUnitProgress()").find((x) => x.unit === "keiryo");
   const strength = mk("unit-strength.js", '"use strict";', "/* ---------- 描画", "collectUnitAccuracy()");
-  const ctx = { console, localStorage: fakeLS(store), UNIT_META: UNIT_META_MINI, TAG_LABELS: {}, LogArchive: LA, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
+  const ctx = { console, localStorage: fakeLS(store), UNIT_META: UNIT_META_MINI, TAG_LABELS: {}, LogArchive: LA, KyotsuNS: require("./test-context.js").readerWindow(LA).KyotsuNS, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
   ctx.window = ctx;
   vm.createContext(ctx);
   vm.runInContext(read("crossunit.js"), ctx);
@@ -95,12 +95,12 @@ function pageTotals(store, now) {
   const summaryPart = rep.slice(0, rep.findIndex((l) => l.startsWith("【ミスの傾向"))).join("\n");
   const sync = read("firebase-sync.js");
   let written = null;
-  const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date",
+  const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
     slice(sync, "function unitKeys", "/* データの「新しさ」") + slice(sync, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
     slice(sync, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
     fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => "x",
     async () => ({ exists: () => true, data: () => ({ data: J({ days: {}, appStartDate: "2020-01-01" }) }) }), async (_d, v) => { written = JSON.parse(v.data); }, () => ({}), {}, () => 0,
-    class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } });
+    class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
   const summary = f.buildSummary();
   return f.backfillDailyQuestLogs().then(() => {
     const perDay = {};
@@ -119,15 +119,17 @@ function launchApp(store, opts) {
   const ls = fakeLS(store);
   const flags = { fail: false };
   const origSet = ls.setItem;
-  ls.setItem = (k, v) => { if (flags.fail && k.startsWith("kyotsu_app_v14_")) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } origSet(k, v); };
+  ls.setItem = (k, v) => { if (flags.fail && k.startsWith("kyotsu_app_v15_")) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } origSet(k, v); };
   const ctx = { console: { log() {}, error() {}, warn() {} }, alert: (m) => alerts.push(m), confirm: () => true, scrollTo() {}, setTimeout, clearTimeout, setInterval, clearInterval,
     getComputedStyle: (e) => e.style, localStorage: ls,
     document: { getElementById: (id) => (els[id] || (els[id] = mkEl())), querySelector: () => null, querySelectorAll: () => [], createElement: () => mkEl(), addEventListener() {}, body: mkEl(), readyState: "loading" } };
   ctx.window = ctx;
   vm.createContext(ctx);
   read("index.html").match(/questions_[a-z_0-9]+\.js/g).forEach((f) => vm.runInContext(read(f), ctx));
+  vm.runInContext(read("storage-ns.js"), ctx);
   vm.runInContext(read("log-archive.js"), ctx);
   vm.runInContext(read("app.js"), ctx);
+  require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx)); // Phase 8A：テスト用アカウントで確定
   return { ctx, els, alerts, flags, store, run: (c) => vm.runInContext(c, ctx) };
 }
 
@@ -301,7 +303,7 @@ function launchApp(store, opts) {
       const d0 = unitData(logs(n, step, BASE));
       const d1 = compact(d0);
       const now = BASE + n * step + DAY;
-      const p0 = await pageTotals({ kyotsu_app_v14_keiryo: J(d0) }, now), p1 = await pageTotals({ kyotsu_app_v14_keiryo: J(d1) }, now);
+      const p0 = await pageTotals({ ["kyotsu_app_v15_u_t_keiryo"]: J(d0) }, now), p1 = await pageTotals({ ["kyotsu_app_v15_u_t_keiryo"]: J(d1) }, now);
       check("11 " + n + "件：calendar・progress・unit-strength・crossunit サマリ・buildSummary・dailyquest 日別件数がすべて同じ（生ログ " + d1.state.answerLog.length + "）", J(p0) === J(p1),
         Object.keys(p0).filter((k) => J(p0[k]) !== J(p1[k])));
     }
@@ -320,7 +322,7 @@ function launchApp(store, opts) {
       ok1 === false && app.run("saveFailing") === true && app.alerts.length === 1 && app.run("state.answerLog.length") === 450 && !app.run('"logArchive" in state'));
     app.flags.fail = false;
     const ok2 = app.run("save()");
-    const saved = JSON.parse(store.kyotsu_app_v14_keiryo);
+    const saved = JSON.parse(store["kyotsu_app_v15_u_t_keiryo"]);
     const expect = compact({ state: JSON.parse(J(saved.state)), stats: saved.stats });
     check("12-2 次の保存で成功：保存データは compactUnitData と同じ形（生ログ 300・archive 150）", ok2 === true && saved.state.answerLog.length === 300 && countArc(saved.state.logArchive) === 150 && J(expect) === J(saved));
     check("12-3 メモリ上も同じ形にそろう（生ログ・archive・rescueLog・questionHistory）", app.run("state.answerLog.length") === 300 &&

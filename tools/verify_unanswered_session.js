@@ -22,7 +22,8 @@ const C = (o) => JSON.parse(J(o));
 const APP_SRC = fs.readFileSync(path.join(DIR, "app.js"), "utf8");
 const SYNC_SRC = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
 let OLD_APP_SRC = null;
-try { OLD_APP_SRC = execSync("git show HEAD:app.js", { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }); } catch (e) { /* git が無い環境では旧端末テストを省略 */ }
+// 旧端末 = unansweredSnapshot を保存していた 7A-2b（9287f10）に固定する
+try { OLD_APP_SRC = execSync("git show 9287f10:app.js", { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }); } catch (e) { /* git が無い環境では旧端末テストを省略 */ }
 
 function extract(src, startMarker, endMarker) {
   const s = src.indexOf(startMarker);
@@ -81,7 +82,10 @@ function launch(store, appSrc) {
   const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
   html.match(/questions_[a-z_0-9]+\.js/g).forEach((f) =>
     vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
-  vm.runInContext(appSrc || APP_SRC, ctx, { filename: "app.js" }); // 最後の選択単元があれば起動時に selectUnit される
+  if (!appSrc) vm.runInContext(fs.readFileSync(path.join(DIR, "storage-ns.js"), "utf8"), ctx, { filename: "storage-ns.js" });
+  vm.runInContext(appSrc || APP_SRC, ctx, { filename: "app.js" });
+  // Phase 8A：テスト用アカウントで context を確定（最後の選択単元があればここで selectUnit される）
+  if (!appSrc) require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx));
   return { ctx, els, store, alerts, run: (code) => vm.runInContext(code, ctx) };
 }
 
@@ -96,7 +100,8 @@ function section(title, fn) {
 }
 
 const UNIT = "seishitsu"; // 32問・group あり
-const KEY = "kyotsu_app_v14_" + UNIT;
+const KEY = require("./test-context.js").TEST_PREFIX + UNIT;
+const OLD_KEY = "kyotsu_app_v14_" + UNIT; // 旧端末（Phase 8A より前）のキー
 const UNIT_KEY_NAME = "kyotsu_app_unit_v1";
 const probe = launch();
 const ALL = probe.run(`UNIT_META.${UNIT}.questions.map((q) => ({ id: q.id, group: q.group || null }))`);
@@ -266,7 +271,7 @@ section("[9] 旧端末（HEAD の app.js）からの再流入", () => {
   if (!OLD_APP_SRC) { console.log("  （git が無いので省略）"); return; }
   const old = launch(null, OLD_APP_SRC);
   old.run(`selectUnit(${J(UNIT)}); startUnansweredOnly(); answer(currentQuestion().correct); nextQuestion();`);
-  const oldPayload = JSON.parse(old.store[KEY]);
+  const oldPayload = JSON.parse(old.store[OLD_KEY]);
   if (!("unansweredSnapshot" in oldPayload.state)) console.log("  （情報）HEAD の app.js はすでに unansweredSnapshot を保存しない");
   const fresh = saved(deviceWith([]));
   const m = mergeUnitData(fresh, oldPayload);

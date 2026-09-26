@@ -21,7 +21,9 @@ const vm = require("vm");
 const DIR = path.join(__dirname, "..");
 const CHILD_UID = "hjWTc7Ll0UeHv5iKbRTlTLRrY8x1";
 const UNIT = "kyokusen";
-const KEY = "kyotsu_app_v14_" + UNIT;
+// Phase 8A 以降の学習データのキー（子どものアカウントの領域）
+const UPREFIX = "kyotsu_app_v15_u_" + CHILD_UID + "_";
+const KEY = UPREFIX + UNIT;
 const UNIT_PATH = "users/" + CHILD_UID + "/units/" + UNIT;
 const DAY = 864e5;
 const J = JSON.stringify;
@@ -134,7 +136,7 @@ function makeDevice(cloud, clock) {
     vm.createContext(ctx);
     vm.runInContext("Date.now = () => __NOW;", ctx);
     const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
-    html.match(/questions_[a-z_0-9]+\.js|log-archive\.js(?=\?)|app\.js(?=\?)/g)
+    html.match(/questions_[a-z_0-9]+\.js|storage-ns\.js(?=\?)|log-archive\.js(?=\?)|app\.js(?=\?)/g)
       .forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
     // firebase-sync.js：import 文だけを偽 Firestore に差し替え、あとはそのまま実行
     const sync = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8")
@@ -143,8 +145,9 @@ function makeDevice(cloud, clock) {
     dev.ctx = ctx;
     dev.timers = timers;
     dev.run = (code) => { ctx.__NOW = clock.now; return vm.runInContext(code, ctx); };
+    // Phase 8A：Auth の判定（ログイン済み）で context が確定してから単元を開く
+    dev.authCb({ uid: CHILD_UID, email: "child@example.com" });      // ログイン → context 確定 → 起動時 syncAll
     dev.run(`selectUnit(${J(UNIT)})`);
-    dev.authCb({ uid: CHILD_UID, email: "child@example.com" });      // ログイン → 起動時 syncAll
     await settle();
     // 起動時 syncAll が予約したリロード（0.9 秒後）を実行し、起きたら同じタブで読み込み直す
     // launch({ noReload: true }) は、起動時の syncAll 1回ぶんだけを見たいとき用（リロードは追わない）
@@ -502,7 +505,7 @@ function check(name, cond, detail) {
   const OTHER_PATH = "users/" + CHILD_UID + "/units/" + OTHER;
   const SUMMARY_PATH = "kyotsu-math-summary/" + CHILD_UID;
   const remoteLog = (cloud, p) => (cloud.store[p || UNIT_PATH] ? JSON.parse(cloud.store[p || UNIT_PATH].payload).state.answerLog.length : 0);
-  const localLog = (dev, unit) => { const raw = dev.store["kyotsu_app_v14_" + (unit || UNIT)]; return raw ? JSON.parse(raw).state.answerLog.length : 0; };
+  const localLog = (dev, unit) => { const raw = dev.store[UPREFIX + (unit || UNIT)]; return raw ? JSON.parse(raw).state.answerLog.length : 0; };
   // 1問だけ回答して保存する（本物の startExam / answer）
   function answerOne(dev, ok, unit) {
     if (unit) dev.run(`selectUnit(${J(unit)})`);
@@ -859,7 +862,7 @@ function check(name, cond, detail) {
       if (mode === "fallback") w5.cloud.failRead = (p) => p.endsWith("/units");
       await w5.A.launch({ noReload: true });
       w5.cloud.failRead = false;
-      same5.push({ mode, local: w5.units.map((u) => w5.A.store["kyotsu_app_v14_" + u]), remote: w5.units.map((u) => w5.cloud.store[P_UNITS + u].payload),
+      same5.push({ mode, local: w5.units.map((u) => w5.A.store[UPREFIX + u]), remote: w5.units.map((u) => w5.cloud.store[P_UNITS + u].payload),
         getDoc: w5.cloud.stats.getDoc, status: w5.A.status() });
     }
     check("34-1 一覧に失敗すると単元ごとに getDoc する（UNIT_META の全単元＋dailyquest）", same5[1].getDoc > 5, same5[1].getDoc);

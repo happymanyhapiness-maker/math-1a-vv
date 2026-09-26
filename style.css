@@ -1707,3 +1707,22 @@ body.exam-mode .main-layout{
 .unit-group-dot.dot-primary { background: #60a5fa; }
 .unit-group-dot.dot-success { background: #34d399; }
 .unit-group-dot.dot-warning { background: #fbbf24; }
+
+/* アカウント確認中の表示（Phase 8A。Auth の判定が終わるまで学習データを開かない間だけ出す） */
+.kyotsu-ctx-banner {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #1e293b;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}

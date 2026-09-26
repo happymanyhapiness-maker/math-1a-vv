@@ -11,7 +11,9 @@
 (function () {
   "use strict";
 
-  var PREFIX = "kyotsu_app_v14_";
+  // 読むのは今の context の領域だけ（本人 / 未ログイン session / 保護者が見る子どもの閲覧用。storage-ns.js が決める）。
+  // 確認中・未設定のときは何も読まない。旧キー kyotsu_app_v14_ は読まない（Phase 8A）
+  function prefixNow() { return (window.KyotsuNS && window.KyotsuNS.readPrefix()) || null; }
 
   // app.js の UNIT_META のラベルだけを複製（questions等の重いデータは持たない）
   var UNIT_LABELS = {
@@ -48,6 +50,8 @@
 
   /* ---------- 全単元のログを日付ごとに集計 ---------- */
   function buildDayMap() {
+    var PREFIX = prefixNow();
+    if (!PREFIX) return {};
     var keys = Object.keys(UNIT_LABELS);
     for (var i = 0; i < localStorage.length; i++) {
       var k = localStorage.key(i);
@@ -87,6 +91,8 @@
   }
 
   var dayMap = buildDayMap();
+  // 表示中の領域のデータが別タブ（同期・取り込み・保護者の閲覧用キャッシュ）で変わったら読み込み直す（Phase 8A）
+  if (window.KyotsuNS) window.KyotsuNS.watchData();
 
   var today = new Date();
   var view = { year: today.getFullYear(), month: today.getMonth() }; // month: 0-11

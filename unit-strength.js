@@ -13,7 +13,9 @@
 (function () {
   "use strict";
 
-  var PREFIX = "kyotsu_app_v14_";
+  // 読むのは今の context の領域だけ（本人 / 未ログイン session / 保護者が見る子どもの閲覧用。storage-ns.js が決める）。
+  // 確認中・未設定のときは何も読まない。旧キー kyotsu_app_v14_ は読まない（Phase 8A）
+  function prefixNow() { return (window.KyotsuNS && window.KyotsuNS.readPrefix()) || null; }
 
   function meta() {
     return (typeof UNIT_META !== "undefined") ? UNIT_META : {};
@@ -30,6 +32,8 @@
 
   /* ---------- 単元ごとの正答率を集計（着手済みのみ） ---------- */
   function collectUnitAccuracy() {
+    var PREFIX = prefixNow();
+    if (!PREFIX) return [];
     var m = meta();
     var keys = Object.keys(m);
 

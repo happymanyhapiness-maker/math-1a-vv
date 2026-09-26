@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>共通テスト数学</title>
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=22">
   <!-- MathJax: 中学土台(chugaku)ユニットの解説で $...$ 記法の数式を表示するために追加。
        他ユニットの解説文には $ を使っていないため、既存表示への影響はない。 -->
   <script>
@@ -288,8 +288,9 @@
   <script src="questions_hojosankaku.js?v=2"></script>
   <script src="questions_houteishiki.js?v=1"></script>
   <script src="questions_kyokusen.js?v=1"></script>
+  <script src="storage-ns.js?v=20260926-8a1-1"></script>
   <script src="log-archive.js?v=20260925-qhfill-1"></script>
-  <script src="app.js?v=20260925-qhfill-1"></script>
+  <script src="app.js?v=20260926-8a1-1"></script>
 <script>
 /* =========================
    追加: 答え合わせ後の「注目すべき直角三角形」赤線リビール
@@ -329,10 +330,11 @@
   observer.observe(target, { attributes: true, attributeFilter: ["style"], childList: true, subtree: true });
 })();
 </script>
-<script src="crossunit.js?v=20260925-archive-1"></script>
-<script src="unit-strength.js?v=20260925-archive-1"></script>
+<script src="crossunit.js?v=20260926-8a1-1"></script>
+<script src="unit-strength.js?v=20260926-8a1-1"></script>
 <script src="sidebar-tabs.js?v=1"></script>
-<script type="module" src="firebase-sync.js?v=20260925-compact-1"></script>
+<!-- 読み込めない（オフラインで Firebase SDK を取れない等）ときは、確認中のまま止めて案内を出す（Phase 8A。推測で開かない） -->
+<script type="module" src="firebase-sync.js?v=20260926-8a1-1" onerror="window.kyotsuSyncUnavailable &amp;&amp; window.kyotsuSyncUnavailable()"></script>
 
 
   <!-- =========================================================

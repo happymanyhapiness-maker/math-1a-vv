@@ -13,4 +13,6 @@ tools/*
 !tools/verify_rescue_log.js
 !tools/verify_compact.js
 !tools/verify_qh_backfill.js
+!tools/verify_uid_context.js
+!tools/test-context.js
 模試分析/

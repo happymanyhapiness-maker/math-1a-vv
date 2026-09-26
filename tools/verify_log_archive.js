@@ -112,14 +112,18 @@ function readers(ver) {
     slice(src, start, end) + "\nreturn " + ret + ";");
   const UNIT_META = {};
   UNITS.forEach((u) => { UNIT_META[u] = { label: u, questions: Array.from({ length: 12 }, (_, i) => ({ id: u.slice(0, 2) + "-" + i })) }; });
+  // テストデータは旧キー（kyotsu_app_v14_{unit}）で作る。Phase 8A 以降のページにはテスト用アカウントの領域として渡す
+  const TC = require("./test-context.js");
+  const tr = (store) => withLA ? Object.fromEntries(Object.entries(store).map(([k, v]) => [k.replace("kyotsu_app_v14_", TC.TEST_PREFIX), v])) : store;
+  const win = withLA ? TC.readerWindow(LA) : {};
   return {
-    calendar: (store) => mk(cal, '"use strict";', "var dayMap = buildDayMap();", "buildDayMap()")(fakeLS(store), withLA ? { LogArchive: LA } : {}, UNIT_META, withLA ? LA : undefined),
-    progress: (store) => mk(prog, '"use strict";', "/* ---------- 日付表示", "collectUnitProgress()")(fakeLS(store), withLA ? { LogArchive: LA } : {}, UNIT_META, withLA ? LA : undefined),
-    strength: (store) => mk(us, '"use strict";', "/* ---------- 描画", "collectUnitAccuracy()")(fakeLS(store), withLA ? { LogArchive: LA } : {}, UNIT_META, withLA ? LA : undefined),
+    calendar: (store) => mk(cal, '"use strict";', "var dayMap = buildDayMap();", "buildDayMap()")(fakeLS(tr(store)), win, UNIT_META, withLA ? LA : undefined),
+    progress: (store) => mk(prog, '"use strict";', "/* ---------- 日付表示", "collectUnitProgress()")(fakeLS(tr(store)), win, UNIT_META, withLA ? LA : undefined),
+    strength: (store) => mk(us, '"use strict";', "/* ---------- 描画", "collectUnitAccuracy()")(fakeLS(tr(store)), win, UNIT_META, withLA ? LA : undefined),
     cross: (store) => {
-      const ctx = { console, localStorage: fakeLS(store), UNIT_META, TAG_LABELS: {}, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
+      const ctx = { console, localStorage: fakeLS(tr(store)), UNIT_META, TAG_LABELS: {}, document: { readyState: "loading", addEventListener() {}, getElementById: () => null } };
       ctx.window = ctx;
-      if (withLA) ctx.LogArchive = LA;
+      if (withLA) { ctx.LogArchive = LA; ctx.KyotsuNS = win.KyotsuNS; }
       vm.createContext(ctx);
       vm.runInContext(cross, ctx);
       return vm.runInContext("buildCrossUnitReport()", ctx).split("\n").filter((l) => !l.startsWith("出力日時")).join("\n");
@@ -131,11 +135,12 @@ function readers(ver) {
         "return { buildSummary, backfillDailyQuestLogs };";
       let written = null;
       const g = withLA ? { LogArchive: LA } : {};
-      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date",
-        body)(fakeLS(store), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => "x",
+      const st = tr(store), sns = TC.syncNS(st);
+      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
+        body)(fakeLS(st), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => "x",
         async () => ({ exists: () => true, data: () => ({ data: J({ days: {}, appStartDate: "2020-01-01" }) }) }),
         async (_d, v) => { written = JSON.parse(v.data); }, () => ({}), {}, () => 0,
-        class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } });
+        class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, sns.ownPrefixNow, sns.NS);
       const s = f.buildSummary();
       await f.backfillDailyQuestLogs();
       const perDay = {};
@@ -162,9 +167,10 @@ function reviewRateOf(appSrc, withLA, data) {
   ctx.window = ctx;
   vm.createContext(ctx);
   read("index.html").match(/questions_[a-z_0-9]+\.js/g).forEach((f) => vm.runInContext(read(f), ctx));
-  if (withLA) vm.runInContext(read("log-archive.js"), ctx);
+  if (withLA) { vm.runInContext(read("storage-ns.js"), ctx); vm.runInContext(read("log-archive.js"), ctx); }
   vm.runInContext(appSrc, ctx);
-  store["kyotsu_app_v14_keiryo"] = J(data);
+  if (withLA) require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx)); // Phase 8A：テスト用アカウントで確定
+  store[(withLA ? require("./test-context.js").TEST_PREFIX : "kyotsu_app_v14_") + "keiryo"] = J(data);
   vm.runInContext('selectUnit("keiryo"); update();', ctx);
   return String(els.reviewRate.innerText);
 }

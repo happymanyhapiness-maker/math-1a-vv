@@ -91,7 +91,10 @@ function makeContext(appSrc, withCross) {
   const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
   html.match(/questions_[a-z_0-9]+\.js/g).forEach((f) =>
     vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
+  const isNew = appSrc === NEW_APP_SRC;
+  if (isNew) vm.runInContext(fs.readFileSync(path.join(DIR, "storage-ns.js"), "utf8"), ctx, { filename: "storage-ns.js" });
   vm.runInContext(appSrc, ctx, { filename: "app.js" });
+  if (isNew) require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx)); // Phase 8A：テスト用アカウントで確定
   if (withCross) vm.runInContext(CROSS_SRC, ctx, { filename: "crossunit.js" });
   return { ctx, els, store, alerts, run: (code) => vm.runInContext(code, ctx) };
 }
@@ -103,7 +106,8 @@ function check(name, cond, detail) {
 }
 
 const UNIT = "kyokusen"; // 4問・方針クイズなし
-const KEY = "kyotsu_app_v14_" + UNIT;
+const KEY = require("./test-context.js").TEST_PREFIX + UNIT;
+const OLD_KEY = "kyotsu_app_v14_" + UNIT; // 旧コード（Phase 8A より前）のキー
 const env = makeContext(NEW_APP_SRC, true);
 const qs = env.run(`UNIT_META.${UNIT}.questions`);
 const [A, B, Cq, D] = qs.map((q) => q.id);
@@ -375,7 +379,7 @@ try {
   const old = makeContext(OLD_APP_SRC, false);
   old.ctx.__NOW = env.ctx.__NOW;
   const full = Object.assign(old.run(`defaultState(${J(UNIT)})`), { wrong: [{ id: A }, { id: B }], reviewMeta: pastDue([A, B]) });
-  old.store[KEY] = J({ state: full, stats: old.run("defaultStats()") });
+  old.store[OLD_KEY] = J({ state: full, stats: old.run("defaultStats()") });
   old.run(`selectUnit(${J(UNIT)})`);
   old.run("update()");
   check("7-3 旧 app: 読み込み・件数表示が壊れない", old.run("dueReviewCount()") === 2);
@@ -391,7 +395,7 @@ try {
   old.run(`markReviewResult(UNIT_META.${UNIT}.questions[0], true); state.reviewMeta[${J(A)}] = { streak: 3, dueAt: 0, lastSeenAt: 1 }; markReviewResult(UNIT_META.${UNIT}.questions[0], true);`);
   check("7-8 旧 app: {id} 形式の要素も卒業で外れる", !wIds(old.run("state.wrong")).includes(A));
   old.run("save()");
-  const oldSaved = JSON.parse(old.store[KEY]);
+  const oldSaved = JSON.parse(old.store[OLD_KEY]);
 
   // 旧端末が旧形式を再流入 → 新コードの merge / load / save で [{id}] に戻る
   const back = mergeNew(C(newData), C(oldSaved));

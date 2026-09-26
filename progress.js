@@ -13,7 +13,9 @@
 (function () {
   "use strict";
 
-  var PREFIX = "kyotsu_app_v14_";
+  // 読むのは今の context の領域だけ（本人 / 未ログイン session / 保護者が見る子どもの閲覧用。storage-ns.js が決める）。
+  // 確認中・未設定のときは何も読まない。旧キー kyotsu_app_v14_ は読まない（Phase 8A）
+  function prefixNow() { return (window.KyotsuNS && window.KyotsuNS.readPrefix()) || null; }
   var UNIT_KEY = "kyotsu_app_unit_v1"; // app.js が起動時にこのキーで単元を復元する
 
   // app.js の UNIT_META から label と総問題数だけを複製
@@ -44,11 +46,12 @@
 
   /* ---------- 単元ごとの進捗・正答率を集計 ---------- */
   function collectUnitProgress() {
+    var PREFIX = prefixNow();
     return Object.keys(UNIT_META_MINI).map(function (unit) {
       var unitMeta = UNIT_META_MINI[unit];
       var total = unitMeta.total;
 
-      var raw = localStorage.getItem(PREFIX + unit);
+      var raw = PREFIX ? localStorage.getItem(PREFIX + unit) : null;
       var obj = null;
       if (raw) { try { obj = JSON.parse(raw); } catch (e) { obj = null; } }
 
@@ -196,4 +199,6 @@
   }
 
   document.addEventListener("DOMContentLoaded", render);
+  // 表示中の領域のデータが別タブ（同期・取り込み・保護者の閲覧用キャッシュ）で変わったら読み込み直す（Phase 8A）
+  if (window.KyotsuNS) window.KyotsuNS.watchData();
 })();

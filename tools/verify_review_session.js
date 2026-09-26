@@ -63,8 +63,9 @@ function makeContext() {
   vm.createContext(ctx);
   vm.runInContext("Date.now = () => __NOW;", ctx);
   const html = fs.readFileSync(path.join(DIR, "index.html"), "utf8");
-  const scripts = html.match(/questions_[a-z_0-9]+\.js|log-archive\.js(?=\?)|app\.js(?=\?)/g);
+  const scripts = html.match(/questions_[a-z_0-9]+\.js|storage-ns\.js(?=\?)|log-archive\.js(?=\?)|app\.js(?=\?)/g);
   scripts.forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
+  require("./test-context.js").readyApp((c) => vm.runInContext(c, ctx)); // Phase 8A：テスト用アカウントで context を確定
   return { ctx, els, store, run: (code) => vm.runInContext(code, ctx) };
 }
 
@@ -239,7 +240,7 @@ console.log("\n[5] ほかのモードの出題順は変わらない");
   setup(env, "kyokusen", [], due0);
   env.run("startUnansweredOnly()");
   const snap = env.run("unansweredSessionIds.slice()");
-  const savedMid = JSON.parse(env.store["kyotsu_app_v14_kyokusen"]).state;
+  const savedMid = JSON.parse(env.store["kyotsu_app_v15_u_t_kyokusen"]).state;
   const r = play(env, ["c", "w", "c", "c"]);
   check("5-4 未挑戦（開始時に固定した unansweredSessionIds の順のまま）", J(r.shown) === J(all) && J(snap) === J(all));
   check("5-5 未挑戦：対象リストは保存しない（Phase 7A-2c でメモリだけ）", !("unansweredSnapshot" in savedMid) && savedMid.mode === "normal" &&
@@ -250,7 +251,7 @@ console.log("\n[6] 固定リストはメモリだけ・破棄のタイミング"
 {
   setup(env, "kyokusen", [A, B, C], due0);
   env.run("startDueReview()");
-  const saved = JSON.parse(env.store["kyotsu_app_v14_kyokusen"]);
+  const saved = JSON.parse(env.store["kyotsu_app_v15_u_t_kyokusen"]);
   check("6-1 保存データに固定リストが入らない（state のキーは defaultState と同じ）",
     J(Object.keys(saved.state)) === J(env.run("Object.keys(defaultState('kyokusen'))")), Object.keys(saved.state));
   check("6-2 reviewSessionIds は state のプロパティではない", !("reviewSessionIds" in saved.state) && !env.run("'reviewSessionIds' in state"));
@@ -283,7 +284,7 @@ console.log("\n[7] 通常試験で長期の wrong を消さない／結果画面
     meta: Object.keys(state.reviewMeta), graduatedAt: J(state.graduatedAt), cleared: stats.clearedCount })`.replace("J(", "JSON.stringify("));
   const resultRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`el("startWrongOnlyReviewBtn2").onclick()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
   const topRetry = () => { const got = []; env.ctx.alert = (m) => got.push(m); env.run(`(function () { const s = el("practiceModeSelect"); s.value = "wrong"; s.onchange.call(s); })()`); env.ctx.alert = () => {}; return { alert: got[0] || null, list: env.run("state.mode") === "review" ? env.run("currentList().map((q) => q.id)") : null }; };
-  const stored = () => JSON.parse(env.store["kyotsu_app_v14_kyokusen"]);
+  const stored = () => JSON.parse(env.store["kyotsu_app_v15_u_t_kyokusen"]);
   const pre = () => {
     setup(env, "kyokusen", [A, B], () => 1, (id) => (id === A ? env.ctx.__NOW - 1000 : env.ctx.__NOW + 86400000));
     env.run(`state.graduatedAt = { "ky9-9": 123 }; stats.clearedCount = 5; save();`);
@@ -400,7 +401,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   const syncSrc = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
   const mergeUnitData = new Function(syncSrc.slice(syncSrc.indexOf("function freshness"),
     syncSrc.indexOf("/* =========================================================\n   Firestore 入出力")) + ";return mergeUnitData;")();
-  const stored = () => JSON.parse(env.store["kyotsu_app_v14_kyokusen"]);
+  const stored = () => JSON.parse(env.store["kyotsu_app_v15_u_t_kyokusen"]);
   // UI と同じく、TIPS は表示 →「次へ」だけ（選択肢・開始ボタンは出ない）
   function tipsRun(mid) {
     const got = []; env.ctx.alert = (m) => got.push(m);
@@ -450,7 +451,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   check("8-D 試験開始後の TIPS は A・B（未ログイン）", J(tipsRun().shown) === J([A, B]));
   check("8-D 試験開始でも旧仕様の tipList は作られない", env.run("state.tipList") === undefined);
   const m = mergeUnitData(stored(), remoteBefore);                   // ログイン中の次回起動
-  env.store["kyotsu_app_v14_kyokusen"] = J(m);
+  env.store["kyotsu_app_v15_u_t_kyokusen"] = J(m);
   env.run(`selectUnit("kyokusen")`);
   check("8-D ログイン中（merge 後）も TIPS は A・B", J(tipsRun().shown) === J([A, B]));
 
@@ -458,7 +459,7 @@ console.log("\n[8] TIPSだけ復習 = 長期の wrong（まだ苦手な問題）
   setup(env, "kyokusen", [A], () => 0);
   env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1], qs[2]]; save(); })()`);
   check("8-E 前提: wrong=[A]、メモリに古い tipList=[B,C] を仕込んだ", J(env.run("state.tipList.map((q) => q.id)")) === J([B, C]));
-  check("8-E 保存データには tipList を書かない（save で落とす）", !("tipList" in JSON.parse(env.store["kyotsu_app_v14_kyokusen"]).state));
+  check("8-E 保存データには tipList を書かない（save で落とす）", !("tipList" in JSON.parse(env.store["kyotsu_app_v15_u_t_kyokusen"]).state));
   check("8-E TIPS は A だけ（legacy tipList に引っ張られない）", J(tipsRun().shown) === J([A]));
   setup(env, "kyokusen", [], () => 0);
   env.run(`(function () { const qs = UNIT_META.kyokusen.questions; state.tipList = [qs[1]]; save(); })()`);

@@ -1,6 +1,57 @@
-const STORAGE_PREFIX = "kyotsu_app_v14_";
-const LEGACY_STORAGE_KEY = "kyotsu_app_v13"; // 単元分離前の旧キー。図形と計量のデータとして1回だけ引き継ぐ
-const UNIT_KEY = "kyotsu_app_unit_v1";
+// 学習データのキーは storage-ns.js（KyotsuNS）がアカウント・未ログイン session ごとに作る（Phase 8A）。
+// 旧キー（kyotsu_app_v14_{unit} / kyotsu_app_v13）はここでは読み書きしない（原本は残す）。
+const UNIT_KEY = "kyotsu_app_unit_v1"; // 最後に開いた単元（UI 設定。アカウントに依存しない）
+
+// 今の context（誰のデータを表示・保存するか）。Auth の判定が終わるまでは null＝確認中で、
+// 学習データの読み込み・保存・同期をしない。firebase-sync.js（無ければ下の fallback）が kyotsuContextReady で渡す。
+let kyotsuCtx = null;
+let kyotsuStartPending = true;
+
+function storageKey(unit) {
+  if (!kyotsuCtx || typeof KyotsuNS === "undefined") return null;
+  return KyotsuNS.key(KyotsuNS.ownPrefix(kyotsuCtx), unit);
+}
+
+let kyotsuCtxBannerText = null; // いま出している案内（テスト・確認用）
+function setCtxBanner(text) {
+  kyotsuCtxBannerText = text || null;
+  const id = "kyotsuCtxBanner";
+  let b = document.getElementById(id);
+  if (!text) { if (b && b.remove) b.remove(); else if (b) b.style.display = "none"; return; }
+  if (!b || !b.style) {
+    b = document.createElement("div");
+    b.id = id;
+    if (document.body && document.body.appendChild) document.body.appendChild(b);
+  }
+  b.className = "kyotsu-ctx-banner";
+  b.style.display = "block";
+  b.innerText = text;
+}
+
+// context が確定したら呼ばれる。1ページで1回だけ（別の context に変わるときは firebase-sync.js がページを読み込み直す）
+function kyotsuContextReady(ctx) {
+  if (kyotsuCtx || !ctx || (ctx.state !== "guest" && ctx.state !== "authenticated")) return;
+  kyotsuCtx = ctx;
+  setCtxBanner(null);
+  if (kyotsuStartPending) {
+    kyotsuStartPending = false;
+    const savedUnit = localStorage.getItem(UNIT_KEY);
+    if (savedUnit && UNIT_META[savedUnit]) selectUnit(savedUnit);
+    else showUnitSelect();
+  }
+}
+window.kyotsuContextReady = kyotsuContextReady;
+window.kyotsuCurrentContext = () => kyotsuCtx;
+
+// firebase-sync.js を読み込めない・Auth の判定が長く終わらないときは、確認中（unresolved）のまま止める（fail closed）。
+// 最後に確定したアカウントを推測して開いたり、未ログイン（guest）に切り替えたりはしない
+// （保護者の操作を本人や guest の学習として保存しないため）。学習データの読み込み・保存・同期はしない。
+// あとから Auth の判定が届けば、firebase-sync.js がふつうに context を確定させる。
+function kyotsuSyncUnavailable() {
+  if (kyotsuCtx) return;
+  setCtxBanner("アカウントを確認できません。通信状態を確認して再読み込みしてください");
+}
+window.kyotsuSyncUnavailable = kyotsuSyncUnavailable;
 const HISTORY_VISIBLE = 5;
 
 // 「方針を確認」クイズ（問題開始前にq.routeを選ばせるUI）のON/OFFスイッチ。
@@ -517,6 +568,8 @@ let saveFailing = false;
 // opts.quiet: 失敗時の alert を出さない（リセットのように呼び出し側で専用の警告を出す場合）
 function save(opts) {
   if (!state.unit) return false;
+  const saveKey = storageKey(state.unit);
+  if (!saveKey) return false; // 確認中（どの領域に保存するか未確定）は保存しない
 
   try {
     // state.timer はこのページ内だけで有効な setInterval のID。保存するコピーだけ null にする
@@ -530,7 +583,7 @@ function save(opts) {
     // questionHistory の欠けている分も生ログから補う（Phase 7C。state は同じまま stats だけ変わることもある）
     const payload = { state: stateToSave, stats };
     const toSave = typeof LogArchive !== "undefined" ? LogArchive.compactUnitData(payload) : payload;
-    localStorage.setItem(STORAGE_PREFIX + state.unit, JSON.stringify(toSave));
+    localStorage.setItem(saveKey, JSON.stringify(toSave));
     // 保存できたら、メモリ上も同じ形にそろえる（保存に失敗したときはメモリをそのまま残し、次の保存で再挑戦）
     if (toSave !== payload) {
       state.answerLog = toSave.state.answerLog;
@@ -602,13 +655,9 @@ function loadUnit(unit) {
   examWrongIds = null; // 単元が変わったら「今回の試験の誤答」は引き継がない
   unansweredSessionIds = []; // 未挑戦セッションの固定リストも引き継がない
 
-  // 旧バージョン(単元分離前)のデータを、図形と計量のデータとして1回だけ引き継ぐ
-  if (unit === "keiryo" && !localStorage.getItem(STORAGE_PREFIX + unit)) {
-    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) localStorage.setItem(STORAGE_PREFIX + unit, legacy);
-  }
-
-  const raw = localStorage.getItem(STORAGE_PREFIX + unit);
+  // 旧キー（v13 / v14）は誰のデータか分からないので、ここでは読まない（firebase-sync.js が新しい情報の有無だけ調べる）
+  const loadKey = storageKey(unit);
+  const raw = loadKey ? localStorage.getItem(loadKey) : null;
   if (raw) {
     try {
       const obj = JSON.parse(raw);
@@ -2771,6 +2820,7 @@ function buildStageOnlyButtons(unit) {
 
 function selectUnit(unit) {
   if (!UNIT_META[unit]) return;
+  if (!kyotsuCtx) return; // 確認中は単元を開かない（context が確定したら kyotsuContextReady が開く）
 
   loadUnit(unit);
   applyUnitUI(unit);
@@ -2995,7 +3045,7 @@ function resetStatsOnly() {
   // なっていて、リロードしていない画面のメモリが古い世代のままの場合に、同じ世代を作らないため）。
   const genOf = (s) => (s && typeof s.resetGen === "number" && s.resetGen > 0 ? Math.floor(s.resetGen) : 0);
   let storedGen = 0;
-  try { storedGen = genOf((JSON.parse(localStorage.getItem(STORAGE_PREFIX + unit)) || {}).state); } catch (e) {}
+  try { storedGen = genOf((JSON.parse(localStorage.getItem(storageKey(unit))) || {}).state); } catch (e) {}
   const resetGen = Math.max(genOf(state), storedGen) + 1;
 
   // 保存に失敗したら元に戻せるよう、リセット前の state / stats を持っておく
@@ -3142,14 +3192,14 @@ if (el("modalGo")) {
     showUnitSelect();
   };
 }
-/* 初期化 */
+/* 初期化：単元カードは作るが、学習データを開くのはアカウントの確認が終わってから（kyotsuContextReady） */
 buildUnitSelectCards();
-
-const savedUnit = localStorage.getItem(UNIT_KEY);
-if (savedUnit && UNIT_META[savedUnit]) {
-  selectUnit(savedUnit);
-} else {
-  showUnitSelect();
+showUnitSelect();
+if (!kyotsuCtx) setCtxBanner("アカウントを確認中…");
+{
+  // Auth の判定が長く終わらなければ、確認できないことを案内する（確認中のまま・学習データは開かない）
+  const t = setTimeout(kyotsuSyncUnavailable, 8000);
+  if (t && t.unref) t.unref();
 }
 
 /* =========================
