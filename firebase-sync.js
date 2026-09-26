@@ -20,7 +20,7 @@ import {
   setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs, serverTimestamp
+  getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
 /* ---------- 設定 ----------
@@ -602,12 +602,16 @@ function buildSummary() {
 }
 
 /* =========================================================
-   plannerの「今日のクエスト」に直接反映する
-   ・plannerを開かなくても、この端末で学習してsyncが走るたびに
-     dailyquest-logs/{CHILD_UID} の「今日」の欄へ直接書き込む。
-   ・plannerの構造（{days:{key:{events,eventDone,quests}}}のJSON文字列1本）
-     を壊さないよう、フェッチ→パース→autoSource:"kyotsu-math"の
-     エントリだけ更新→書き戻し、という手順を踏む。
+   plannerの「今日のクエスト」に、専用フィールド kyotsuMathAuto で反映する
+   ・dailyquest-logs/{uid} のトップレベルフィールド kyotsuMathAuto だけを
+     setDoc(merge:true) で書く：
+       kyotsuMathAuto: { "YYYY-MM-DD": { date, source:"kyotsu-math", count, updatedAt } }
+     LEAP側の leapAuto・英コミュ側の eikomiAuto と同じ考え方
+     （日付キーごとのFirestoreネイティブmap）。
+   ・plannerの store（dataフィールドのJSON文字列）は一切読まない・書かない。
+     merge:trueはネストしたmapもキー単位でマージされるため、今日の日付キー
+     だけを更新でき、他の日付キーや data / leapAuto / eikomiAuto には
+     一切触れない。
    ・plannerの記録がまだ一度も存在しない場合は何もしない（安全側）。
    ・保護者（閲覧モード）では絶対に動かさない。
    ========================================================= */
@@ -616,39 +620,19 @@ async function pushDailyQuestToday(s, gen) {
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
   const uid = targetUid();
+  const today = todayKeyJST();
+  const count = s.todayCount || 0;
+  if (count <= 0) return; // 今日まだ0件なら書かない（Planner側もcount<=0の記録は表示しない）
   try {
-    const snap = await getDoc(doc(db, "dailyquest-logs", uid));
+    const ref = doc(db, "dailyquest-logs", uid);
+    const snap = await getDoc(ref);
     if (!alive(gen)) return;
-    if (!snap.exists() || !snap.data().data) return;
-    let store;
-    try { store = JSON.parse(snap.data().data); } catch (e) { return; }
-    if (!store.days) store.days = {};
-    const today = todayKeyJST();
-    if (!store.days[today]) store.days[today] = { events: [], eventDone: {}, quests: [] };
-    const day = store.days[today];
-    if (!day.quests) day.quests = [];
-    const label = s.todayCount
-      ? "kyotsu-math（自動記録）（本日" + s.todayCount + "問）"
-      : "kyotsu-math（自動記録）";
-    const existing = day.quests.find(q => q.autoSource === "kyotsu-math");
-    let changed = false;
-    if (existing) {
-      if (existing.label !== label || !existing.done) {
-        existing.label = label;
-        existing.done = true;
-        changed = true;
-      }
-    } else {
-      day.quests.push({ label: label, done: true, tag: "数学", autoSource: "kyotsu-math" });
-      changed = true;
-    }
-    if (!changed) return;
-    if (!alive(gen)) return;
-    store._updatedAt = Date.now();
-    await setDoc(doc(db, "dailyquest-logs", uid), {
-      data: JSON.stringify(store),
-      clientUpdatedAt: store._updatedAt,
-      updatedAt: serverTimestamp()
+    if (!snap.exists()) return;
+    const existing = snap.data().kyotsuMathAuto || {};
+    const prev = existing[today];
+    if (prev && prev.count === count) return; // 変化なし。同日再実行での重複書き込みを避ける
+    await setDoc(ref, {
+      kyotsuMathAuto: { [today]: { date: today, source: "kyotsu-math", count, updatedAt: Date.now() } }
     }, { merge: true });
   } catch (e) {
     console.warn("[sync] dailyquest push失敗", e);
@@ -676,12 +660,12 @@ async function pushSummary(gen) {
 }
 
 /* =========================================================
-   過去の学習履歴を、plannerの「今日のクエスト」に一括で反映する
-   （一回限りの移行用）
-   ・全単元のanswerLogを日付ごとに集計し、dailyquest-logs/{uid}の
-     各日付にautoSource:"kyotsu-math"のクエストとして書き込む。
+   過去の学習履歴を、kyotsuMathAuto へ一括で反映する（一回限りの移行用）
+   ・全単元のanswerLogを日付ごとに集計し、dailyquest-logs/{uid}.kyotsuMathAuto
+     の各日付キーへ { date, source:"kyotsu-math", count, updatedAt } として書き込む。
    ・plannerの記録が一度も存在しない場合は何もしない（安全のため）。
-   ・既存の他のクエストには一切触れない。
+   ・data・leapAuto・eikomiAuto・既存data.days内のautoSource:"kyotsu-math"
+     には一切触れない（削除・移行・書き換えのいずれもしない）。
    ========================================================= */
 async function backfillDailyQuestLogs() {
   if (!currentUser || isGuardian()) return { ok: false, reason: "not-child" };
@@ -703,54 +687,25 @@ async function backfillDailyQuestLogs() {
   const dayKeys = Object.keys(perDay);
   if (dayKeys.length === 0) return { ok: true, updatedDays: 0, totalDaysFound: 0 };
 
-  const today = todayKeyJST();
-
   try {
-    const snap = await getDoc(doc(db, "dailyquest-logs", uid));
-    if (!snap.exists() || !snap.data().data) return { ok: false, reason: "no-dailyquest-doc" };
-    let store;
-    try { store = JSON.parse(snap.data().data); } catch (e) { return { ok: false, reason: "parse-error" }; }
-    if (!store.days) store.days = {};
+    const ref = doc(db, "dailyquest-logs", uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return { ok: false, reason: "no-dailyquest-doc" };
+    const existing = snap.data().kyotsuMathAuto || {};
 
-    // 過去分を追加しても、Plannerの「記録開始日」(appStartDate)より前だと
-    // 振り返りカレンダー上でグレーアウトしてタップできなくなってしまう。
-    // バックフィルする日付の中に記録開始日より前のものがあれば、記録開始日を繰り上げる。
-    const earliestKey = dayKeys.reduce((min, k) => (k < min ? k : min), dayKeys[0]);
-    let appStartDateChanged = false;
-    if (!store.appStartDate || earliestKey < store.appStartDate) {
-      store.appStartDate = earliestKey;
-      appStartDateChanged = true;
-    }
-
+    const updates = {};
     let updated = 0;
     dayKeys.forEach(key => {
-      if (!store.days[key]) store.days[key] = { events: [], eventDone: {}, quests: [] };
-      const day = store.days[key];
-      if (!day.quests) day.quests = [];
-      const label = key === today
-        ? "kyotsu-math（自動記録）（本日" + perDay[key] + "問）"
-        : "kyotsu-math（自動記録）（" + perDay[key] + "問）";
-      const existing = day.quests.find(q => q.autoSource === "kyotsu-math");
-      if (existing) {
-        if (existing.label !== label || !existing.done) {
-          existing.label = label;
-          existing.done = true;
-          updated++;
-        }
-      } else {
-        day.quests.push({ label: label, done: true, tag: "数学", autoSource: "kyotsu-math" });
-        updated++;
-      }
+      const count = perDay[key];
+      const prev = existing[key];
+      if (prev && prev.count === count) return; // 変化なし
+      updates[key] = { date: key, source: "kyotsu-math", count, updatedAt: Date.now() };
+      updated++;
     });
 
-    if (updated === 0 && !appStartDateChanged) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
+    if (updated === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
 
-    store._updatedAt = Date.now();
-    await setDoc(doc(db, "dailyquest-logs", uid), {
-      data: JSON.stringify(store),
-      clientUpdatedAt: store._updatedAt,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    await setDoc(ref, { kyotsuMathAuto: updates }, { merge: true });
     return { ok: true, updatedDays: updated, totalDaysFound: dayKeys.length };
   } catch (e) {
     console.warn("[sync] backfill失敗", e);

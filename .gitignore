@@ -15,4 +15,5 @@ tools/*
 !tools/verify_qh_backfill.js
 !tools/verify_uid_context.js
 !tools/test-context.js
+!tools/verify_kyotsu_math_auto.js
 模試分析/
