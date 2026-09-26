@@ -7,8 +7,11 @@
    ・app.js 本体には依存しない（calendar.js と同じ理由で、UNIT_META
      を丸ごと読み込むと index.html 用の初期化コードまで動いてしまう
      ため、単元ラベルと総問題数だけをここに複製して持つ）。
-   ・データソースは他の後付けスクリプトと同じ localStorage の
-     kyotsu_app_v14_<unit> キー。
+   ・データソースは他の後付けスクリプトと同じ localStorage の学習データ。
+     キーは storage-ns.js が今の context ごとに決める（Phase 8A）：本人は
+     kyotsu_app_v15_u_{uid}_{unit}、未ログインは kyotsu_app_v15_g_{sessionId}_{unit}、
+     保護者が見る子どもの閲覧用は kyotsu_view_v1_{保護者の uid}_{子どもの uid}_{unit}。
+     旧キー kyotsu_app_v14_{unit} は読まない。
    ========================================================= */
 (function () {
   "use strict";
