@@ -7,11 +7,8 @@
    ・保存先: users/{uid}/units/{unitKey}  … payload は JSON文字列1本
      （Firestoreの型制約・undefined制約を完全に回避するため）
    ・読み込み方法: <script type="module" src="firebase-sync.js?v=2"></script>
-   ・2026-09〜: LEAP/planner(デイリークエスト)と同じFirebaseプロジェクト
-     （leap-app-sync）・同じ子供用ログインIDに統一。加えて、同期のたびに
-     「kyotsu-math-summary/{uid}」へ最終学習日時・今日の演習数・累計演習数
-     だけの軽量サマリーを書き込み、planner側（dq-firebase-sync.js）から
-     読めるようにしてある。
+   ・同期のたびに「kyotsu-math-summary/{uid}」へ最終学習日時・今日の演習数・
+     累計演習数だけの軽量サマリーも書き込む。
    ========================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
@@ -23,14 +20,7 @@ import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
-/* ---------- 設定 ----------
-   2026-09〜: LEAP単語帳アプリ／デイリークエスト(planner)と同じ
-   Firebaseプロジェクト（leap-app-sync）・同じログインIDに統一。
-   これにより、子どもは1つのID/パスワードでLEAP・kyotsu-math・plannerに
-   ログインでき、plannerのFirestoreルールもこのプロジェクト内で一元管理できる。
-   ※旧kyotsu-mathプロジェクト（projectId: "kyotsu-math"）に貯まっていた
-   クラウド同期履歴はこの切り替えでは引き継がれない（端末内localStorageは
-   そのまま残るのでローカルの学習データ自体は消えない）。 */
+/* ---------- 設定 ---------- */
 const firebaseConfig = {
   apiKey: "AIzaSyBkrhdO_041b7Hi0nyAY8p--uHRYoFKUqk",
   authDomain: "leap-app-sync.firebaseapp.com",
@@ -46,7 +36,6 @@ const RELOAD_FLAG = "kyotsu_sync_reloaded";
 const PUSH_DELAY = 4000; // 保存後、これだけ静かになったらアップロード
 
 /* ---------- 保護者（閲覧専用）設定 ----------
-   ・LEAP/planner側と同じUIDを流用する（leap-app-syncプロジェクトの値）。
    ・GUARDIAN_UIDS に入っているuidでログインした場合は「閲覧モード」になる:
      - データの読み込み先は自分のuidではなく CHILD_UID 固定
      - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため） */
@@ -606,7 +595,6 @@ function buildSummary() {
    ・dailyquest-logs/{uid} のトップレベルフィールド kyotsuMathAuto だけを
      setDoc(merge:true) で書く：
        kyotsuMathAuto: { "YYYY-MM-DD": { date, source:"kyotsu-math", count, updatedAt } }
-     LEAP側の leapAuto・英コミュ側の eikomiAuto と同じ考え方
      （日付キーごとのFirestoreネイティブmap）。
    ・plannerの store（dataフィールドのJSON文字列）は一切読まない・書かない。
      merge:trueはネストしたmapもキー単位でマージされるため、今日の日付キー

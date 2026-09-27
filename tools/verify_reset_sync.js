@@ -19,7 +19,7 @@ const path = require("path");
 const vm = require("vm");
 
 const DIR = path.join(__dirname, "..");
-const CHILD_UID = "hjWTc7Ll0UeHv5iKbRTlTLRrY8x1";
+const CHILD_UID = "testChildUid000000000000001"; // テスト用のダミーUID
 const UNIT = "kyokusen";
 // Phase 8A 以降の学習データのキー（子どものアカウントの領域）
 const UPREFIX = "kyotsu_app_v15_u_" + CHILD_UID + "_";

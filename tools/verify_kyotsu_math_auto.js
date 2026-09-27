@@ -32,14 +32,11 @@ function check(label, cond, extra) {
   else { failed++; console.error("  NG  " + label, extra !== undefined ? extra : ""); }
 }
 
-const CHILD_UID = "hjWTc7Ll0UeHv5iKbRTlTLRrY8x1";
-const GUARDIAN_UID = "eVm3klGUSpcxRPtxN7NHo4lYx7f2";
+// テスト用のダミーUID（本物のアカウントとは無関係）
+const CHILD_UID = "testChildUid000000000000001";
+const GUARDIAN_UID = "testGuardianUid0000000000001";
 const DQ_PATH = "dailyquest-logs/" + CHILD_UID;
-// 備考：kyotsu-mathの役割モデルは guardian（保護者・閲覧専用） / それ以外はすべて
-// learner として自分のuid配下へ書き込む設計（LearningScopeのような
-// child/parent/unauthorized/guestの4分類は無い）。family外UIDを弾く境界は
-// Firestore RulesとFirebase Authのアカウント発行そのものが担っており、
-// アプリ側のrole判定はguardianか否かだけ（今回の移行でもこの仕様は維持する）。
+// アプリ側の role は guardian（閲覧専用）か learner（自分のuid配下へ書く）の2つだけ。
 
 // ---- Firestoreのmerge:trueは、ネストしたmapフィールドもキー単位で再帰的にマージする。
 // 単純な{...old, ...new}のシャロー統合だとこの挙動を再現できないため、再帰merge関数を使う。
