@@ -663,6 +663,7 @@ async function pushSummary(gen) {
    ・data・leapAuto・eikomiAuto・既存data.days内のautoSource:"kyotsu-math"
      には一切触れない（削除・移行・書き換えのいずれもしない）。
    ========================================================= */
+// UIからは呼ばれていない（移行完了・再実行で過去実績を減らしうるためボタン削除済み）。将来の管理用途に残置。
 async function backfillDailyQuestLogs() {
   if (!currentUser || !isLearner()) return { ok: false, reason: "not-child" };
   const uid = targetUid();
@@ -1088,9 +1089,6 @@ function injectUI() {
     '    <button class="btn primary" id="syncNowBtn">今すぐ同期</button>' +
     '    <button class="btn secondary" id="syncLogoutBtn">ログアウト</button>' +
     '  </div>' +
-    '  <div class="stack-buttons" id="syncBackfillRow" style="display:none;margin-top:6px;">' +
-    '    <button class="btn secondary" id="syncBackfillBtn">過去ログをデイリークエストに反映</button>' +
-    '  </div>' +
     '  <div class="stack-buttons" id="syncResetRow" style="display:none;margin-top:6px;">' +
     '    <button class="btn secondary" id="syncResetBtn" style="color:#991b1b;border-color:#991b1b;">このPCの検証データをリセット</button>' +
     '  </div>' +
@@ -1110,25 +1108,6 @@ function injectUI() {
   });
   document.getElementById("syncLogoutBtn").addEventListener("click", () => signOut(auth));
   document.getElementById("syncResetBtn").addEventListener("click", resetLocalTestData);
-  document.getElementById("syncBackfillBtn").addEventListener("click", async () => {
-    const btn = document.getElementById("syncBackfillBtn");
-    btn.disabled = true;
-    const r = await backfillDailyQuestLogs();
-    btn.disabled = false;
-    if (!r.ok) {
-      if (r.reason === "no-dailyquest-doc") {
-        alert("デイリークエスト側の記録がまだ見つかりませんでした。先にデイリークエストのアプリを一度開いてから、もう一度試してください。");
-      } else {
-        alert("反映に失敗しました。もう一度試してみてください。");
-      }
-      return;
-    }
-    if (r.updatedDays > 0) {
-      alert("デイリークエストに" + r.updatedDays + "日分の記録を反映しました！");
-    } else {
-      alert("すでに最新の状態でした（今回は追加・更新はありませんでした）。");
-    }
-  });
   return true;
 }
 
@@ -1198,9 +1177,6 @@ function renderAuthUI() {
 
   const resetRow = document.getElementById("syncResetRow");
   if (resetRow) resetRow.style.display = (currentUser && isGuardian()) ? "block" : "none";
-
-  const backfillRow = document.getElementById("syncBackfillRow");
-  if (backfillRow) backfillRow.style.display = (currentUser && isLearner()) ? "block" : "none";
 
   if (!out || !inn) return;
   if (currentUser) {
