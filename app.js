@@ -1183,54 +1183,6 @@ function renderInsightsPanel() {
   `;
 }
 
-// コンソールで人間が読める形に整形して出す（開発・確認用）
-function debugPrintAnalysis(log) {
-  const a = analyzeLog(log || state.answerLog);
-  if (a.unseen) {
-    console.log("%cまだ回答ログがありません。数問解くと集計されます。", "color:#888");
-    return a;
-  }
-  console.log("%c===== 学習ログ分析 =====", "font-weight:bold;font-size:14px;color:#2563eb");
-  console.log(`総回答 ${a.totalAnswered}問 / 正解 ${a.totalCorrect}問 / 正答率 ${a.overallRate}%`);
-
-  console.log("%c▼ ミス傾向トップ（誤答タグ）", "font-weight:bold");
-  if (a.tagRanking.length) {
-    console.table(a.tagRanking.map(t => ({ 傾向: t.label, 回数: t.count })));
-  } else {
-    console.log("  誤答なし（すばらしい）");
-  }
-
-  console.log("%c▼ weakness軸 別 正答率", "font-weight:bold");
-  console.table(Object.fromEntries(Object.entries(a.byWeakness).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
-
-  console.log("%c▼ ステージ別 正答率", "font-weight:bold");
-  console.table(Object.fromEntries(Object.entries(a.byStage).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
-
-  console.log("%c▼ 解法ルート別 正答率", "font-weight:bold");
-  console.table(Object.fromEntries(Object.entries(a.byRoute).map(([k, v]) => [k, `${v.correct}/${v.total} (${v.rate}%)`])));
-
-  console.log("%c▼ 時間プロファイル", "font-weight:bold");
-  console.log(`  平均 ${a.time.avgAll}秒 / 正解時 ${a.time.avgCorrect}秒 / 誤答時 ${a.time.avgWrong}秒`);
-  if (a.time.avgCorrect && a.time.avgWrong) {
-    if (a.time.avgWrong < a.time.avgCorrect) {
-      console.log("  → 誤答の方が速い＝『早とちり・見切り発車』の傾向");
-    } else {
-      console.log("  → 誤答の方が遅い＝『悩んだ末に外す』傾向");
-    }
-  }
-
-  if (a.repeatMistakes.length) {
-    console.log("%c▼ 繰り返しミスしている問題", "font-weight:bold;color:#b91c1c");
-    console.table(a.repeatMistakes.map(m => ({ 問題ID: m.questionId, ミス回数: m.count })));
-  }
-  if (a.repeatTags.length) {
-    console.log("%c▼ 繰り返している思考のクセ", "font-weight:bold;color:#b91c1c");
-    console.table(a.repeatTags.map(t => ({ クセ: t.label, 回数: t.count })));
-  }
-  console.log("%c========================", "color:#2563eb");
-  return a;
-}
-
 /* =========================
    分析レポート生成（Claudeに貼り付ける用テキスト）
    analyzeLog の結果を、人にもClaudeにも読みやすいプレーンテキストに整形する。
