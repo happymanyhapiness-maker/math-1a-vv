@@ -17,7 +17,8 @@ const C = (o) => JSON.parse(J(o));
 const SYNC_SRC = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
 const CHILD = (SYNC_SRC.match(/const CHILD_UID = "([A-Za-z0-9]+)";/) || [])[1];
 const GUARDIAN = (SYNC_SRC.match(/const GUARDIAN_UIDS = \[\s*"([A-Za-z0-9]+)"/) || [])[1];
-const OTHER = "otherLearnerUid0000000000001";
+const OTHER = "otherLearnerUid0000000000001";          // 家族外のログイン済みアカウント（X）
+const INDEPENDENT = "IMu4q62RGbNs2y5MXu0yJ0OfYgU2";     // LEAP専用の独立学習者（I）。数学は同期対象外
 const UNIT = "kyokusen";
 const DAY = 864e5;
 const NS = require(path.join(DIR, "storage-ns.js"));
@@ -37,7 +38,18 @@ async function settle() { for (let i = 0; i < 40; i++) await new Promise((r) => 
 // ---- 偽 Firestore（端末間で共有）。gate を入れると、読み書きがそこで止まる（同期の途中を作る） ----
 function makeCloud() {
   const store = {};
-  const cloud = { store, writes: [], rejected: [], gate: null };
+  const cloud = { store, writes: [], rejected: [], reads: [], readRejected: [], gate: null };
+  // 本番の Rules（2026-09-27 公開）：users/{uid}/units・kyotsu-math-summary/{uid}・dailyquest-logs/{uid} は
+  //  書き込み＝本人かつ CHILD_UID だけ、読み込み＝本人か「保護者が子どもの分」だけ
+  const ownerOf = (p) => { const seg = p.split("/"); return seg[0] === "users" || seg[0] === "kyotsu-math-summary" || seg[0] === "dailyquest-logs" ? seg[1] : null; };
+  const readGate = (dev, p) => {
+    cloud.reads.push({ path: p, by: dev.authUid });
+    const owner = ownerOf(p);
+    if (owner && !(dev.authUid && (owner === dev.authUid || (dev.authUid === GUARDIAN && owner === CHILD)))) {
+      cloud.readRejected.push({ path: p, by: dev.authUid });
+      throw Object.assign(new Error("permission-denied"), { code: "permission-denied" });
+    }
+  };
   const snap = (d) => ({ exists: () => !!d, data: () => (d ? JSON.parse(J(d)) : undefined) });
   const wait = async () => { while (cloud.gate) await cloud.gate; };
   cloud.fbFor = (dev) => ({
@@ -50,10 +62,12 @@ function makeCloud() {
     getDoc: async (ref) => {
       await wait();
       if (cloud.failOnce && cloud.failOnce.op === "read" && ref.path.indexOf(cloud.failOnce.match) >= 0) { cloud.failOnce = null; throw new Error("read failed once"); }
+      readGate(dev, ref.path);
       return snap(store[ref.path]);
     },
     getDocs: async (col) => {
       await wait();
+      readGate(dev, col.path);
       const depth = col.path.split("/").length + 1;
       const docs = Object.keys(store).filter((p) => p.startsWith(col.path + "/") && p.split("/").length === depth)
         .map((p) => { const d = JSON.parse(J(store[p])); return { id: p.split("/").pop(), data: () => d }; });
@@ -62,10 +76,9 @@ function makeCloud() {
     setDoc: async (ref, data, opts) => {
       await wait();
       if (cloud.failOnce && cloud.failOnce.op === "write" && ref.path.indexOf(cloud.failOnce.match) >= 0) { cloud.failOnce = null; throw new Error("write failed once"); }
-      const seg = ref.path.split("/");
-      const owner = seg[0] === "users" || seg[0] === "kyotsu-math-summary" || seg[0] === "dailyquest-logs" ? seg[1] : null;
-      // 本番の Rules：本人の uid だけ書ける（書いた瞬間のトークン＝その端末の今のログイン）
-      if (owner && owner !== dev.authUid) { cloud.rejected.push({ path: ref.path, by: dev.authUid }); throw Object.assign(new Error("permission-denied"), { code: "permission-denied" }); }
+      const owner = ownerOf(ref.path);
+      // 本番の Rules：本人の uid かつ CHILD_UID だけ書ける（書いた瞬間のトークン＝その端末の今のログイン）
+      if (owner && (owner !== dev.authUid || owner !== CHILD)) { cloud.rejected.push({ path: ref.path, by: dev.authUid }); throw Object.assign(new Error("permission-denied"), { code: "permission-denied" }); }
       cloud.writes.push({ path: ref.path, by: dev.authUid, data: JSON.parse(J(data)) });
       store[ref.path] = opts && opts.merge ? Object.assign({}, store[ref.path] || {}, JSON.parse(J(data))) : JSON.parse(J(data));
     },
@@ -237,11 +250,15 @@ const setup = () => { const clock = { now: Date.UTC(2026, 8, 20, 1) }; const clo
     check("2-2 単元・サマリーの書き込みに印 w と client version", cloud.store["users/" + CHILD + "/units/" + UNIT].w === NS.WRITER_MARKER &&
       cloud.store["kyotsu-math-summary/" + CHILD].w === NS.WRITER_MARKER && cloud.store["kyotsu-math-summary/" + CHILD].client === NS.CLIENT_VERSION);
     await d.login(OTHER);
-    check("2-3 別の本人Bでログインするとページを読み込み直し、Bの領域（空）で開く", d.reloads >= 1 && d.ctx().storageOwnerUid === OTHER && !d.localOf(up(OTHER)));
+    check("2-3 家族外のアカウントBでログインするとページを読み込み直し、Bの領域（空）で開く", d.reloads >= 1 && d.ctx().storageOwnerUid === OTHER && !d.localOf(up(OTHER)));
+    const beforeB = cloud.writes.length;
     answerN(d, 2, clock); await d.flush();
-    check("2-4 Bの回答はBの領域とBの Firestore だけ。Aの local・remote は変わらない",
-      d.localOf(up(OTHER)).state.answerLog.length === 2 && cloud.unit(OTHER).state.answerLog.length === 2 &&
-      d.localOf(up(CHILD)).state.answerLog.length === 4 && cloud.unit(CHILD).state.answerLog.length === 4);
+    // B は CHILD_UID でも保護者でもない（unauthorized）。Rules で数学データを書けないので、端末内の自分の領域にだけ保存する
+    check("2-4 Bの回答はBの端末内の領域だけ（Firestore への書き込みも拒否も0）。Aの local・remote は変わらない",
+      d.localOf(up(OTHER)).state.answerLog.length === 2 && !cloud.unit(OTHER) &&
+      cloud.writes.length === beforeB && cloud.rejected.length === 0 &&
+      d.localOf(up(CHILD)).state.answerLog.length === 4 && cloud.unit(CHILD).state.answerLog.length === 4,
+      { writes: cloud.writes.slice(beforeB).map((w) => w.path), rejected: cloud.rejected });
     const before = cloud.writes.length;
     await d.login(GUARDIAN);
     check("2-5 保護者でログイン：保護者自身の領域は空、子どもは閲覧用キャッシュ kyotsu_view_v1_{保護者}_{子ども}_ に入る",
@@ -640,6 +657,87 @@ const setup = () => { const clock = { now: Date.UTC(2026, 8, 20, 1) }; const clo
     const src = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
     check("7-1 同期欄にクライアントの version を出す", /syncClientVersion/.test(src) && /NS\.CLIENT_VERSION/.test(src));
     check("7-2 固定の印と表示用 version は別の値", NS.WRITER_MARKER === "kyotsu-8a" && NS.CLIENT_VERSION !== NS.WRITER_MARKER);
+  });
+
+  await section("[8] 同期してよいのは本人（CHILD_UID）だけ。家族外・LEAP専用アカウントは unauthorized（Firestore に触らない）", async () => {
+    const DQ = (uid) => "dailyquest-logs/" + uid;
+    for (const [name, uid] of [["LEAP専用の独立学習者 I", INDEPENDENT], ["家族外のアカウント X", OTHER]]) {
+      const { clock, cloud } = setup();
+      cloud.store[DQ(uid)] = { data: "{}" };   // Planner の記録があっても書きに行かないことを確かめる
+      const d = makeDevice(cloud, clock, "U");
+      await d.start(); await d.login(uid);
+      const ctx = d.ctx();
+      check("8-1 " + name + "：role は unauthorized・Firestore の対象 uid は無し・端末内は自分の領域",
+        ctx.state === "authenticated" && ctx.role === "unauthorized" && ctx.remoteTargetUid === null && ctx.storageOwnerUid === uid, ctx);
+      answerN(d, 3, clock); await d.flush();
+      const p = d.page;
+      p.run("kyotsuSync.syncAll({})"); await settle();
+      p.run("kyotsuSync.pushSummary()"); await settle();
+      let bf = null; p.run("kyotsuSync.backfillDailyQuestLogs()").then((r) => { bf = r; }); await settle();
+      await d.flush();
+      check("8-2 " + name + "：学習は端末内の自分の領域に保存される（ローカル利用は壊さない）",
+        d.localOf(up(uid)) && d.localOf(up(uid)).state.answerLog.length === 3);
+      check("8-3 " + name + "：Firestore の読み込み0・書き込み0・permission-denied 0（summary・units・dailyquest-logs すべて）",
+        cloud.reads.length === 0 && cloud.writes.length === 0 && cloud.rejected.length === 0 && cloud.readRejected.length === 0,
+        { reads: cloud.reads, writes: cloud.writes.map((w) => w.path), rejected: cloud.rejected, readRejected: cloud.readRejected });
+      check("8-4 " + name + "：過去ログの反映は not-child で止まる", bf && bf.ok === false && bf.reason === "not-child", bf);
+      check("8-5 " + name + "：未送信の単元を溜めない（dirty 0）", p.run("dirtyUnits.size") === 0);
+      check("8-6 " + name + "：Planner の記録は変わらない", J(cloud.store[DQ(uid)]) === J({ data: "{}" }));
+    }
+
+    // 本人：これまでどおり units・summary・dailyquest-logs に同期する
+    {
+      const { clock, cloud } = setup();
+      cloud.store[DQ(CHILD)] = { data: "{}" };
+      const d = makeDevice(cloud, clock, "C");
+      await d.start(); await d.login(CHILD);
+      const ctx = d.ctx();
+      check("8-7 本人：role は learner・Firestore の対象は自分", ctx.role === "learner" && ctx.remoteTargetUid === CHILD && ctx.storageOwnerUid === CHILD, ctx);
+      answerN(d, 4, clock); await d.flush();
+      const s = cloud.store["kyotsu-math-summary/" + CHILD];
+      check("8-8 本人：units と summary に書き込む（印 w 付き）",
+        cloud.unit(CHILD) && cloud.unit(CHILD).state.answerLog.length === 4 && s && s.w === NS.WRITER_MARKER && s.totalCount >= 4, s);
+      const dq = cloud.store[DQ(CHILD)];
+      check("8-9 本人：dailyquest-logs の kyotsuMathAuto に今日の件数が入る（data は消さない）",
+        dq && dq.data === "{}" && dq.kyotsuMathAuto && Object.values(dq.kyotsuMathAuto).some((e) => e && e.count === 4), dq);
+      check("8-10 本人：permission-denied 0", cloud.rejected.length === 0 && cloud.readRejected.length === 0,
+        { rejected: cloud.rejected, readRejected: cloud.readRejected });
+    }
+
+    // 保護者：子どもを読むだけ。何も書かない
+    {
+      const { clock, cloud } = setup();
+      const c = makeDevice(cloud, clock, "C");
+      await c.start(); await c.login(CHILD); answerN(c, 2, clock); await c.flush();
+      cloud.store[DQ(CHILD)] = { data: "{}" };
+      const writesBefore = cloud.writes.length, readsBefore = cloud.reads.length;
+      const g = makeDevice(cloud, clock, "G");
+      await g.start(); await g.login(GUARDIAN);
+      const ctx = g.ctx();
+      check("8-11 保護者：role は guardian・Firestore の対象は子ども", ctx.role === "guardian" && ctx.remoteTargetUid === CHILD && ctx.storageOwnerUid === GUARDIAN, ctx);
+      answerN(g, 3, clock); await g.flush();
+      g.page.run("kyotsuSync.pushSummary()"); await settle();
+      let bf = null; g.page.run("kyotsuSync.backfillDailyQuestLogs()").then((r) => { bf = r; }); await settle();
+      await g.flush();
+      const newReads = cloud.reads.slice(readsBefore);
+      check("8-12 保護者：子どもの units を読んで閲覧用キャッシュに入れる",
+        newReads.length > 0 && newReads.every((r) => r.by === GUARDIAN && r.path.indexOf(CHILD) >= 0) &&
+        J(g.localOf(NS.viewPrefix(GUARDIAN, CHILD))) === J(cloud.unit(CHILD)), newReads);
+      check("8-13 保護者：Firestore への書き込み0・permission-denied 0（検証プレイ・summary・過去ログ反映すべて）",
+        cloud.writes.length === writesBefore && cloud.rejected.length === 0 && cloud.readRejected.length === 0 && bf && bf.reason === "not-child",
+        { writes: cloud.writes.slice(writesBefore).map((w) => w.path), rejected: cloud.rejected, bf });
+    }
+
+    // 未ログイン：これまでどおり guest。Firestore には触らない
+    {
+      const { clock, cloud } = setup();
+      const d = makeDevice(cloud, clock, "N");
+      await d.start();
+      answerN(d, 2, clock); await d.flush();
+      check("8-14 未ログイン：guest の領域に保存・Firestore の読み書き0",
+        d.ctx().state === "guest" && d.ctx().role === null && cloud.reads.length === 0 && cloud.writes.length === 0 &&
+        d.localOf(NS.guestPrefix(d.ctx().guestSessionId)).state.answerLog.length === 2);
+    }
   });
 
   console.log("\n結果: " + pass + " OK / " + fail + " NG");

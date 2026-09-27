@@ -169,8 +169,8 @@ function readers(ver) {
       const dq = fakeDailyQuestDoc();
       const g = withLA ? { LogArchive: LA } : {};
       const st = tr(store), sns = TC.syncNS(st);
-      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
-        body)(fakeLS(st), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => "x",
+      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "isLearner", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
+        body)(fakeLS(st), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => true, () => "x",
         dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, sns.ownPrefixNow, sns.NS);
       const s = f.buildSummary();

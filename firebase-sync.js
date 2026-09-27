@@ -38,7 +38,9 @@ const PUSH_DELAY = 4000; // 保存後、これだけ静かになったらアッ�
 /* ---------- 保護者（閲覧専用）設定 ----------
    ・GUARDIAN_UIDS に入っているuidでログインした場合は「閲覧モード」になる:
      - データの読み込み先は自分のuidではなく CHILD_UID 固定
-     - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため） */
+     - Firestoreへのアップロードは一切行わない（検証プレイのログを汚さないため）
+   ・CHILD_UID でも GUARDIAN_UIDS でもない uid は「unauthorized」。Firestore Rules で数学データを
+     読み書きできないので、Firestore には一切アクセスしない（学習は端末内の自分の領域にだけ保存する） */
 const CHILD_UID = "hjWTc7Ll0UeHv5iKbRTlTLRrY8x1";
 const GUARDIAN_UIDS = [
   "eVm3klGUSpcxRPtxN7NHo4lYx7f2"
@@ -81,6 +83,10 @@ function afterBusy() {
 function isGuardian() {
   return !!activeCtx && activeCtx.state === "authenticated" && activeCtx.role === "guardian";
 }
+// Firestore に自分の学習を書いてよいのは本人（CHILD_UID）だけ
+function isLearner() {
+  return !!activeCtx && activeCtx.state === "authenticated" && activeCtx.role === "learner";
+}
 
 /* 読み書き先のuid。保護者なら常に子ども側のuidを見る（＝閲覧モード） */
 function targetUid() {
@@ -103,10 +109,12 @@ function contextFor(user) {
     return { state: "guest", authUid: null, role: null, storageOwnerUid: null, remoteTargetUid: null, guestSessionId: sid, lastAuth };
   }
   const guardian = GUARDIAN_UIDS.indexOf(user.uid) >= 0;
-  const role = guardian ? "guardian" : "learner";
+  const child = user.uid === CHILD_UID;
+  const role = guardian ? "guardian" : (child ? "learner" : "unauthorized");
   return { state: "authenticated", authUid: user.uid, role,
     storageOwnerUid: user.uid,                           // local の書き込み先は常に自分（保護者は自分の検証用）
-    remoteTargetUid: guardian ? CHILD_UID : user.uid,    // Firestore は本人なら自分、保護者なら子ども（読むだけ）
+    // Firestore は本人なら自分、保護者なら子ども（読むだけ）、それ以外は触らない
+    remoteTargetUid: guardian ? CHILD_UID : (child ? user.uid : null),
     guestSessionId: null, lastAuth: { uid: user.uid, role } };
 }
 
@@ -604,7 +612,7 @@ function buildSummary() {
    ・保護者（閲覧モード）では絶対に動かさない。
    ========================================================= */
 async function pushDailyQuestToday(s, gen) {
-  if (!currentUser || isGuardian()) return;
+  if (!currentUser || !isLearner()) return;
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
   const uid = targetUid();
@@ -628,7 +636,7 @@ async function pushDailyQuestToday(s, gen) {
 }
 
 async function pushSummary(gen) {
-  if (!currentUser || isGuardian()) return; // 閲覧モードでは絶対に書かない
+  if (!currentUser || !isLearner()) return; // 閲覧モード・unauthorized では絶対に書かない
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
   try {
@@ -656,7 +664,7 @@ async function pushSummary(gen) {
      には一切触れない（削除・移行・書き換えのいずれもしない）。
    ========================================================= */
 async function backfillDailyQuestLogs() {
-  if (!currentUser || isGuardian()) return { ok: false, reason: "not-child" };
+  if (!currentUser || !isLearner()) return { ok: false, reason: "not-child" };
   const uid = targetUid();
 
   const perDay = {};
@@ -709,6 +717,8 @@ async function syncAll(opts) {
   const gen = ctxGen;
   // 保護者は子どもの remote を閲覧用キャッシュに入れるだけ（自分の検証データとは merge しない・何も送らない）
   if (isGuardian()) return refreshGuardianView(gen, opts);
+  // unauthorized：Firestore Rules で読めも書けもしないので、同期そのものをしない（学習は端末内だけ）
+  if (!isLearner()) return;
   busy = true;
   const silent = opts && opts.silent;
   if (!silent) log("同期中…");
@@ -1178,7 +1188,7 @@ function renderAuthUI() {
   const syncCardTop = document.getElementById("syncStatusCardTop");
   const syncPillExam = document.getElementById("syncPillExam");
   const whoText = currentUser
-    ? "ログイン中: " + (currentUser.email || currentUser.uid) + (isGuardian() ? "（閲覧のみ・アップロードなし）" : "")
+    ? "ログイン中: " + (currentUser.email || currentUser.uid) + (isGuardian() ? "（閲覧のみ・アップロードなし）" : (isLearner() ? "" : "（同期対象外・この端末だけに保存）"))
     : "";
   [syncCardTop, syncPillExam].forEach((elm) => {
     if (!elm) return;
@@ -1190,7 +1200,7 @@ function renderAuthUI() {
   if (resetRow) resetRow.style.display = (currentUser && isGuardian()) ? "block" : "none";
 
   const backfillRow = document.getElementById("syncBackfillRow");
-  if (backfillRow) backfillRow.style.display = (currentUser && !isGuardian()) ? "block" : "none";
+  if (backfillRow) backfillRow.style.display = (currentUser && isLearner()) ? "block" : "none";
 
   if (!out || !inn) return;
   if (currentUser) {
@@ -1229,7 +1239,8 @@ onAuthStateChanged(auth, user => {
   renderAuthUI();
   if (typeof window.kyotsuContextReady === "function") window.kyotsuContextReady(next);
   if (currentUser) {
-    log(isGuardian() ? "ログインしました。子どものデータを取得します…" : "ログインしました。同期します…", "#166534");
+    log(isGuardian() ? "ログインしました。子どものデータを取得します…"
+      : (isLearner() ? "ログインしました。同期します…" : "このアカウントは同期の対象外です。学習はこの端末だけに保存されます"), "#166534");
     syncAll({});
   }
 });

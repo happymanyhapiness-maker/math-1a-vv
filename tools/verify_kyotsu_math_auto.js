@@ -64,6 +64,8 @@ function makeContext({ initialDoc, uid, isGuardianUser, unitLogs = {} } = {}) {
     currentUser: uid ? { uid } : null,
     ctxGen: 0,
     isGuardian: () => !!isGuardianUser,
+    // 本人（CHILD_UID）だけが同期する。このテストの uid はダミーなので、保護者でないログインを本人役として扱う
+    isLearner: () => !!ctx.currentUser && !isGuardianUser,
     alive: (gen) => gen === ctx.ctxGen && !!ctx.currentUser,
     targetUid: () => {
       if (!ctx.currentUser) throw new Error("no-authenticated-context");

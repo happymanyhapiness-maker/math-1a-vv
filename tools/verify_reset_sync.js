@@ -140,7 +140,9 @@ function makeDevice(cloud, clock) {
       .forEach((f) => vm.runInContext(fs.readFileSync(path.join(DIR, f), "utf8"), ctx, { filename: f }));
     // firebase-sync.js：import 文だけを偽 Firestore に差し替え、あとはそのまま実行
     const sync = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8")
-      .replace(/import\s*\{([^}]*)\}\s*from\s*"[^"]+";/g, "const {$1} = __fb;");
+      .replace(/import\s*\{([^}]*)\}\s*from\s*"[^"]+";/g, "const {$1} = __fb;")
+      // 同期してよいのは CHILD_UID だけなので、このテストの本人役（ダミー uid）を CHILD_UID として読み込む
+      .replace(/const CHILD_UID = "[A-Za-z0-9]+";/, "const CHILD_UID = " + J(CHILD_UID) + ";");
     vm.runInContext(sync, ctx, { filename: "firebase-sync.js" });
     dev.ctx = ctx;
     dev.timers = timers;

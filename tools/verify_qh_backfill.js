@@ -254,10 +254,10 @@ function unit(answerLog, extra, statsExtra) {
       vm.createContext(ctx);
       vm.runInContext(read("crossunit.js"), ctx);
       const dq = fakeDailyQuestDoc();
-      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
+      const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "isLearner", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
         slice(SYNC, "function unitKeys", "/* データの「新しさ」") + slice(SYNC, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
         slice(SYNC, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
-        fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => "x",
+        fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => true, () => "x",
         dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
       const summary = f.buildSummary();
