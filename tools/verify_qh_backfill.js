@@ -17,6 +17,39 @@ const vm = require("vm");
 
 const DIR = path.join(__dirname, "..");
 const J = JSON.stringify;
+
+// ---- Daily Quest（dailyquest-logs/{uid}）の偽 Firestore ----
+// backfillDailyQuestLogs() は getDoc で既存の kyotsuMathAuto を読み、setDoc(ref, { kyotsuMathAuto }, { merge: true }) で書く。
+// merge:true はネストした map もキー単位で再帰マージするので、それを再現する。written は書き込み後のドキュメント全体。
+function fakeDailyQuestDoc() {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const mergeInto = (dst, src) => { Object.keys(src).forEach((k) => { if (isObj(src[k]) && isObj(dst[k])) mergeInto(dst[k], src[k]); else dst[k] = JSON.parse(JSON.stringify(src[k])); }); return dst; };
+  const dq = { data: JSON.stringify({ days: {}, appStartDate: "2020-01-01" }) }; // planner 側の既存ドキュメント（kyotsuMathAuto はまだ無い）
+  const f = { written: null };
+  f.getDoc = async () => ({ exists: () => true, data: () => JSON.parse(JSON.stringify(dq)) });
+  f.setDoc = async (_d, v, opt) => {
+    if (!opt || opt.merge !== true) throw new Error("dailyquest-logs への setDoc は merge:true のはず");
+    f.written = JSON.parse(JSON.stringify(mergeInto(dq, v)));
+  };
+  return f;
+}
+// written（書き込み後の dailyquest-logs ドキュメント）から日別件数を取り出す。
+// 現行は kyotsuMathAuto[日付].count。比較基準の旧版（5ac3c16 より前）は data（planner の JSON）の
+// days[日付].quests の自動記録ラベル「（N問）」に書いていたので、どちらも日別件数にそろえる。
+function dqPerDay(written) {
+  const perDay = {};
+  const auto = written && written.kyotsuMathAuto;
+  if (auto) {
+    Object.keys(auto).sort().forEach((k) => { perDay[k] = auto[k].count; });
+  } else if (written && typeof written.data === "string") {
+    const days = JSON.parse(written.data).days || {};
+    Object.keys(days).sort().forEach((k) => {
+      const q = (days[k].quests || []).find((x) => x.autoSource === "kyotsu-math");
+      if (q) perDay[k] = Number((q.label.match(/(\d+)問/) || [])[1]);
+    });
+  }
+  return perDay;
+}
 const C = (o) => JSON.parse(J(o));
 const LA = require(path.join(DIR, "log-archive.js"));
 const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8").replace(/\r\n/g, "\n");
@@ -220,12 +253,12 @@ function unit(answerLog, extra, statsExtra) {
       ctx.window = ctx;
       vm.createContext(ctx);
       vm.runInContext(read("crossunit.js"), ctx);
-      let written = null;
+      const dq = fakeDailyQuestDoc();
       const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
         slice(SYNC, "function unitKeys", "/* データの「新しさ」") + slice(SYNC, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
         slice(SYNC, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
         fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => "x",
-        async () => ({ exists: () => true, data: () => ({ data: J({ days: {}, appStartDate: "2020-01-01" }) }) }), async (_d, v) => { written = JSON.parse(v.data); }, () => ({}), {}, () => 0,
+        dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
       const summary = f.buildSummary();
       await f.backfillDailyQuestLogs();
@@ -234,7 +267,7 @@ function unit(answerLog, extra, statsExtra) {
         progress: mk("progress.js", '"use strict";', "/* ---------- 日付表示", "collectUnitProgress()").find((x) => x.unit === "keiryo"),
         strength: mk("unit-strength.js", '"use strict";', "/* ---------- 描画", "collectUnitAccuracy()"),
         cross: vm.runInContext("buildCrossUnitReport()", ctx).split("\n").filter((l) => !l.startsWith("出力日時")).join("\n"),
-        summary, written
+        summary, written: dq.written
       };
     };
     const logs = Array.from({ length: 113 }, (_, i) => log("q" + (i % 12), BASE + i * 5 * 3600000, i % 4 !== 0, ["answered", "answered", "timeout", "skip"][i % 4], ["normal", "review", "dueReview"][i % 3]));

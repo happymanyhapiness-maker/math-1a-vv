@@ -19,6 +19,39 @@ const { execSync } = require("child_process");
 
 const DIR = path.join(__dirname, "..");
 const J = JSON.stringify;
+
+// ---- Daily Quest（dailyquest-logs/{uid}）の偽 Firestore ----
+// backfillDailyQuestLogs() は getDoc で既存の kyotsuMathAuto を読み、setDoc(ref, { kyotsuMathAuto }, { merge: true }) で書く。
+// merge:true はネストした map もキー単位で再帰マージするので、それを再現する。written は書き込み後のドキュメント全体。
+function fakeDailyQuestDoc() {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const mergeInto = (dst, src) => { Object.keys(src).forEach((k) => { if (isObj(src[k]) && isObj(dst[k])) mergeInto(dst[k], src[k]); else dst[k] = JSON.parse(JSON.stringify(src[k])); }); return dst; };
+  const dq = { data: JSON.stringify({ days: {}, appStartDate: "2020-01-01" }) }; // planner 側の既存ドキュメント（kyotsuMathAuto はまだ無い）
+  const f = { written: null };
+  f.getDoc = async () => ({ exists: () => true, data: () => JSON.parse(JSON.stringify(dq)) });
+  f.setDoc = async (_d, v, opt) => {
+    if (!opt || opt.merge !== true) throw new Error("dailyquest-logs への setDoc は merge:true のはず");
+    f.written = JSON.parse(JSON.stringify(mergeInto(dq, v)));
+  };
+  return f;
+}
+// written（書き込み後の dailyquest-logs ドキュメント）から日別件数を取り出す。
+// 現行は kyotsuMathAuto[日付].count。比較基準の旧版（5ac3c16 より前）は data（planner の JSON）の
+// days[日付].quests の自動記録ラベル「（N問）」に書いていたので、どちらも日別件数にそろえる。
+function dqPerDay(written) {
+  const perDay = {};
+  const auto = written && written.kyotsuMathAuto;
+  if (auto) {
+    Object.keys(auto).sort().forEach((k) => { perDay[k] = auto[k].count; });
+  } else if (written && typeof written.data === "string") {
+    const days = JSON.parse(written.data).days || {};
+    Object.keys(days).sort().forEach((k) => {
+      const q = (days[k].quests || []).find((x) => x.autoSource === "kyotsu-math");
+      if (q) perDay[k] = Number((q.label.match(/(\d+)問/) || [])[1]);
+    });
+  }
+  return perDay;
+}
 const C = (o) => JSON.parse(J(o));
 const LA = require(path.join(DIR, "log-archive.js"));
 const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8").replace(/\r\n/g, "\n");
@@ -133,21 +166,16 @@ function readers(ver) {
         slice(sync, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
         slice(sync, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\n" +
         "return { buildSummary, backfillDailyQuestLogs };";
-      let written = null;
+      const dq = fakeDailyQuestDoc();
       const g = withLA ? { LogArchive: LA } : {};
       const st = tr(store), sns = TC.syncNS(st);
       const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
         body)(fakeLS(st), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => "x",
-        async () => ({ exists: () => true, data: () => ({ data: J({ days: {}, appStartDate: "2020-01-01" }) }) }),
-        async (_d, v) => { written = JSON.parse(v.data); }, () => ({}), {}, () => 0,
+        dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, sns.ownPrefixNow, sns.NS);
       const s = f.buildSummary();
       await f.backfillDailyQuestLogs();
-      const perDay = {};
-      Object.keys((written && written.days) || {}).forEach((k) => {
-        const q = written.days[k].quests.find((x) => x.autoSource === "kyotsu-math");
-        perDay[k] = q && Number((q.label.match(/(\d+)問/) || [])[1]);
-      });
+      const perDay = dqPerDay(dq.written);
       return { summary: s, perDay };
     }
   };

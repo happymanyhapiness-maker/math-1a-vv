@@ -6,11 +6,12 @@
 //  ・今日の復習 / 間違えた問題だけ / TIPS / 結果画面の再挑戦が、最新の UNIT_META だけで出題・採点される
 //  ・UNIT_META に無いID（stale）は保存からは消さず、出題・件数表示からは外す
 //  ・merge（通常 / 片側null / resetGen 世代違い / 旧端末からの再流入 / Phase 2 救済）
-//  ・merge の wrong 以外は HEAD（変更前）と同じ結果
-//  ・{id} 形式を旧コード（HEAD の app.js / firebase-sync.js）に渡しても壊れない
+//  ・merge の wrong 以外は旧版（比較元）と同じ結果
+//  ・{id} 形式を旧コード（比較元の app.js / firebase-sync.js）に渡しても壊れない
+//    （キャッシュされた旧 JS のまま開いている端末・タブとの互換を見るため）
 //
 //   node tools/verify_wrong_id.js [比較元の firebase-sync.js] [比較元の app.js]
-//   （比較元を省略すると git の HEAD から取り出す）
+//   （比較元を省略すると git の OLD_BASE_COMMIT から取り出す。以下の「HEAD」はこの比較元のこと）
 
 const fs = require("fs");
 const path = require("path");
@@ -21,8 +22,11 @@ const DIR = path.join(__dirname, "..");
 const J = JSON.stringify;
 const C = (o) => JSON.parse(J(o));
 
+// 比較元の既定は Phase 7A-2c（31fed99）に固定する。HEAD から取ると、コミットが進むたびに
+// 「旧版」が現行コードになってしまい、旧端末互換の検証にならないため。
+const OLD_BASE_COMMIT = "31fed99";
 function gitShow(file) {
-  return execSync("git show HEAD:" + file, { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return execSync("git show " + OLD_BASE_COMMIT + ":" + file, { cwd: DIR, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 const OLD_SYNC_SRC = process.argv[2] ? fs.readFileSync(process.argv[2], "utf8") : gitShow("firebase-sync.js");
 const OLD_APP_SRC = process.argv[3] ? fs.readFileSync(process.argv[3], "utf8") : gitShow("app.js");
