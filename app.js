@@ -2979,6 +2979,7 @@ function toggleStrictTime() {
       state.strict ? "時間制限: 厳格" : "時間制限: 通常";
   }
 }
+// UIからは呼ばれていない（誤タップでの復元不能な消失を避けるためボタンを削除済み）。将来の管理用途に残置。
 function resetStatsOnly() {
   if (!state.unit) return;
 
@@ -3070,7 +3071,6 @@ if (el("goTopBtn")) el("goTopBtn").onclick = exitExamMode;
 if (el("goTopBtn2")) el("goTopBtn2").onclick = exitExamMode;
 if (el("goTopBtn3")) el("goTopBtn3").onclick = exitExamMode;
 if (el("toggleStrictTimeBtn")) el("toggleStrictTimeBtn").onclick = toggleStrictTime;
-if (el("resetStatsBtn")) el("resetStatsBtn").onclick = resetStatsOnly;
 if (el("copyAnalysisBtn")) el("copyAnalysisBtn").onclick = copyAnalysisToClipboard;
 if (el("previewAnalysisBtn")) el("previewAnalysisBtn").onclick = toggleAnalysisPreview;
 
