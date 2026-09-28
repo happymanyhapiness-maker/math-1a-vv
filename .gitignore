@@ -3,17 +3,4 @@ bk_questions_chugaku.js
 index.BAK
 .claude/
 chatgpt/
-tools/*
-!tools/verify_sync_merge.js
-!tools/verify_review_session.js
-!tools/verify_reset_sync.js
-!tools/verify_wrong_id.js
-!tools/verify_unanswered_session.js
-!tools/verify_log_archive.js
-!tools/verify_rescue_log.js
-!tools/verify_compact.js
-!tools/verify_qh_backfill.js
-!tools/verify_uid_context.js
-!tools/test-context.js
-!tools/verify_kyotsu_math_auto.js
 模試分析/
