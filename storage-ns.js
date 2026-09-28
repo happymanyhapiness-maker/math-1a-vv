@@ -63,6 +63,11 @@
     if (ctx.state === "guest") return guestPrefix(ctx.guestSessionId);
     return null;
   }
+  // 保護者の閲覧中か（readPrefix が閲覧用キャッシュを返す条件と同じ。表示の判定はここに揃える）
+  function isGuardianCtx(ctx) {
+    if (ctx === undefined) ctx = readContext();
+    return !!ctx && ctx.state === "authenticated" && ctx.role === "guardian";
+  }
   // 集計ページ（calendar / progress / crossunit / unit-strength）が読む領域
   //  保護者は子どもの閲覧用キャッシュ、それ以外は自分の領域
   function readPrefix(ctx) {
@@ -199,6 +204,7 @@
     viewPrefix: viewPrefix,
     ownPrefix: ownPrefix,
     readPrefix: readPrefix,
+    isGuardianCtx: isGuardianCtx,
     unitsWithPrefix: unitsWithPrefix,
     key: key,
     watchData: watchData,

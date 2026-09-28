@@ -201,6 +201,13 @@
     });
   }
 
+  // 保護者の閲覧中だけバナーを出す（子ども・未ログインでは hidden のまま）
+  function showGuardianBanner() {
+    var b = document.getElementById("guardianViewBanner");
+    if (b) b.hidden = !(window.KyotsuNS && window.KyotsuNS.isGuardianCtx());
+  }
+
+  document.addEventListener("DOMContentLoaded", showGuardianBanner);
   document.addEventListener("DOMContentLoaded", render);
   // 表示中の領域のデータが別タブ（同期・取り込み・保護者の閲覧用キャッシュ）で変わったら読み込み直す（Phase 8A）
   if (window.KyotsuNS) window.KyotsuNS.watchData();

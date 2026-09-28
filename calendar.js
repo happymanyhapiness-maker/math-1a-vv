@@ -206,7 +206,14 @@
     renderCalendar();
   }
 
+  // 保護者の閲覧中だけバナーを出す（子ども・未ログインでは hidden のまま）
+  function showGuardianBanner() {
+    var b = document.getElementById("guardianViewBanner");
+    if (b) b.hidden = !(window.KyotsuNS && window.KyotsuNS.isGuardianCtx());
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    showGuardianBanner();
     var prevBtn = document.getElementById("calPrevBtn");
     var nextBtn = document.getElementById("calNextBtn");
     if (prevBtn) prevBtn.addEventListener("click", function () { changeMonth(-1); });

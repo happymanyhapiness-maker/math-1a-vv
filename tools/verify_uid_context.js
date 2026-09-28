@@ -740,6 +740,28 @@ const setup = () => { const clock = { now: Date.UTC(2026, 8, 20, 1) }; const clo
     }
   });
 
+  // 9. 保護者表示の判定（KyotsuNS.isGuardianCtx）は readPrefix が閲覧用キャッシュを返す条件と一致する
+  {
+    const cases = [
+      null, undefined,
+      { state: "guest", authUid: null, role: null, storageOwnerUid: null, remoteTargetUid: null, guestSessionId: "g1" },
+      { state: "authenticated", authUid: CHILD, role: "learner", storageOwnerUid: CHILD, remoteTargetUid: CHILD },
+      { state: "authenticated", authUid: GUARDIAN, role: "guardian", storageOwnerUid: GUARDIAN, remoteTargetUid: CHILD },
+      { state: "authenticated", authUid: "other", role: "unauthorized", storageOwnerUid: "other", remoteTargetUid: null },
+      { state: "guest", role: "guardian", guestSessionId: "g2" },                        // 状態が崩れていても guest なら保護者扱いしない
+      { state: "checking", role: "guardian", storageOwnerUid: GUARDIAN, remoteTargetUid: CHILD },
+    ];
+    const rows = cases.map((c) => {
+      const p = c === undefined ? null : NS.readPrefix(c);
+      const viewing = !!p && p.indexOf(NS.VIEW_PREFIX) === 0;
+      return { c, guardian: c === undefined ? null : NS.isGuardianCtx(c), viewing };
+    }).filter((r) => r.guardian !== null);
+    check("9-1 isGuardianCtx と readPrefix の保護者判定（閲覧用キャッシュを読むか）が全パターンで一致",
+      rows.every((r) => r.guardian === r.viewing), rows.filter((r) => r.guardian !== r.viewing));
+    check("9-2 保護者だけ true・子ども／未ログイン／対象外は false",
+      rows.filter((r) => r.guardian).length === 1 && rows.find((r) => r.guardian).c.role === "guardian" && rows.find((r) => r.guardian).c.state === "authenticated");
+  }
+
   console.log("\n結果: " + pass + " OK / " + fail + " NG");
   process.exit(fail ? 1 : 0);
 })();

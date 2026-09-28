@@ -1726,3 +1726,25 @@ body.exam-mode .main-layout{
   text-align: center;
   pointer-events: none;
 }
+
+/* 保護者の閲覧中だけ出す表示（子ども・未ログインでは hidden） */
+.guardian-banner {
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.guardian-banner[hidden] { display: none; }
+.guardian-banner-drill {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.app-shell > .guardian-banner { margin: 8px 16px 0; }

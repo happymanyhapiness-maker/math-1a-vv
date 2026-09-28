@@ -28,11 +28,21 @@ function setCtxBanner(text) {
   b.innerText = text;
 }
 
+// 保護者の閲覧中だけ「子どもの学習状況」「保護者の確認用データ」の表示を出す（判定は KyotsuNS.isGuardianCtx に揃える）
+function showGuardianNotes(ctx) {
+  const on = typeof KyotsuNS !== "undefined" && KyotsuNS.isGuardianCtx(ctx);
+  ["guardianViewBanner", "guardianDrillNote"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !on;
+  });
+}
+
 // context が確定したら呼ばれる。1ページで1回だけ（別の context に変わるときは firebase-sync.js がページを読み込み直す）
 function kyotsuContextReady(ctx) {
   if (kyotsuCtx || !ctx || (ctx.state !== "guest" && ctx.state !== "authenticated")) return;
   kyotsuCtx = ctx;
   setCtxBanner(null);
+  showGuardianNotes(ctx);
   if (kyotsuStartPending) {
     kyotsuStartPending = false;
     const savedUnit = localStorage.getItem(UNIT_KEY);
