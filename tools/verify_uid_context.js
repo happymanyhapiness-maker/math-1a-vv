@@ -18,7 +18,7 @@ const SYNC_SRC = fs.readFileSync(path.join(DIR, "firebase-sync.js"), "utf8");
 const CHILD = (SYNC_SRC.match(/const CHILD_UID = "([A-Za-z0-9]+)";/) || [])[1];
 const GUARDIAN = (SYNC_SRC.match(/const GUARDIAN_UIDS = \[\s*"([A-Za-z0-9]+)"/) || [])[1];
 const OTHER = "otherLearnerUid0000000000001";          // 家族外のログイン済みアカウント（X）
-const INDEPENDENT = "IMu4q62RGbNs2y5MXu0yJ0OfYgU2";     // LEAP専用の独立学習者（I）。数学は同期対象外
+const INDEPENDENT = "TEST-INDEPENDENT-UID-00000001";    // LEAP専用の独立学習者（I）の代役。数学では専用の扱いが無く、unauthorized になることを確かめる
 const UNIT = "kyokusen";
 const DAY = 864e5;
 const NS = require(path.join(DIR, "storage-ns.js"));
@@ -661,6 +661,9 @@ const setup = () => { const clock = { now: Date.UTC(2026, 8, 20, 1) }; const clo
 
   await section("[8] 同期してよいのは本人（CHILD_UID）だけ。家族外・LEAP専用アカウントは unauthorized（Firestore に触らない）", async () => {
     const DQ = (uid) => "dailyquest-logs/" + uid;
+    const guardians = ((SYNC_SRC.match(/const GUARDIAN_UIDS = \[([^\]]*)\]/) || [])[1] || "").match(/"[A-Za-z0-9]+"/g) || [];
+    check("8-0 前提：INDEPENDENT の代役は CHILD・GUARDIAN（全員）・OTHER のどれとも違う",
+      !!CHILD && guardians.length > 0 && [CHILD, OTHER].concat(guardians.map((s) => s.slice(1, -1))).indexOf(INDEPENDENT) < 0);
     for (const [name, uid] of [["LEAP専用の独立学習者 I", INDEPENDENT], ["家族外のアカウント X", OTHER]]) {
       const { clock, cloud } = setup();
       cloud.store[DQ(uid)] = { data: "{}" };   // Planner の記録があっても書きに行かないことを確かめる
