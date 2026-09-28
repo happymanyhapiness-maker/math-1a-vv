@@ -243,7 +243,7 @@ score: 5,
 weakness: "計算精度",
 route: ["対数の定義"],
 q: "$2^{x}=5$ を満たすxを対数で表せ。",
-a: ["log₂5", "log₅2", "5/2", "√5"],
+a: ["$\\log_{2}5$", "$\\log_{5}2$", "$\\dfrac{5}{2}$", "$\\sqrt{5}$"],
 correct: 0,
 tags: ["correct", "ratio_reverse", "concept_gap", "concept_gap"],
 explain: {

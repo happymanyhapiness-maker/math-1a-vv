@@ -38,7 +38,7 @@ const questions_sankaku_2 = [
   weakness: "計算精度",
   route: ["周期"],
   q: "$y=2\\sin\\left(x-\\dfrac{\\pi}{3}\\right)$ の周期はどれか。",
-  a: ["2π", "π", "π/3", "6π"],
+  a: ["$2\\pi$", "$\\pi$", "$\\dfrac{\\pi}{3}$", "$6\\pi$"],
   correct: 0,
   tags: ["correct", "concept_gap", "condition_misread", "calc_error"],
   explain: {
@@ -194,7 +194,7 @@ const questions_sankaku_2 = [
   weakness: "共通点抽出",
   route: ["半角公式", "定積分"],
   q: "$\\displaystyle\\int_{0}^{\\pi}\\sin^2x\\,dx$ を、半角公式を使って計算せよ。",
-  a: ["π/2", "π", "π/4", "0"],
+  a: ["$\\dfrac{\\pi}{2}$", "$\\pi$", "$\\dfrac{\\pi}{4}$", "$0$"],
   correct: 0,
   tags: ["correct", "calc_error", "calc_error", "concept_gap"],
   explain: {

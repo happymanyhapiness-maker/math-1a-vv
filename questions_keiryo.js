@@ -243,7 +243,7 @@ score: 5,
 weakness: "方針切替",
 route:["同じ量を2通りで表す"],
 q: "三角形ABCで BC=14, CH=x。Aから辺BCに下ろした垂線の足をHとする。BH は？",
-a: ["14-x", "x-14", "14+x", "x/14"],
+a: ["$14-x$", "$x-14$", "$14+x$", "$\\dfrac{x}{14}$"],
 correct: 0,
 tags: ["correct", "sign_error", "calc_error", "concept_gap"],
 explain: {
