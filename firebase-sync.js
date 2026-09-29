@@ -128,6 +128,7 @@ function invalidateContext() {
   pushTimer = null;
   dirtyUnits = new Set();
   dqAutoCache = {};
+  dqAutoFailedAt = 0;
   busy = false;
   savedWhileBusy = false;
   try { sessionStorage.removeItem(RELOAD_FLAG); } catch (e) { /* 何もしない */ }
@@ -172,6 +173,87 @@ function freshness(data) {
     if (r && typeof r.timestamp === "number" && r.timestamp > max) max = r.timestamp;
   }
   return max;
+}
+
+/* =========================================================
+   同期の状態表示（子ども向けに静かに出す）
+   ・「端末で最後に回答した時刻」が「最後に同期に成功した時刻」より新しい状態が5分以上続いたら「送信待ち」。
+     保存を検知する仕組み（localStorageの上書き）に頼らず、端末の回答ログの新しさを直接見るので、
+     検知が効かない環境でも気づける。
+   ・最終同期の成功時刻は端末に保存する（アカウントごと。再読み込みしても残る）。
+   ・出すのは黄色い「☁ 送信待ち」と一行の説明だけ。同期できたら自動で消える（音・ダイアログ・赤は使わない）。
+   ========================================================= */
+const SYNC_PENDING_GRACE_MS = 5 * 60 * 1000;
+const SYNC_OK_KEY_PREFIX = "kyotsu_sync_ok_v1_";
+let dqAutoFailedAt = 0;   // デイリークエストへの自動記録の書き込みが最後に失敗した時刻（メモリだけ。成功すると0）
+
+function syncHealthOf(lastSyncOkAt, latestLocalAt, nowMs) {
+  const ok = Number(lastSyncOkAt) > 0 ? Number(lastSyncOkAt) : 0;
+  const local = Number(latestLocalAt) > 0 ? Number(latestLocalAt) : 0;
+  const pending = local > ok && (nowMs - local) >= SYNC_PENDING_GRACE_MS;
+  return { pending, lastSyncOkAt: ok, unsentSince: pending ? local : 0 };
+}
+
+function syncAgoText(ts, nowMs) {
+  ts = Number(ts);
+  if (!(ts > 0)) return "まだ同期していません";
+  const diff = nowMs - ts;
+  if (diff < 60000) return "最終同期：たった今";
+  if (diff < 3600000) return "最終同期：" + Math.floor(diff / 60000) + "分前";
+  if (diff < 86400000) return "最終同期：" + Math.floor(diff / 3600000) + "時間前";
+  return "最終同期：" + Math.floor(diff / 86400000) + "日前";
+}
+
+function getLastSyncOkAt() {
+  try {
+    const uid = activeCtx && activeCtx.authUid;
+    if (!uid) return 0;
+    return Number(localStorage.getItem(SYNC_OK_KEY_PREFIX + uid)) || 0;
+  } catch (e) { return 0; }
+}
+
+// 同期が失敗なく終わったときに呼ぶ
+function markSyncOk() {
+  try {
+    const uid = activeCtx && activeCtx.authUid;
+    if (uid) setItemRaw(SYNC_OK_KEY_PREFIX + uid, String(Date.now()));
+  } catch (e) { /* 保存できなくても学習・同期には影響しない */ }
+  renderSyncHealth();
+}
+
+function latestLocalAnswerAt() {
+  let max = 0;
+  unitKeys().forEach(unit => { const f = freshness(readLocal(unit)); if (f > max) max = f; });
+  return max;
+}
+
+function renderSyncHealth() {
+  const top = document.getElementById("syncStatusValueTop");
+  const pill = document.getElementById("syncPillExam");
+  const line = document.getElementById("syncHealth");
+  const learner = !!currentUser && !!activeCtx && isLearner();
+  const now = Date.now();
+  const h = learner ? syncHealthOf(getLastSyncOkAt(), latestLocalAnswerAt(), now) : { pending: false, lastSyncOkAt: 0, unsentSince: 0 };
+  const AMBER = "#B7791F", GREEN = "#166534";
+  if (top) { top.textContent = h.pending ? "☁ 送信待ち" : "☁ ON"; top.style.color = h.pending ? AMBER : GREEN; }
+  if (pill) { pill.textContent = h.pending ? "☁ 送信待ち" : "☁ 同期ON"; pill.style.color = h.pending ? AMBER : ""; }
+  if (line) {
+    let text = "", color = "#64748b";
+    if (learner) {
+      if (h.pending) {
+        text = "⏳ まだ送れていない記録があります（" + syncAgoText(h.lastSyncOkAt, now) + "）。Wi-Fiにつないで、このページを開いたままにしてね。";
+        color = AMBER;
+      } else if (dqAutoFailedAt) {
+        text = "デイリークエストへの反映が遅れています。次の同期でやり直します。";
+        color = AMBER;
+      } else if (h.lastSyncOkAt) {
+        text = syncAgoText(h.lastSyncOkAt, now);
+      }
+    }
+    line.textContent = text;
+    line.style.color = color;
+    line.style.display = text ? "block" : "none";
+  }
 }
 
 /* =========================================================
@@ -696,10 +778,13 @@ async function pushDailyQuestAuto(s, gen) {
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
   try {
-    await syncKyotsuAuto(gen, s && s.perDay, dailyQuestWindowStart(), s && s.perDayReview);
+    const r = await syncKyotsuAuto(gen, s && s.perDay, dailyQuestWindowStart(), s && s.perDayReview);
+    if (r && r.ok) dqAutoFailedAt = 0;
   } catch (e) {
+    dqAutoFailedAt = Date.now();
     console.warn("[sync] dailyquest push失敗", e);
   }
+  renderSyncHealth();
 }
 
 async function pushSummary(gen) {
@@ -841,7 +926,9 @@ async function syncAll(opts) {
   } else if (!listFailed) {
     const t = new Date().toLocaleTimeString("ja-JP");
     log("同期済み（" + t + "）", "#166534");
+    markSyncOk();
   }
+  if (failed.length > 0 || listFailed) renderSyncHealth();
   pushSummary(gen);
   afterBusy();
 
@@ -1094,7 +1181,9 @@ async function pushDirty() {
     log(UNSENT_MSG, "#991b1b");
   } else {
     log("同期済み（" + new Date().toLocaleTimeString("ja-JP") + "）", "#166534");
+    markSyncOk();
   }
+  if (failed.length > 0) renderSyncHealth();
   pushSummary(gen);   // サマリーは単元本体とは別。失敗しても単元は未送信扱いにしない（次の push で local から計算し直す）
   afterBusy();
 }
@@ -1132,6 +1221,7 @@ function injectUI() {
     '  </div>' +
     '</div>' +
     '<div class="small-text" id="syncStatus" style="margin-top:6px;">未ログイン</div>' +
+    '<div class="small-text" id="syncHealth" style="margin-top:2px;display:none;"></div>' +
     '<div class="small-text" id="syncClientVersion" style="margin-top:2px;color:#94a3b8;">クライアント ' + NS.CLIENT_VERSION + '</div>';
 
   anchor.parentNode.appendChild(box);
@@ -1213,6 +1303,8 @@ function renderAuthUI() {
     if (currentUser) elm.title = whoText;
   });
 
+  renderSyncHealth();
+
   const resetRow = document.getElementById("syncResetRow");
   if (resetRow) resetRow.style.display = (currentUser && isGuardian()) ? "block" : "none";
 
@@ -1265,6 +1357,18 @@ window.addEventListener("visibilitychange", () => {
     clearTimeout(pushTimer);
     pushDirty();
   }
+});
+
+/* 同期の状態表示：画面に戻ったとき・通信が戻ったとき・1分ごとに更新。「送信待ち」をタップすると、すぐ同期をやり直す */
+window.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") renderSyncHealth(); });
+window.addEventListener("online", () => renderSyncHealth());
+{
+  const t = setInterval(renderSyncHealth, 60000);
+  if (t && typeof t.unref === "function") t.unref();   // Node（テスト）で終了を妨げない。ブラウザは数値なので何もしない
+}
+["syncStatusCardTop", "syncPillExam"].forEach((id) => {
+  const elm = document.getElementById(id);
+  if (elm) elm.addEventListener("click", () => { if (currentUser && isLearner()) syncAll({}); });
 });
 
 /* 通信が戻ったら、未送信ぶんを送る */

@@ -102,11 +102,22 @@ function makeContext({ initialDoc, uid, isGuardianUser, unitLogs = {}, now = NOW
       docs.set(ref.path, opts && opts.merge ? deepMergeFirestoreStyle(docs.get(ref.path), data) : JSON.parse(JSON.stringify(data)));
     }
   };
+  // ---- 同期の状態表示（renderSyncHealth など）用の擬似DOM・擬似localStorage ----
+  const dom = {};
+  ["syncStatusValueTop", "syncPillExam", "syncHealth"].forEach(id => { dom[id] = { textContent: "", style: {} }; });
+  const storage = {};
+  ctx.document = { getElementById: id => dom[id] || null };
+  ctx.localStorage = { getItem: k => (k in storage ? storage[k] : null), setItem: (k, v) => { storage[k] = String(v); } };
+  ctx.setItemRaw = (k, v) => { storage[k] = String(v); };
+  ctx.activeCtx = uid ? { authUid: uid } : null;
   vm.createContext(ctx);
-  vm.runInContext("var dqAutoCache = {};", ctx);
-  ["todayKeyJST", "buildSummary", "dailyQuestWindowStart", "planKyotsuAutoUpdates", "syncKyotsuAuto", "pushDailyQuestAuto", "backfillDailyQuestLogs"]
+  // 定数はソースの宣言をそのまま取り出す（テスト側で値を決め打ちしない）
+  const constLine = (name) => { const m = src.match(new RegExp("^const " + name + " = [^;]+;", "m")); if (!m) throw new Error(name + " が見つからない"); return m[0].replace(/^const /, "var "); };
+  vm.runInContext("var dqAutoCache = {}; var dqAutoFailedAt = 0; " + constLine("SYNC_PENDING_GRACE_MS") + " " + constLine("SYNC_OK_KEY_PREFIX"), ctx);
+  ["todayKeyJST", "buildSummary", "dailyQuestWindowStart", "planKyotsuAutoUpdates", "syncKyotsuAuto", "pushDailyQuestAuto", "backfillDailyQuestLogs",
+   "freshness", "syncHealthOf", "syncAgoText", "getLastSyncOkAt", "markSyncOk", "latestLocalAnswerAt", "renderSyncHealth"]
     .forEach(name => vm.runInContext(extractFunction(name), ctx));
-  return { ctx, docs, writes, state };
+  return { ctx, docs, writes, state, dom, storage };
 }
 
 const push = ctx => vm.runInContext("pushDailyQuestAuto(buildSummary(), 0)", ctx);
@@ -487,6 +498,115 @@ async function run() {
       const u = plan({}, { "2026-09-28": 8 }, { "2026-09-28": bad });
       check("24-4 復習件数が不正(" + JSON.stringify(bad) + ") → 内訳を付けない（count だけ書く）", !!u["2026-09-28"] && u["2026-09-28"].count === 8 && !u["2026-09-28"].breakdown, u);
     }
+  }
+
+  // ================= 同期の状態表示（送信待ち・最終同期） =================
+  const MIN = 60000, HOUR = 3600000;
+
+  console.log("\n[25] 純関数 syncHealthOf：端末の最終回答が、最終同期成功より新しく、5分以上そのままなら「送信待ち」");
+  {
+    const { ctx } = makeContext({});
+    const h = (ok, local, now) => JSON.parse(vm.runInContext(`JSON.stringify(syncHealthOf(${ok}, ${local}, ${now}))`, ctx));
+    const N = 10 * HOUR;
+    check("25-1 一度も同期していない(0)＋10分前の回答 → 送信待ち。unsentSince は最終回答の時刻", h(0, N - 10 * MIN, N).pending === true && h(0, N - 10 * MIN, N).unsentSince === N - 10 * MIN);
+    check("25-2 4分59秒前の回答 → まだ待たない（猶予5分）", h(0, N - 5 * MIN + 1000, N).pending === false);
+    check("25-3 ちょうど5分 → 送信待ち", h(0, N - 5 * MIN, N).pending === true);
+    check("25-4 最終同期が回答より新しい → 送信待ちにしない", h(N - MIN, N - 20 * MIN, N).pending === false);
+    check("25-5 回答のあとに同期成功 → 送信待ちにしない。同期のほうが古ければ送信待ち", h(N - 30 * MIN, N - 20 * MIN, N).pending === true && h(N - 10 * MIN, N - 20 * MIN, N).pending === false);
+    check("25-6 回答が無い(0)・不正な値 → 送信待ちにしない", h(0, 0, N).pending === false && vm.runInContext("syncHealthOf('x', NaN, 1000).pending", ctx) === false && vm.runInContext("syncHealthOf(-5, -9, 1000).pending", ctx) === false);
+    check("25-7 端末の時計が進んでいて回答が未来 → 送信待ちにしない", h(0, N + HOUR, N).pending === false);
+    check("25-8 最終同期成功の時刻はそのまま返す", h(N - 3 * HOUR, 0, N).lastSyncOkAt === N - 3 * HOUR);
+  }
+
+  console.log("\n[26] 純関数 syncAgoText");
+  {
+    const { ctx } = makeContext({});
+    const t = (ts, now) => vm.runInContext(`syncAgoText(${ts}, ${now})`, ctx);
+    const N = 100 * 86400000;
+    check("26-1 未同期・不正", t(0, N) === "まだ同期していません" && vm.runInContext("syncAgoText('x', 5)", ctx) === "まだ同期していません");
+    check("26-2 たった今／未来", t(N - 30000, N) === "最終同期：たった今" && t(N + 5 * MIN, N) === "最終同期：たった今");
+    check("26-3 分・時間・日", t(N - 26 * MIN, N) === "最終同期：26分前" && t(N - 3 * HOUR - 5 * MIN, N) === "最終同期：3時間前" && t(N - 50 * HOUR, N) === "最終同期：2日前");
+  }
+
+  console.log("\n[27] renderSyncHealth：本人（learner）の画面に、黄色の「☁ 送信待ち」と一行の説明。同期できたら消える");
+  {
+    // a) 同期済み・最近の回答 → 通常表示
+    {
+      const { ctx, dom, storage } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - 2 * MIN) } });
+      storage["kyotsu_sync_ok_v1_" + CHILD_UID] = String(NOW_DEFAULT - MIN);
+      vm.runInContext("renderSyncHealth()", ctx);
+      check("27-1 同期済み：カードは「☁ ON」（緑）・ピルは「☁ 同期ON」・説明は最終同期の時刻だけ",
+        dom.syncStatusValueTop.textContent === "☁ ON" && dom.syncStatusValueTop.style.color === "#166534" && dom.syncPillExam.textContent === "☁ 同期ON" &&
+        dom.syncHealth.textContent === "最終同期：1分前" && dom.syncHealth.style.display === "block", { top: dom.syncStatusValueTop, pill: dom.syncPillExam, line: dom.syncHealth });
+    }
+    // b) 送信待ち：30分前に回答、最終同期は2時間前（保存検知に頼らない＝dirtyの印が無くても出る）
+    {
+      const { ctx, dom } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - 30 * MIN) } });
+      ctx.localStorage.setItem("kyotsu_sync_ok_v1_" + CHILD_UID, String(NOW_DEFAULT - 2 * HOUR));
+      vm.runInContext("renderSyncHealth()", ctx);
+      check("27-2 送信待ち：カードは「☁ 送信待ち」（黄）、ピルも黄", dom.syncStatusValueTop.textContent === "☁ 送信待ち" && dom.syncStatusValueTop.style.color === "#B7791F" &&
+        dom.syncPillExam.textContent === "☁ 送信待ち" && dom.syncPillExam.style.color === "#B7791F");
+      check("27-3 説明は一行で、最終同期の時刻つき（赤・ダイアログは使わない）", /まだ送れていない記録があります（最終同期：2時間前）。Wi-Fiにつないで/.test(dom.syncHealth.textContent) && dom.syncHealth.style.color === "#B7791F" && !/#[Ff]{2}0000|#991b1b/.test(dom.syncHealth.style.color));
+    }
+    // c) 一度も同期していない端末で回答がある → 送信待ち。文言は「まだ同期していません」
+    {
+      const { ctx, dom } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - 20 * MIN) } });
+      vm.runInContext("renderSyncHealth()", ctx);
+      check("27-4 未同期の端末：送信待ち＋「まだ同期していません」", dom.syncStatusValueTop.textContent === "☁ 送信待ち" && /まだ同期していません/.test(dom.syncHealth.textContent), dom.syncHealth.textContent);
+    }
+    // d) 同期成功を記録すると消える
+    {
+      const { ctx, dom, storage } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - 30 * MIN) } });
+      vm.runInContext("renderSyncHealth()", ctx);
+      check("27-5 前提：送信待ちが出ている", dom.syncStatusValueTop.textContent === "☁ 送信待ち");
+      vm.runInContext("markSyncOk()", ctx);
+      check("27-6 markSyncOk で最終同期時刻が端末に保存され（アカウント別）、表示は通常に戻る",
+        storage["kyotsu_sync_ok_v1_" + CHILD_UID] === String(NOW_DEFAULT) && dom.syncStatusValueTop.textContent === "☁ ON" && dom.syncHealth.textContent === "最終同期：たった今", { storage, top: dom.syncStatusValueTop.textContent });
+    }
+    // e) 本人以外（保護者・未ログイン）は何も出さない
+    {
+      const g = makeContext({ uid: GUARDIAN_UID, isGuardianUser: true, unitLogs: { u1: logsOf(NOW_DEFAULT - 30 * MIN) } });
+      vm.runInContext("renderSyncHealth()", g.ctx);
+      check("27-7 保護者：送信待ちを出さない（説明は非表示）", g.dom.syncStatusValueTop.textContent === "☁ ON" && g.dom.syncHealth.style.display === "none");
+      const u = makeContext({ uid: null, unitLogs: { u1: logsOf(NOW_DEFAULT - 30 * MIN) } });
+      vm.runInContext("renderSyncHealth()", u.ctx);
+      check("27-8 未ログイン：何も出さない", u.dom.syncStatusValueTop.textContent === "☁ ON" && u.dom.syncHealth.style.display === "none");
+    }
+    // f) 画面の部品が無くても例外にならない
+    {
+      const { ctx, dom } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - 30 * MIN) } });
+      Object.keys(dom).forEach(k => delete dom[k]);
+      let threw = false;
+      try { vm.runInContext("renderSyncHealth()", ctx); } catch (e) { threw = true; }
+      check("27-9 部品（要素）が無くても例外を出さない", !threw);
+    }
+  }
+
+  console.log("\n[28] デイリークエストへの書き込み失敗：一行の説明を出し、成功したら消える（子どもには対処不要と分かる文言）");
+  {
+    const { ctx, dom, storage, state } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - MIN) }, getDocThrows: true });
+    storage["kyotsu_sync_ok_v1_" + CHILD_UID] = String(NOW_DEFAULT);
+    await push(ctx);
+    check("28-1 失敗：「デイリークエストへの反映が遅れています。次の同期でやり直します。」", dom.syncHealth.textContent === "デイリークエストへの反映が遅れています。次の同期でやり直します。" && dom.syncHealth.style.display === "block", dom.syncHealth);
+    check("28-2 単元の同期の状態（☁ ON）は変えない", dom.syncStatusValueTop.textContent === "☁ ON");
+    const ok = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(NOW_DEFAULT - MIN) } });
+    ok.storage["kyotsu_sync_ok_v1_" + CHILD_UID] = String(NOW_DEFAULT);
+    vm.runInContext("dqAutoFailedAt = 123", ok.ctx);
+    await push(ok.ctx);
+    check("28-3 次の成功で失敗の記憶が消え、通常の表示（最終同期）に戻る", vm.runInContext("dqAutoFailedAt", ok.ctx) === 0 && ok.dom.syncHealth.textContent === "最終同期：たった今", ok.dom.syncHealth.textContent);
+  }
+
+  console.log("\n[29] 実際のソース：同期が失敗なく終わったときだけ markSyncOk。部品は index.html と同期欄にある");
+  {
+    const body = (name) => extractFunction(name);
+    const sa = body("syncAll"), pd = body("pushDirty");
+    check("29-1 syncAll：成功の枝（同期済み）で markSyncOk、失敗の枝（未送信）では呼ばない",
+      /log\("同期済み（" \+ t \+ "）", "#166534"\);\s*markSyncOk\(\);/.test(sa) && !/UNSENT_MSG[^}]*markSyncOk/.test(sa), sa.slice(sa.indexOf("同期済み") - 200, sa.indexOf("同期済み") + 200));
+    check("29-2 pushDirty：同様", /log\("同期済み（" \+ new Date\(\)\.toLocaleTimeString\("ja-JP"\) \+ "）", "#166534"\);\s*markSyncOk\(\);/.test(pd) && !/UNSENT_MSG[^}]*markSyncOk/.test(pd));
+    const indexHtml = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+    check("29-3 index.html に カード(syncStatusValueTop)・ピル(syncPillExam) がある。同期欄に syncHealth を作る", /id="syncStatusValueTop"/.test(indexHtml) && /id="syncPillExam"/.test(indexHtml) && /id="syncHealth"/.test(src));
+    check("29-4 送信待ちのカード・ピルは、タップで同期をやり直す（本人のときだけ）", /\["syncStatusCardTop", "syncPillExam"\]\.forEach[\s\S]*?isLearner\(\)\) syncAll\(\{\}\)/.test(src));
+    check("29-5 定期更新のタイマーはNodeの終了を妨げない（unref）", /setInterval\(renderSyncHealth, 60000\)[\s\S]{0,120}unref/.test(src));
   }
 
   console.log(`\n合計: ${passed}件成功 / ${failed}件失敗`);
