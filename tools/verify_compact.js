@@ -130,12 +130,13 @@ function pageTotals(store, now) {
   const dq = fakeDailyQuestDoc();
   const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "isLearner", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
     slice(sync, "function unitKeys", "/* データの「新しさ」") + slice(sync, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
+    "const ctxGen = 0, alive = () => true;\nlet dqAutoCache = {};\n" + slice(sync, "function dailyQuestWindowStart", "async function pushDailyQuestAuto") +
     slice(sync, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
     fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => true, () => "x",
     dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
     class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
   const summary = f.buildSummary();
-  return f.backfillDailyQuestLogs().then(() => {
+  return f.backfillDailyQuestLogs({ fromDay: "1970-01-01" }).then(() => {
     const perDay = dqPerDay(dq.written);
     // progress の answeredCount は questionHistory＋生ログの問題ID（補完で同じになることを確認する）
     return { calendar, progress, strength, summaryPart, summary, perDay };

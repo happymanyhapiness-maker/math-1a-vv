@@ -61,6 +61,7 @@ let activeCtx = null;   // { state, authUid, role, storageOwnerUid, remoteTarget
 let ctxGen = 0;
 let pushTimer = null;
 let dirtyUnits = new Set();   // 未送信の単元（メモリだけ。リロード後は起動時の syncAll が local から送り直す）
+let dqAutoCache = {};         // デイリークエスト側の kyotsuMathAuto で「すでに確認・書き込み済みの件数」{ 日付: { count } }（通信を減らすためのメモリだけの記憶）
 let busy = false;
 let savedWhileBusy = false;   // 同期中にアプリが保存した（同期が終わったら、もう一度送る）
 
@@ -126,6 +127,7 @@ function invalidateContext() {
   clearTimeout(pushTimer);
   pushTimer = null;
   dirtyUnits = new Set();
+  dqAutoCache = {};
   busy = false;
   savedWhileBusy = false;
   try { sessionStorage.removeItem(RELOAD_FLAG); } catch (e) { /* 何もしない */ }
@@ -576,10 +578,13 @@ function countableLog(local) {
   return Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
 }
 
+// perDay：JST日付キー → その日の回答数（全日分）。サマリー本体（Firestoreに書く3項目）には含めず、
+// デイリークエストの自動記録（kyotsuMathAuto）の再集計にだけ使う。
 function buildSummary() {
   let lastStudiedAt = 0;
   let todayCount = 0;
   let totalCount = 0;
+  const perDay = {};
   const today = todayKeyJST();
 
   unitKeys().forEach(unit => {
@@ -591,11 +596,12 @@ function buildSummary() {
       if (r.timestamp > lastStudiedAt) lastStudiedAt = r.timestamp;
       const jst = new Date(r.timestamp + 9 * 3600 * 1000);
       const key = jst.getUTCFullYear() + "-" + String(jst.getUTCMonth() + 1).padStart(2, "0") + "-" + String(jst.getUTCDate()).padStart(2, "0");
+      perDay[key] = (perDay[key] || 0) + 1;
       if (key === today) todayCount++;
     });
   });
 
-  return { lastStudiedAt, todayCount, totalCount };
+  return { lastStudiedAt, todayCount, totalCount, perDay };
 }
 
 /* =========================================================
@@ -605,31 +611,80 @@ function buildSummary() {
        kyotsuMathAuto: { "YYYY-MM-DD": { date, source:"kyotsu-math", count, updatedAt } }
      （日付キーごとのFirestoreネイティブmap）。
    ・plannerの store（dataフィールドのJSON文字列）は一切読まない・書かない。
-     merge:trueはネストしたmapもキー単位でマージされるため、今日の日付キー
+     merge:trueはネストしたmapもキー単位でマージされるため、対象の日付キー
      だけを更新でき、他の日付キーや data / leapAuto / eikomiAuto には
      一切触れない。
+   ・「今日」だけでなく、直近の数日分をローカルの全ログから毎回再集計し、
+     「件数が増えた日だけ」書く（既存の件数は絶対に減らさない）。
+     学習の翌日に同期されても、その日の分を取りこぼさない（自己修復）。
+   ・再集計の対象期間は dailyQuestWindowStart() 〜 今日（JST）。
+     旧方式（data内のautoSourceクエスト）が書かれていた日には触れない。
    ・plannerの記録がまだ一度も存在しない場合は何もしない（安全側）。
    ・保護者（閲覧モード）では絶対に動かさない。
    ========================================================= */
-async function pushDailyQuestToday(s, gen) {
+
+// 再集計の開始日（JST日付キー）。直近 WINDOW_DAYS 日、ただし MIN_DAY より前にはさかのぼらない。
+//   MIN_DAY：旧方式（dataフィールド内の autoSource:"kyotsu-math" クエスト）が最後に書かれたのは
+//   2026-09-26 22:06 に kyotsuMathAuto 方式へ切り替えるまで。それ以前の日は旧方式の記録が
+//   あるかもしれないので、新方式で上書き（＝旧記録の非表示化・件数の入れ替わり）しないよう対象外にする。
+function dailyQuestWindowStart() {
+  const WINDOW_DAYS = 7;
+  const MIN_DAY = "2026-09-27";
+  const t = todayKeyJST().split("-").map(Number);
+  const d = new Date(Date.UTC(t[0], t[1] - 1, t[2]) - (WINDOW_DAYS - 1) * 86400000);
+  const start = d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+  return start < MIN_DAY ? MIN_DAY : start;
+}
+
+// existing：dailyquest-logs.kyotsuMathAuto（{ 日付: { count, ... } }）／counts：{ 日付: 件数 }
+// 書くべき日だけを { 日付: エントリ } で返す純関数。既存より増えた日だけ（同数・減少は書かない）。
+function planKyotsuAutoUpdates(existing, counts, nowMs) {
+  const updates = {};
+  Object.keys(counts || {}).forEach(key => {
+    const count = counts[key];
+    if (!(count > 0)) return;
+    const prev = existing && existing[key];
+    const prevCount = Number(prev && prev.count) || 0;
+    if (count <= prevCount) return;
+    updates[key] = { date: key, source: "kyotsu-math", count, updatedAt: nowMs };
+  });
+  return updates;
+}
+
+// perDay：buildSummary().perDay。fromDay 〜 今日 の日だけを対象にする。
+async function syncKyotsuAuto(gen, perDay, fromDay) {
+  const today = todayKeyJST();
+  const counts = {};
+  Object.keys(perDay || {}).forEach(k => { if (k >= fromDay && k <= today) counts[k] = perDay[k]; });
+  const dayKeys = Object.keys(counts);
+  if (dayKeys.length === 0) return { ok: true, updatedDays: 0, totalDaysFound: 0 };
+  // すでに確認・書き込み済みの件数で足りているなら、通信しない（回答のたびに読み取りが走らないように）
+  if (Object.keys(planKyotsuAutoUpdates(dqAutoCache, counts, 0)).length === 0) {
+    return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
+  }
+  const ref = doc(db, "dailyquest-logs", targetUid());
+  const snap = await getDoc(ref);
+  if (!alive(gen)) return { ok: false, reason: "auth-changed" };
+  if (!snap.exists()) return { ok: false, reason: "no-dailyquest-doc" };
+  const existing = snap.data().kyotsuMathAuto || {};
+  Object.keys(existing).forEach(k => {
+    const c = Number(existing[k] && existing[k].count) || 0;
+    if (c > ((dqAutoCache[k] && dqAutoCache[k].count) || 0)) dqAutoCache[k] = { count: c };
+  });
+  const updates = planKyotsuAutoUpdates(existing, counts, Date.now());
+  const updatedDays = Object.keys(updates).length;
+  if (updatedDays === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
+  await setDoc(ref, { kyotsuMathAuto: updates }, { merge: true });
+  Object.keys(updates).forEach(k => { dqAutoCache[k] = { count: updates[k].count }; });
+  return { ok: true, updatedDays, totalDaysFound: dayKeys.length };
+}
+
+async function pushDailyQuestAuto(s, gen) {
   if (!currentUser || !isLearner()) return;
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
-  const uid = targetUid();
-  const today = todayKeyJST();
-  const count = s.todayCount || 0;
-  if (count <= 0) return; // 今日まだ0件なら書かない（Planner側もcount<=0の記録は表示しない）
   try {
-    const ref = doc(db, "dailyquest-logs", uid);
-    const snap = await getDoc(ref);
-    if (!alive(gen)) return;
-    if (!snap.exists()) return;
-    const existing = snap.data().kyotsuMathAuto || {};
-    const prev = existing[today];
-    if (prev && prev.count === count) return; // 変化なし。同日再実行での重複書き込みを避ける
-    await setDoc(ref, {
-      kyotsuMathAuto: { [today]: { date: today, source: "kyotsu-math", count, updatedAt: Date.now() } }
-    }, { merge: true });
+    await syncKyotsuAuto(gen, s && s.perDay, dailyQuestWindowStart());
   } catch (e) {
     console.warn("[sync] dailyquest push失敗", e);
   }
@@ -649,61 +704,31 @@ async function pushSummary(gen) {
       w: NS.WRITER_MARKER,
       client: NS.CLIENT_VERSION   // rollout の確認用（どの版のクライアントが最後に同期したか）
     });
-    if (alive(gen)) pushDailyQuestToday(s, gen);
+    if (alive(gen)) pushDailyQuestAuto(s, gen);
   } catch (e) {
     console.error("[sync] summary push failed", e);
   }
 }
 
 /* =========================================================
-   過去の学習履歴を、kyotsuMathAuto へ一括で反映する（一回限りの移行用）
-   ・全単元のanswerLogを日付ごとに集計し、dailyquest-logs/{uid}.kyotsuMathAuto
-     の各日付キーへ { date, source:"kyotsu-math", count, updatedAt } として書き込む。
+   kyotsuMathAuto への手動の再反映（管理用。UIからは呼ばない）
+   ・pushDailyQuestAuto と同じ「件数が増えた日だけ書く」処理。既存の件数は減らさない。
+   ・既定の対象期間も同じ（dailyQuestWindowStart() 〜 今日）。
+     それより前まで反映したいときだけ opts.fromDay（"YYYY-MM-DD"）を渡す。
+     ただし旧方式の記録（data内の autoSource:"kyotsu-math"）がある日は、新方式の記録が入ると
+     表示が入れ替わる（旧記録は非表示になる）ので、内容を確認してから使うこと。
    ・plannerの記録が一度も存在しない場合は何もしない（安全のため）。
    ・data・leapAuto・eikomiAuto・既存data.days内のautoSource:"kyotsu-math"
      には一切触れない（削除・移行・書き換えのいずれもしない）。
    ========================================================= */
-// UIからは呼ばれていない（移行完了・再実行で過去実績を減らしうるためボタン削除済み）。将来の管理用途に残置。
-async function backfillDailyQuestLogs() {
+async function backfillDailyQuestLogs(opts) {
   if (!currentUser || !isLearner()) return { ok: false, reason: "not-child" };
-  const uid = targetUid();
-
-  const perDay = {};
-  unitKeys().forEach(unit => {
-    const local = readLocal(unit);
-    const log = countableLog(local);
-    log.forEach(r => {
-      const t = r && typeof r.timestamp === "number" ? r.timestamp : 0;
-      if (!t) return;
-      const jst = new Date(t + 9 * 3600 * 1000);
-      const key = jst.getUTCFullYear() + "-" + String(jst.getUTCMonth() + 1).padStart(2, "0") + "-" + String(jst.getUTCDate()).padStart(2, "0");
-      perDay[key] = (perDay[key] || 0) + 1;
-    });
-  });
-
-  const dayKeys = Object.keys(perDay);
-  if (dayKeys.length === 0) return { ok: true, updatedDays: 0, totalDaysFound: 0 };
-
+  const gen = ctxGen;
+  const fromDay = (opts && typeof opts.fromDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(opts.fromDay))
+    ? opts.fromDay
+    : dailyQuestWindowStart();
   try {
-    const ref = doc(db, "dailyquest-logs", uid);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return { ok: false, reason: "no-dailyquest-doc" };
-    const existing = snap.data().kyotsuMathAuto || {};
-
-    const updates = {};
-    let updated = 0;
-    dayKeys.forEach(key => {
-      const count = perDay[key];
-      const prev = existing[key];
-      if (prev && prev.count === count) return; // 変化なし
-      updates[key] = { date: key, source: "kyotsu-math", count, updatedAt: Date.now() };
-      updated++;
-    });
-
-    if (updated === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
-
-    await setDoc(ref, { kyotsuMathAuto: updates }, { merge: true });
-    return { ok: true, updatedDays: updated, totalDaysFound: dayKeys.length };
+    return await syncKyotsuAuto(gen, buildSummary().perDay, fromDay);
   } catch (e) {
     console.warn("[sync] backfill失敗", e);
     return { ok: false, reason: String(e) };

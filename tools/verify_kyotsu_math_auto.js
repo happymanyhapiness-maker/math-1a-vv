@@ -1,10 +1,10 @@
 // -*- coding: utf-8 -*-
 // verify_kyotsu_math_auto.js
-// kyotsu-math → Daily Quest 連携（kyotsuMathAuto方式）の最小回帰テスト。
-// firebase-sync.js から pushDailyQuestToday / backfillDailyQuestLogs / todayKeyJST を
-// 実ソースのまま取り出し、vmで実行する。unitKeys/readLocal/countableLog（学習ログの集計、
-// 今回変更していない部分）と Firestore はテスト用のスタブに差し替える。
-// 本物のFirebaseには一切アクセスしない。
+// kyotsu-math → Daily Quest 連携（kyotsuMathAuto方式）の回帰テスト。
+// firebase-sync.js から buildSummary / dailyQuestWindowStart / planKyotsuAutoUpdates / syncKyotsuAuto /
+// pushDailyQuestAuto / backfillDailyQuestLogs / todayKeyJST を実ソースのまま取り出し、vmで実行する。
+// unitKeys/readLocal/countableLog（学習ログの集計）と Firestore はテスト用のスタブに差し替える。
+// 時計は固定（既定は 2026-09-29 12:00 JST）。本物のFirebaseには一切アクセスしない。
 //
 //   node tools/verify_kyotsu_math_auto.js
 
@@ -38,6 +38,10 @@ const GUARDIAN_UID = "testGuardianUid0000000000001";
 const DQ_PATH = "dailyquest-logs/" + CHILD_UID;
 // アプリ側の role は guardian（閲覧専用）か learner（自分のuid配下へ書く）の2つだけ。
 
+// 既定の「今」：2026-09-29 12:00 JST（9/28 の8問が翌日に同期された状況と同じ日）
+const NOW_DEFAULT = Date.UTC(2026, 8, 29, 3, 0, 0);
+const jstMs = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h - 9, mi || 0);   // JSTの日時 → epoch ms
+
 // ---- Firestoreのmerge:trueは、ネストしたmapフィールドもキー単位で再帰的にマージする。
 // 単純な{...old, ...new}のシャロー統合だとこの挙動を再現できないため、再帰merge関数を使う。
 const isPlainObject = v => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -53,14 +57,21 @@ function deepMergeFirestoreStyle(oldObj, newObj) {
   return result;
 }
 
-function makeContext({ initialDoc, uid, isGuardianUser, unitLogs = {} } = {}) {
+function makeContext({ initialDoc, uid, isGuardianUser, unitLogs = {}, now = NOW_DEFAULT, getDocThrows = false } = {}) {
   const docs = new Map();
   if (initialDoc) docs.set(DQ_PATH, JSON.parse(JSON.stringify(initialDoc)));
   const writes = [];
+  const state = { now, getDocCalls: 0 };
+
+  // 固定時計（引数なしの new Date() と Date.now() だけが固定される）
+  class FakeDate extends Date {
+    constructor(...a) { if (a.length) super(...a); else super(state.now); }
+    static now() { return state.now; }
+  }
 
   const ctx = {
-    console,
-    Date, JSON, Math, Object, Array, String, Number, Error, Promise,
+    console: { log() {}, warn() {}, error() {} },
+    Date: FakeDate, JSON, Math, Object, Array, String, Number, Error, Promise,
     currentUser: uid ? { uid } : null,
     ctxGen: 0,
     isGuardian: () => !!isGuardianUser,
@@ -78,71 +89,106 @@ function makeContext({ initialDoc, uid, isGuardianUser, unitLogs = {} } = {}) {
     // ---- 偽Firestore ----
     db: {},
     doc: (_db, ...seg) => ({ path: seg.join("/") }),
-    getDoc: async (ref) => ({
-      exists: () => docs.has(ref.path),
-      data: () => (docs.has(ref.path) ? JSON.parse(JSON.stringify(docs.get(ref.path))) : undefined)
-    }),
+    getDoc: async (ref) => {
+      state.getDocCalls++;
+      if (getDocThrows) throw new Error("network");
+      return {
+        exists: () => docs.has(ref.path),
+        data: () => (docs.has(ref.path) ? JSON.parse(JSON.stringify(docs.get(ref.path))) : undefined)
+      };
+    },
     setDoc: async (ref, data, opts) => {
       writes.push({ path: ref.path, data: JSON.parse(JSON.stringify(data)), merge: !!(opts && opts.merge) });
       docs.set(ref.path, opts && opts.merge ? deepMergeFirestoreStyle(docs.get(ref.path), data) : JSON.parse(JSON.stringify(data)));
     }
   };
   vm.createContext(ctx);
-  vm.runInContext(extractFunction("todayKeyJST"), ctx);
-  vm.runInContext(extractFunction("pushDailyQuestToday"), ctx);
-  vm.runInContext(extractFunction("backfillDailyQuestLogs"), ctx);
-  return { ctx, docs, writes };
+  vm.runInContext("var dqAutoCache = {};", ctx);
+  ["todayKeyJST", "buildSummary", "dailyQuestWindowStart", "planKyotsuAutoUpdates", "syncKyotsuAuto", "pushDailyQuestAuto", "backfillDailyQuestLogs"]
+    .forEach(name => vm.runInContext(extractFunction(name), ctx));
+  return { ctx, docs, writes, state };
 }
 
-function todayKeyJSTNode() {
-  const d = new Date(Date.now() + 9 * 3600 * 1000);
-  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
-}
+const push = ctx => vm.runInContext("pushDailyQuestAuto(buildSummary(), 0)", ctx);
+const dqWrites = writes => writes.filter(w => w.path === DQ_PATH);
+const logsOf = (...timestamps) => timestamps.map(t => ({ timestamp: t }));
+const times = (n, base, step = 60000) => Array.from({ length: n }, (_, i) => base + i * step);
 
 async function run() {
-  const today = todayKeyJSTNode();
-
-  console.log("\n[1] 今日分1日をkyotsuMathAutoへ保存する");
+  console.log("\n[0] 対象期間：直近7日、ただし 2026-09-27 より前にはさかのぼらない");
   {
-    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID });
-    await vm.runInContext(`pushDailyQuestToday({ todayCount: 2 }, 0)`, ctx);
+    const start = (nowMs) => { const { ctx } = makeContext({ now: nowMs }); return vm.runInContext("dailyQuestWindowStart()", ctx); };
+    check("0-1 9/29 → 9/27（7日前の9/23は下限より前なので9/27）", start(jstMs(2026, 9, 29, 12)) === "2026-09-27", start(jstMs(2026, 9, 29, 12)));
+    check("0-2 9/27 → 9/27", start(jstMs(2026, 9, 27, 0, 30)) === "2026-09-27");
+    check("0-3 10/2 → 9/27（6日前の9/26は下限より前）", start(jstMs(2026, 10, 2, 9)) === "2026-09-27", start(jstMs(2026, 10, 2, 9)));
+    check("0-4 10/3 → 9/27（ちょうど6日前が下限）", start(jstMs(2026, 10, 3, 9)) === "2026-09-27", start(jstMs(2026, 10, 3, 9)));
+    check("0-5 10/10 → 10/4（下限より後は、直近7日＝今日を含めて7日）", start(jstMs(2026, 10, 10, 9)) === "2026-10-04", start(jstMs(2026, 10, 10, 9)));
+    check("0-6 月をまたぐ 11/2 → 10/27", start(jstMs(2026, 11, 2, 9)) === "2026-10-27", start(jstMs(2026, 11, 2, 9)));
+  }
+
+  console.log("\n[1] 今日分をkyotsuMathAutoへ保存する");
+  {
+    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10), jstMs(2026, 9, 29, 11)) } });
+    await push(ctx);
     const doc = docs.get(DQ_PATH);
     check("1-1 kyotsuMathAutoフィールドが書き込まれる", !!(doc && doc.kyotsuMathAuto), doc);
-    check("1-2 今日の日付キーにcount:2が入る", doc.kyotsuMathAuto[today].count === 2, doc.kyotsuMathAuto);
-    check("1-3 sourceはkyotsu-math", doc.kyotsuMathAuto[today].source === "kyotsu-math");
+    check("1-2 今日の日付キーにcount:2が入る", doc.kyotsuMathAuto["2026-09-29"].count === 2, doc.kyotsuMathAuto);
+    check("1-3 sourceはkyotsu-math", doc.kyotsuMathAuto["2026-09-29"].source === "kyotsu-math");
     check("1-4 dataフィールドは変更されない", doc.data === "{}");
   }
 
-  console.log("\n[2] 同日への再実行は重複せず、同じ日付キーを更新するだけ");
+  console.log("\n[2] 同日への再実行は重複せず、増えたときだけ同じ日付キーを更新する");
   {
-    const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID });
-    await vm.runInContext(`pushDailyQuestToday({ todayCount: 3 }, 0)`, ctx);
-    await vm.runInContext(`pushDailyQuestToday({ todayCount: 3 }, 0)`, ctx); // 同じ件数で再実行
+    const logs = { u1: logsOf(...times(3, jstMs(2026, 9, 29, 10))) };
+    const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    await push(ctx);
+    await push(ctx); // 同じ件数で再実行
     const doc = docs.get(DQ_PATH);
     check("2-1 日付キーは1つだけ", Object.keys(doc.kyotsuMathAuto).length === 1, doc.kyotsuMathAuto);
-    const dqWrites = writes.filter(w => w.path === DQ_PATH);
-    check("2-2 変化が無い2回目はsetDocを呼ばない（冪等）", dqWrites.length === 1, dqWrites);
+    check("2-2 変化が無い2回目はsetDocを呼ばない（冪等）", dqWrites(writes).length === 1, dqWrites(writes));
 
-    await vm.runInContext(`pushDailyQuestToday({ todayCount: 5 }, 0)`, ctx); // 件数が変わった再実行
-    check("2-3 件数が変われば同じ日付キーを更新する", docs.get(DQ_PATH).kyotsuMathAuto[today].count === 5);
+    logs.u1 = logsOf(...times(5, jstMs(2026, 9, 29, 10))); // 件数が増えた再実行
+    await push(ctx);
+    check("2-3 件数が増えれば同じ日付キーを更新する", docs.get(DQ_PATH).kyotsuMathAuto["2026-09-29"].count === 5);
     check("2-4 日付キーはやはり1つだけ（重複しない）", Object.keys(docs.get(DQ_PATH).kyotsuMathAuto).length === 1);
   }
 
-  console.log("\n[3] 複数日backfillで各日付キーが保存される");
+  console.log("\n[3] 期間内の複数日を再集計して保存する（日付はJSTの0時区切り）");
   {
-    const day1 = new Date("2026-09-01T01:00:00.000Z").getTime(); // JST 9/1 10:00
-    const day2a = new Date("2026-09-02T01:00:00.000Z").getTime(); // JST 9/2 10:00
-    const day2b = new Date("2026-09-02T02:00:00.000Z").getTime(); // JST 9/2 11:00
     const { ctx, docs } = makeContext({
       initialDoc: { data: "{}" }, uid: CHILD_UID,
-      unitLogs: { u1: [{ timestamp: day1 }, { timestamp: day2a }, { timestamp: day2b }] }
+      unitLogs: {
+        u1: logsOf(jstMs(2026, 9, 27, 10), jstMs(2026, 9, 28, 10), jstMs(2026, 9, 28, 11)),
+        u2: logsOf(jstMs(2026, 9, 28, 12))
+      }
     });
     const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
     check("3-1 ok:true", r.ok === true, r);
     check("3-2 2日分が更新される", r.updatedDays === 2, r);
     const doc = docs.get(DQ_PATH);
-    check("3-3 2026-09-01はcount:1", doc.kyotsuMathAuto["2026-09-01"].count === 1);
-    check("3-4 2026-09-02はcount:2", doc.kyotsuMathAuto["2026-09-02"].count === 2);
+    check("3-3 2026-09-27はcount:1", doc.kyotsuMathAuto["2026-09-27"].count === 1);
+    check("3-4 2026-09-28は単元をまたいでcount:3", doc.kyotsuMathAuto["2026-09-28"].count === 3);
+  }
+
+  console.log("\n[3b] JST境界：UTC 14:59:59 は当日、15:00:00 は翌日");
+  {
+    const before = Date.UTC(2026, 8, 28, 14, 59, 59);  // JST 9/28 23:59:59
+    const after = Date.UTC(2026, 8, 28, 15, 0, 0);     // JST 9/29 00:00:00
+    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(before, after) } });
+    await push(ctx);
+    const auto = docs.get(DQ_PATH).kyotsuMathAuto;
+    check("3b-1 23:59:59 は 9/28、00:00:00 は 9/29 に数える", auto["2026-09-28"].count === 1 && auto["2026-09-29"].count === 1, auto);
+  }
+
+  console.log("\n[3c] 端末の時計が進んでいて「未来の日付」のログがあっても、今日より先の日は書かない");
+  {
+    const { ctx, docs } = makeContext({
+      initialDoc: { data: "{}" }, uid: CHILD_UID,
+      unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10), jstMs(2026, 9, 30, 10), jstMs(2026, 12, 1, 10)) }
+    });
+    await push(ctx);
+    const keys = Object.keys(docs.get(DQ_PATH).kyotsuMathAuto);
+    check("3c-1 今日(9/29)だけが書かれ、9/30・12/1（未来）は書かれない", keys.join() === "2026-09-29", keys);
   }
 
   console.log("\n[4] 既存kyotsuMathAutoの別日付を保持する");
@@ -150,78 +196,76 @@ async function run() {
     const { ctx, docs } = makeContext({
       initialDoc: { data: "{}", kyotsuMathAuto: { "2026-08-01": { date: "2026-08-01", source: "kyotsu-math", count: 9, updatedAt: 1 } } },
       uid: CHILD_UID,
-      unitLogs: { u1: [{ timestamp: new Date("2026-09-02T01:00:00.000Z").getTime() }] }
+      unitLogs: { u1: logsOf(jstMs(2026, 9, 28, 10)) }
     });
     await vm.runInContext("backfillDailyQuestLogs()", ctx);
     const doc = docs.get(DQ_PATH);
     check("4-1 既存の別日付キーは変化しない", doc.kyotsuMathAuto["2026-08-01"].count === 9, doc.kyotsuMathAuto);
-    check("4-2 新しい日付キーが追加される", doc.kyotsuMathAuto["2026-09-02"].count === 1);
+    check("4-2 新しい日付キーが追加される", doc.kyotsuMathAuto["2026-09-28"].count === 1);
   }
 
-  console.log("\n[5-7] data / leapAuto / eikomiAutoを変更しない");
+  console.log("\n[5-7] data / leapAuto / eikomiAutoを変更しない（書くのはkyotsuMathAutoだけ）");
   {
     const initialData = JSON.stringify({ days: { "2026-01-01": { quests: [{ label: "手動", done: true }] } }, appStartDate: "2026-01-01" });
-    const { ctx, docs } = makeContext({
+    const { ctx, docs, writes } = makeContext({
       initialDoc: {
         data: initialData,
         leapAuto: { "2026-08-01": { date: "2026-08-01", source: "leap", count: 5, updatedAt: 1 } },
         eikomiAuto: { "2026-08-01": { date: "2026-08-01", source: "eikomi", count: 7, updatedAt: 1 } }
       },
       uid: CHILD_UID,
-      unitLogs: { u1: [{ timestamp: new Date("2026-09-02T01:00:00.000Z").getTime() }] }
+      unitLogs: { u1: logsOf(jstMs(2026, 9, 28, 10)) }
     });
     await vm.runInContext("backfillDailyQuestLogs()", ctx);
     const doc = docs.get(DQ_PATH);
     check("5 dataフィールドは変更されない", doc.data === initialData);
     check("6 leapAutoは変更されない", JSON.stringify(doc.leapAuto) === JSON.stringify({ "2026-08-01": { date: "2026-08-01", source: "leap", count: 5, updatedAt: 1 } }));
     check("7 eikomiAutoは変更されない", JSON.stringify(doc.eikomiAuto) === JSON.stringify({ "2026-08-01": { date: "2026-08-01", source: "eikomi", count: 7, updatedAt: 1 } }));
+    check("7b setDocに渡すのはkyotsuMathAutoフィールドだけ", dqWrites(writes).every(w => Object.keys(w.data).join() === "kyotsuMathAuto" && w.merge === true), dqWrites(writes));
   }
 
   console.log("\n[8] 未認証・書き込み対象外role（guardian）から書かない");
   {
     // guest（未認証）
     {
-      const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: null, unitLogs: { u1: [{ timestamp: Date.now() }] } });
+      const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: null, unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10)) } });
       const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
+      await push(ctx);
       check("8-1 guestはnot-childで拒否される", r.ok === false && r.reason === "not-child", r);
       check("8-2 guestはkyotsuMathAutoを書けない", !docs.get(DQ_PATH).kyotsuMathAuto);
-      check("8-3 guestではsetDocが呼ばれない", writes.filter(w => w.path === DQ_PATH).length === 0);
+      check("8-3 guestではsetDocが呼ばれない", dqWrites(writes).length === 0);
     }
     // guardian（保護者・閲覧モード）
     {
-      const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: GUARDIAN_UID, isGuardianUser: true, unitLogs: { u1: [{ timestamp: Date.now() }] } });
+      const { ctx, docs, writes, state } = makeContext({ initialDoc: { data: "{}" }, uid: GUARDIAN_UID, isGuardianUser: true, unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10)) } });
       const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
+      await push(ctx);
       check("8-4 guardianはnot-childで拒否される", r.ok === false && r.reason === "not-child", r);
       check("8-5 guardianはkyotsuMathAutoを書けない", !docs.get(DQ_PATH).kyotsuMathAuto);
-      check("8-6 guardianではsetDocが呼ばれない", writes.filter(w => w.path === DQ_PATH).length === 0);
+      check("8-6 guardianではsetDocもgetDocも呼ばれない", dqWrites(writes).length === 0 && state.getDocCalls === 0);
     }
   }
 
   console.log("\n[9] 正しい学習者（本人）のみ書き込み可能");
   {
-    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: [{ timestamp: new Date("2026-09-02T01:00:00.000Z").getTime() }] } });
+    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(jstMs(2026, 9, 28, 10)) } });
     const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
     check("9-1 本人はok:true", r.ok === true, r);
     check("9-2 本人はkyotsuMathAutoを書ける", !!docs.get(DQ_PATH).kyotsuMathAuto);
   }
 
-  console.log("\n[10] Daily Quest document未作成ならsetDoc0回・新規作成しない");
+  console.log("\n[10] Daily Quest document未作成ならsetDoc0回・新規作成しない（あとで作られたら書く）");
   {
-    // pushDailyQuestToday経由
-    {
-      const { ctx, docs, writes } = makeContext({ initialDoc: null, uid: CHILD_UID }); // ドキュメント自体が無い
-      await vm.runInContext(`pushDailyQuestToday({ todayCount: 3 }, 0)`, ctx);
-      check("10-1 pushDailyQuestToday: setDocが0回", writes.filter(w => w.path === DQ_PATH).length === 0, writes);
-      check("10-2 pushDailyQuestToday: documentが新規作成されない", !docs.has(DQ_PATH));
-    }
-    // backfillDailyQuestLogs経由
-    {
-      const { ctx, docs, writes } = makeContext({ initialDoc: null, uid: CHILD_UID, unitLogs: { u1: [{ timestamp: new Date("2026-09-02T01:00:00.000Z").getTime() }] } });
-      const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
-      check("10-3 backfillDailyQuestLogs: no-dailyquest-doc", r.ok === false && r.reason === "no-dailyquest-doc", r);
-      check("10-4 backfillDailyQuestLogs: setDocが0回", writes.filter(w => w.path === DQ_PATH).length === 0, writes);
-      check("10-5 backfillDailyQuestLogs: documentが新規作成されない", !docs.has(DQ_PATH));
-    }
+    const { ctx, docs, writes } = makeContext({ initialDoc: null, uid: CHILD_UID, unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10)) } });
+    await push(ctx);
+    check("10-1 push: setDocが0回", dqWrites(writes).length === 0, writes);
+    check("10-2 push: documentが新規作成されない", !docs.has(DQ_PATH));
+    const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
+    check("10-3 backfill: no-dailyquest-doc", r.ok === false && r.reason === "no-dailyquest-doc", r);
+    check("10-4 backfill: setDocが0回・新規作成されない", dqWrites(writes).length === 0 && !docs.has(DQ_PATH));
+    docs.set(DQ_PATH, { data: "{}" });   // Planner側の記録があとから作られた
+    await push(ctx);
+    check("10-5 記録が作られたあとの次のpushでは書く（未作成を『確認済み』として覚えていない）", !!docs.get(DQ_PATH).kyotsuMathAuto && docs.get(DQ_PATH).kyotsuMathAuto["2026-09-29"].count === 1, docs.get(DQ_PATH));
   }
 
   console.log("\n[11] 既存data内のautoSource:\"kyotsu-math\"を変更しない");
@@ -231,12 +275,127 @@ async function run() {
     });
     const { ctx, docs } = makeContext({
       initialDoc: { data: initialData }, uid: CHILD_UID,
-      unitLogs: { u1: [{ timestamp: new Date("2026-09-02T01:00:00.000Z").getTime() }, { timestamp: new Date("2026-09-02T02:00:00.000Z").getTime() }] }
+      unitLogs: { u1: logsOf(jstMs(2026, 9, 2, 10), jstMs(2026, 9, 2, 11), jstMs(2026, 9, 28, 10)) }
     });
     await vm.runInContext("backfillDailyQuestLogs()", ctx);
     const doc = docs.get(DQ_PATH);
     check("11-1 旧autoSourceエントリを含むdataは一切書き換えられない", doc.data === initialData);
-    check("11-2 新kyotsuMathAuto側には正しい件数が書かれる", doc.kyotsuMathAuto["2026-09-02"].count === 2);
+    check("11-2 旧方式がありうる期間（9/27より前）の日は、既定では新方式で書かない（旧記録を入れ替えない）", !doc.kyotsuMathAuto["2026-09-02"], doc.kyotsuMathAuto);
+    check("11-3 期間内の日は書かれる", doc.kyotsuMathAuto["2026-09-28"].count === 1);
+  }
+
+  console.log("\n[12] 今回の事故：9/28の8問が翌日(9/29)に同期されても、9/28分が書かれる");
+  {
+    const { ctx, docs } = makeContext({
+      initialDoc: { data: "{}" }, uid: CHILD_UID,
+      unitLogs: { chugaku: logsOf(...times(8, jstMs(2026, 9, 28, 22, 26), 60000)), keiryo: logsOf(jstMs(2026, 9, 26, 15, 51)) }
+    });
+    await push(ctx);   // 9/29 17:47 の起動時同期に相当（今日9/29の件数は0）
+    const auto = docs.get(DQ_PATH).kyotsuMathAuto;
+    check("12-1 9/28 が count:8 で書かれる", auto && auto["2026-09-28"] && auto["2026-09-28"].count === 8, auto);
+    check("12-2 今日(9/29)は0件なので書かない", !auto["2026-09-29"]);
+    check("12-3 9/26（旧方式がありうる期間）は書かない", !auto["2026-09-26"]);
+  }
+
+  console.log("\n[13] 期間の窓：9/27より前・窓より古い日は書かない（過去分の一斉表示をしない）");
+  {
+    const logs = { u1: logsOf(jstMs(2026, 9, 26, 12), jstMs(2026, 9, 27, 12), jstMs(2026, 10, 3, 12), jstMs(2026, 10, 4, 12), jstMs(2026, 10, 10, 12)) };
+    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs, now: jstMs(2026, 10, 10, 20) });
+    await push(ctx);
+    const keys = Object.keys(docs.get(DQ_PATH).kyotsuMathAuto).sort();
+    check("13-1 10/10 の窓は 10/4〜10/10。10/4 と 10/10 だけが書かれる", JSON.stringify(keys) === JSON.stringify(["2026-10-04", "2026-10-10"]), keys);
+  }
+
+  console.log("\n[14] 増加のみ：既存が同じか大きければ書かない・減らさない");
+  {
+    const mk = (count) => ({ "2026-09-28": { date: "2026-09-28", source: "kyotsu-math", count, updatedAt: 1 } });
+    const logs = { u1: logsOf(...times(8, jstMs(2026, 9, 28, 22, 0))) };
+    // 既存の方が大きい（別端末の記録・ログの整理で今の集計が少なく見える場合）
+    {
+      const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mk(10) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      check("14-1 既存10 > 集計8 → 書かない・10のまま", dqWrites(writes).length === 0 && docs.get(DQ_PATH).kyotsuMathAuto["2026-09-28"].count === 10);
+    }
+    // 同数
+    {
+      const { ctx, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mk(8) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      check("14-2 既存8 = 集計8 → 書かない", dqWrites(writes).length === 0);
+    }
+    // 既存の方が小さい
+    {
+      const { ctx, docs } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mk(5) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      check("14-3 既存5 < 集計8 → 8に更新", docs.get(DQ_PATH).kyotsuMathAuto["2026-09-28"].count === 8);
+    }
+  }
+
+  console.log("\n[15] 通信を減らす：差分が無ければ再読み込みしない・増えたときだけ読む");
+  {
+    const logs = { u1: logsOf(...times(3, jstMs(2026, 9, 29, 10))) };
+    const { ctx, writes, state } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    await push(ctx);
+    const afterFirst = state.getDocCalls;
+    await push(ctx);
+    await push(ctx);
+    check("15-1 最初の1回だけgetDoc（同じ件数の再実行ではgetDocしない）", afterFirst === 1 && state.getDocCalls === 1, state.getDocCalls);
+    logs.u1 = logsOf(...times(4, jstMs(2026, 9, 29, 10)));
+    await push(ctx);
+    check("15-2 件数が増えたらgetDocして書く", state.getDocCalls === 2 && dqWrites(writes).length === 2, { calls: state.getDocCalls, writes: dqWrites(writes).length });
+    // 既存の方が大きいと分かった日は、記憶して以後getDocしない
+    const c2 = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: { "2026-09-29": { date: "2026-09-29", source: "kyotsu-math", count: 9, updatedAt: 1 } } }, uid: CHILD_UID, unitLogs: logs });
+    await push(c2.ctx); await push(c2.ctx);
+    check("15-3 既存9 > 集計4 と分かったら、以後は読まない（1回だけ）", c2.state.getDocCalls === 1 && dqWrites(c2.writes).length === 0, c2.state.getDocCalls);
+  }
+
+  console.log("\n[16] 通信エラーでも例外を投げない・何も書かない");
+  {
+    const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: { u1: logsOf(jstMs(2026, 9, 29, 10)) }, getDocThrows: true });
+    let threw = false;
+    try { await push(ctx); } catch (e) { threw = true; }
+    check("16-1 pushは例外を外に出さない", !threw);
+    check("16-2 何も書かれない", dqWrites(writes).length === 0 && !docs.get(DQ_PATH).kyotsuMathAuto);
+    const r = await vm.runInContext("backfillDailyQuestLogs()", ctx);
+    check("16-3 backfillはok:falseを返す", r.ok === false && /network/.test(r.reason), r);
+  }
+
+  console.log("\n[17] backfill：fromDay を指定したときだけ、それより前も反映（既定は期間内のみ）");
+  {
+    const logs = { u1: logsOf(jstMs(2026, 9, 2, 10), jstMs(2026, 9, 28, 10)) };
+    const a = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    await vm.runInContext("backfillDailyQuestLogs()", a.ctx);
+    check("17-1 既定：9/2は書かれず9/28だけ", Object.keys(a.docs.get(DQ_PATH).kyotsuMathAuto).join() === "2026-09-28");
+    const b = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    await vm.runInContext(`backfillDailyQuestLogs({ fromDay: "2026-09-01" })`, b.ctx);
+    check("17-2 fromDay指定：9/2も書かれる", Object.keys(b.docs.get(DQ_PATH).kyotsuMathAuto).sort().join() === "2026-09-02,2026-09-28");
+    const c = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    await vm.runInContext(`backfillDailyQuestLogs({ fromDay: "yesterday" })`, c.ctx);
+    check("17-3 不正なfromDayは無視して既定の期間になる", Object.keys(c.docs.get(DQ_PATH).kyotsuMathAuto).join() === "2026-09-28");
+  }
+
+  console.log("\n[18] 純関数 planKyotsuAutoUpdates");
+  {
+    const { ctx } = makeContext({});
+    const plan = (existing, counts) => JSON.parse(vm.runInContext(`JSON.stringify(planKyotsuAutoUpdates(${JSON.stringify(existing)}, ${JSON.stringify(counts)}, 123))`, ctx));
+    const u = plan({ "2026-09-28": { count: 3 }, "2026-09-29": { count: 5 } }, { "2026-09-27": 2, "2026-09-28": 3, "2026-09-29": 4, "2026-09-30": 0 });
+    check("18-1 新規の日だけ書く（同数・減少・0件は書かない）", JSON.stringify(Object.keys(u)) === JSON.stringify(["2026-09-27"]), u);
+    check("18-2 エントリの形", JSON.stringify(u["2026-09-27"]) === JSON.stringify({ date: "2026-09-27", source: "kyotsu-math", count: 2, updatedAt: 123 }), u);
+    check("18-3 existingが空・未定義でも動く", Object.keys(plan({}, { "2026-09-28": 1 })).length === 1 && Object.keys(plan(null, { "2026-09-28": 1 })).length === 1);
+  }
+
+  console.log("\n[19] buildSummary：サマリーの3項目は従来どおり、perDayが追加される");
+  {
+    const { ctx } = makeContext({ uid: CHILD_UID, unitLogs: { u1: logsOf(jstMs(2026, 9, 28, 10), jstMs(2026, 9, 29, 9), jstMs(2026, 9, 29, 11)), u2: [{ nothing: true }, { timestamp: "x" }] } });
+    const s = JSON.parse(vm.runInContext("JSON.stringify(buildSummary())", ctx));
+    check("19-1 totalCount=3・todayCount=2（timestampが数値でないログは数えない）", s.totalCount === 3 && s.todayCount === 2, s);
+    check("19-2 lastStudiedAt は最新の回答時刻", s.lastStudiedAt === jstMs(2026, 9, 29, 11), s);
+    check("19-3 perDay は日別の件数", JSON.stringify(s.perDay) === JSON.stringify({ "2026-09-28": 1, "2026-09-29": 2 }), s.perDay);
+  }
+
+  console.log("\n[20] pushSummary が書くサマリーのフィールドに perDay を含めない");
+  {
+    const m = src.match(/async function pushSummary\(gen\) \{[\s\S]*?\n\}/);
+    check("20-1 pushSummary の setDoc は lastStudiedAt / todayCount / totalCount / updatedAt / w / client だけ", !!m && !/perDay/.test(m[0]) && /pushDailyQuestAuto\(s, gen\)/.test(m[0]), m && m[0]);
   }
 
   console.log(`\n合計: ${passed}件成功 / ${failed}件失敗`);

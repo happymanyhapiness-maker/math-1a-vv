@@ -164,6 +164,10 @@ function readers(ver) {
     summary: async (store, now) => {
       const body = slice(sync, "function unitKeys", "/* データの「新しさ」") +
         slice(sync, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
+        // git HEAD の旧版には新しい自動記録の関数が無い。あるときだけ足す（旧版と作業中の版を同じ道具で比べるため）
+        (sync.includes("function dailyQuestWindowStart")
+          ? "const ctxGen = 0, alive = () => true;\nlet dqAutoCache = {};\n" + slice(sync, "function dailyQuestWindowStart", "async function pushDailyQuestAuto")
+          : "") +
         slice(sync, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\n" +
         "return { buildSummary, backfillDailyQuestLogs };";
       const dq = fakeDailyQuestDoc();
@@ -173,9 +177,14 @@ function readers(ver) {
         body)(fakeLS(st), UNIT_META, "kyotsu_app_v14_", g, { uid: "x" }, () => false, () => true, () => "x",
         dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, sns.ownPrefixNow, sns.NS);
-      const s = f.buildSummary();
-      await f.backfillDailyQuestLogs();
-      const perDay = dqPerDay(dq.written);
+      const full = f.buildSummary();
+      // 比べるのはサマリーとして書く3項目だけ（新しい版の buildSummary が返す perDay は、自動記録の再集計用の追加項目）
+      const s = { lastStudiedAt: full.lastStudiedAt, todayCount: full.todayCount, totalCount: full.totalCount };
+      await f.backfillDailyQuestLogs({ fromDay: "1970-01-01" });
+      // 新しい版は「今日より先の日」を書かない（端末の時計ずれ対策）。テストデータには擬似時計の「今」より未来のログがあるので、
+      // 旧版・新版とも「今日以前の日」だけを比べる
+      const todayKey = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const perDay = Object.fromEntries(Object.entries(dqPerDay(dq.written)).filter(([k]) => k <= todayKey));
       return { summary: s, perDay };
     }
   };

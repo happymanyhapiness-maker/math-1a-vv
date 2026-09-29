@@ -256,12 +256,13 @@ function unit(answerLog, extra, statsExtra) {
       const dq = fakeDailyQuestDoc();
       const f = new Function("localStorage", "UNIT_META", "PREFIX", "globalThis", "currentUser", "isGuardian", "isLearner", "targetUid", "getDoc", "setDoc", "doc", "db", "serverTimestamp", "Date", "ownPrefixNow", "NS",
         slice(SYNC, "function unitKeys", "/* データの「新しさ」") + slice(SYNC, "function todayKeyJST", "/* =========================================================\n   plannerの「今日のクエスト」") +
+        "const ctxGen = 0, alive = () => true;\nlet dqAutoCache = {};\n" + slice(SYNC, "function dailyQuestWindowStart", "async function pushDailyQuestAuto") +
         slice(SYNC, "async function backfillDailyQuestLogs", "\n  } catch (e) {") + "\n  } catch (e) { throw e; }\n}\nreturn { buildSummary, backfillDailyQuestLogs };")(
         fakeLS(store), UNIT_META_MINI, "kyotsu_app_v14_", { LogArchive: LA }, { uid: "x" }, () => false, () => true, () => "x",
         dq.getDoc, dq.setDoc, () => ({}), {}, () => 0,
         class extends Date { constructor(...a) { if (a.length) super(...a); else super(now); } static now() { return now; } }, require("./test-context.js").syncNS(store).ownPrefixNow, require("./test-context.js").syncNS(store).NS);
       const summary = f.buildSummary();
-      await f.backfillDailyQuestLogs();
+      await f.backfillDailyQuestLogs({ fromDay: "1970-01-01" });
       return {
         calendar: mk("calendar.js", '"use strict";', "var dayMap = buildDayMap();", "buildDayMap()"),
         progress: mk("progress.js", '"use strict";', "/* ---------- 日付表示", "collectUnitProgress()").find((x) => x.unit === "keiryo"),

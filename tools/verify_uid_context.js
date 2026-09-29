@@ -691,6 +691,9 @@ const setup = () => { const clock = { now: Date.UTC(2026, 8, 20, 1) }; const clo
     // 本人：これまでどおり units・summary・dailyquest-logs に同期する
     {
       const { clock, cloud } = setup();
+      // 自動記録（kyotsuMathAuto）の再集計は 2026-09-27 以降の日だけが対象（firebase-sync.js の dailyQuestWindowStart の MIN_DAY）。
+      // setup() の既定の日付（9/20）のままだと対象外になるので、この本人ブロックだけ対象期間内の日付から始める
+      clock.now = Date.UTC(2026, 8, 30, 1);
       cloud.store[DQ(CHILD)] = { data: "{}" };
       const d = makeDevice(cloud, clock, "C");
       await d.start(); await d.login(CHILD);
