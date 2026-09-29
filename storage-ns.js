@@ -16,7 +16,7 @@
 (function (root) {
   "use strict";
 
-  var CLIENT_VERSION = "8a-2";               // 同期欄に表示し、学習サマリーにも書く（rollout の確認用）
+  var CLIENT_VERSION = "8a-3";               // 同期欄に表示し、学習サマリーにも書く（rollout の確認用）
   var WRITER_MARKER = "kyotsu-8a";           // Phase 8A 以降のクライアントが単元・サマリーの書き込みに付ける固定値
   var USER_PREFIX = "kyotsu_app_v15_u_";
   var GUEST_PREFIX = "kyotsu_app_v15_g_";

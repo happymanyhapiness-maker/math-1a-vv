@@ -320,7 +320,16 @@ async function run() {
     {
       const { ctx, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mk(8) }, uid: CHILD_UID, unitLogs: logs });
       await push(ctx);
-      check("14-2 既存8 = 集計8 → 書かない", dqWrites(writes).length === 0);
+      const w = dqWrites(writes);
+      check("14-2 既存8（内訳なし）= 集計8 → 件数は変えず、内訳だけを付けて書く（同数で内訳が無い日の補完）",
+        w.length === 1 && w[0].data.kyotsuMathAuto["2026-09-28"].count === 8 && !!w[0].data.kyotsuMathAuto["2026-09-28"].breakdown, w);
+    }
+    // 同数で、既存に有効な内訳がある → 書かない
+    {
+      const withB = { "2026-09-28": { date: "2026-09-28", source: "kyotsu-math", count: 8, updatedAt: 1, breakdown: { normal: 8, review: 0 } } };
+      const { ctx, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: withB }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      check("14-2b 既存8（有効な内訳あり）= 集計8 → 書かない", dqWrites(writes).length === 0);
     }
     // 既存の方が小さい
     {
@@ -396,6 +405,88 @@ async function run() {
   {
     const m = src.match(/async function pushSummary\(gen\) \{[\s\S]*?\n\}/);
     check("20-1 pushSummary の setDoc は lastStudiedAt / todayCount / totalCount / updatedAt / w / client だけ", !!m && !/perDay/.test(m[0]) && /pushDailyQuestAuto\(s, gen\)/.test(m[0]), m && m[0]);
+  }
+
+  // ================= 内訳（breakdown:{normal, review}） =================
+  const modeLog = (t, mode) => ({ timestamp: t, mode });
+  const D28 = jstMs(2026, 9, 28, 22, 0);
+  const mkEntry = (count, breakdown) => ({ "2026-09-28": Object.assign({ date: "2026-09-28", source: "kyotsu-math", count, updatedAt: 1 }, breakdown ? { breakdown } : {}) });
+
+  console.log("\n[21] 内訳：復習（review / dueReview）とそれ以外（通常）に分ける。合計＝count。日付ごと");
+  {
+    const logs = {
+      u1: [modeLog(D28, "normal"), modeLog(D28 + 1, "review"), modeLog(D28 + 2, "dueReview"), modeLog(D28 + 3, "stage"), modeLog(D28 + 4, "tips"), { timestamp: D28 + 5 }],
+      u2: [modeLog(jstMs(2026, 9, 29, 10), "review")]
+    };
+    const { ctx, docs } = makeContext({ initialDoc: { data: "{}" }, uid: CHILD_UID, unitLogs: logs });
+    const sum = JSON.parse(vm.runInContext("JSON.stringify(buildSummary())", ctx));
+    check("21-1 buildSummary.perDayReview は日別の復習件数（review と dueReview だけ）", JSON.stringify(sum.perDayReview) === JSON.stringify({ "2026-09-28": 2, "2026-09-29": 1 }), sum.perDayReview);
+    await push(ctx);
+    const auto = docs.get(DQ_PATH).kyotsuMathAuto;
+    check("21-2 9/28：count 6、内訳 通常4・復習2（mode の無い・stage・tips・normal は通常）",
+      auto["2026-09-28"].count === 6 && JSON.stringify(auto["2026-09-28"].breakdown) === JSON.stringify({ normal: 4, review: 2 }), auto["2026-09-28"]);
+    check("21-3 9/29：count 1、内訳 通常0・復習1", auto["2026-09-29"].count === 1 && JSON.stringify(auto["2026-09-29"].breakdown) === JSON.stringify({ normal: 0, review: 1 }), auto["2026-09-29"]);
+    const ps = (src.match(/async function pushSummary\(gen\) \{[\s\S]*?\n\}/) || [""])[0];
+    check("21-4 サマリー(kyotsu-math-summary)に perDay / perDayReview は入らない", ps.length > 0 && !/perDay/.test(ps), ps);
+  }
+
+  console.log("\n[22] 内訳の書き換え規則：増えたら内訳ごと置き換え・同数で内訳無しなら補完・同数で有効な内訳があれば書かない・減らさない");
+  {
+    const logs = { u1: [...times(6, D28).map(t => modeLog(t, "normal")), ...times(2, D28 + 100000).map(t => modeLog(t, "review"))] };   // 8問（通常6・復習2）
+    {
+      const { ctx, docs } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mkEntry(5, { normal: 5, review: 0 }) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      const e = docs.get(DQ_PATH).kyotsuMathAuto["2026-09-28"];
+      check("22-1 既存5（内訳あり）→ 8：count 8・内訳は新しい値（通常6・復習2）に置き換わる", e.count === 8 && JSON.stringify(e.breakdown) === JSON.stringify({ normal: 6, review: 2 }), e);
+    }
+    {
+      const { ctx, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mkEntry(10) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      check("22-2 既存10 > 集計8（内訳なし）→ 書かない（減らさない・内訳の補完もしない）", dqWrites(writes).length === 0);
+    }
+    for (const bad of [{ normal: 5, review: 2 }, { normal: 7.5, review: 0.5 }, { normal: -1, review: 9 }, { normal: 8 }, "x", []]) {
+      const { ctx, docs } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mkEntry(8, bad) }, uid: CHILD_UID, unitLogs: logs });
+      await push(ctx);
+      const e = docs.get(DQ_PATH).kyotsuMathAuto["2026-09-28"];
+      check("22-3 同数8で既存の内訳が無効(" + JSON.stringify(bad) + ") → 有効な内訳に直す", e.count === 8 && JSON.stringify(e.breakdown) === JSON.stringify({ normal: 6, review: 2 }), e);
+    }
+    {
+      const old = { "2026-09-02": { date: "2026-09-02", source: "kyotsu-math", count: 3, updatedAt: 1 } };
+      const { ctx, docs, writes } = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: old }, uid: CHILD_UID, unitLogs: { u1: times(3, jstMs(2026, 9, 2, 10)).map(t => modeLog(t, "review")) } });
+      await push(ctx);
+      await vm.runInContext("backfillDailyQuestLogs()", ctx);
+      check("22-4 窓の外の過去日（9/2）は内訳の補完もしない（過去分の書き換えをしない）", dqWrites(writes).length === 0 && !docs.get(DQ_PATH).kyotsuMathAuto["2026-09-02"].breakdown);
+      await vm.runInContext('backfillDailyQuestLogs({ fromDay: "2026-09-01" })', ctx);
+      check("22-5 fromDay を明示したときだけ補完される（件数は変わらない）",
+        !!docs.get(DQ_PATH).kyotsuMathAuto["2026-09-02"].breakdown && docs.get(DQ_PATH).kyotsuMathAuto["2026-09-02"].count === 3);
+    }
+  }
+
+  console.log("\n[23] 通信を減らす：内訳を補完したあとは再読み込みしない");
+  {
+    const logs = { u1: times(4, D28).map(t => modeLog(t, "review")) };
+    const a = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mkEntry(4) }, uid: CHILD_UID, unitLogs: logs });
+    await push(a.ctx); await push(a.ctx); await push(a.ctx);
+    check("23-1 補完の1回だけ getDoc・書き込み（以後は再実行しても読まない・書かない）", a.state.getDocCalls === 1 && dqWrites(a.writes).length === 1, { calls: a.state.getDocCalls, writes: dqWrites(a.writes).length });
+    const b = makeContext({ initialDoc: { data: "{}", kyotsuMathAuto: mkEntry(4, { normal: 0, review: 4 }) }, uid: CHILD_UID, unitLogs: logs });
+    await push(b.ctx); await push(b.ctx);
+    check("23-2 別端末が先に有効な内訳つきで書いていた日は、読むだけで書かない（1回だけ読む）", b.state.getDocCalls === 1 && dqWrites(b.writes).length === 0, b.state.getDocCalls);
+  }
+
+  console.log("\n[24] 純関数 planKyotsuAutoUpdates（内訳）");
+  {
+    const { ctx } = makeContext({});
+    const plan = (existing, counts, reviews) => JSON.parse(vm.runInContext(
+      "JSON.stringify(planKyotsuAutoUpdates(" + JSON.stringify(existing) + ", " + JSON.stringify(counts) + ", 7" + (reviews === undefined ? "" : ", " + JSON.stringify(reviews)) + "))", ctx));
+    const u1 = plan({}, { "2026-09-28": 8 }, { "2026-09-28": 2 });
+    check("24-1 内訳 通常6・復習2", JSON.stringify(u1["2026-09-28"].breakdown) === JSON.stringify({ normal: 6, review: 2 }), u1);
+    check("24-2 reviews を渡さない従来の呼び方は内訳なし・同数の補完もしない",
+      !plan({}, { "2026-09-28": 8 })["2026-09-28"].breakdown && Object.keys(plan({ "2026-09-28": { count: 8 } }, { "2026-09-28": 8 })).length === 0);
+    check("24-3 復習が無い日（reviewsに無い）は 通常のみ・review 0", JSON.stringify(plan({}, { "2026-09-28": 3 }, {})["2026-09-28"].breakdown) === JSON.stringify({ normal: 3, review: 0 }));
+    for (const bad of [9, -1, 1.5, "2"]) {
+      const u = plan({}, { "2026-09-28": 8 }, { "2026-09-28": bad });
+      check("24-4 復習件数が不正(" + JSON.stringify(bad) + ") → 内訳を付けない（count だけ書く）", !!u["2026-09-28"] && u["2026-09-28"].count === 8 && !u["2026-09-28"].breakdown, u);
+    }
   }
 
   console.log(`\n合計: ${passed}件成功 / ${failed}件失敗`);

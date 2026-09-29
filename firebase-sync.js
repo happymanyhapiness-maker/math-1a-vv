@@ -578,13 +578,14 @@ function countableLog(local) {
   return Array.isArray(local.state.answerLog) ? local.state.answerLog : [];
 }
 
-// perDay：JST日付キー → その日の回答数（全日分）。サマリー本体（Firestoreに書く3項目）には含めず、
-// デイリークエストの自動記録（kyotsuMathAuto）の再集計にだけ使う。
+// perDay：JST日付キー → その日の回答数（全日分）、perDayReview：そのうち復習の回答数。サマリー本体（Firestoreに書く3項目）には
+// 含めず、デイリークエストの自動記録（kyotsuMathAuto）の再集計にだけ使う。
 function buildSummary() {
   let lastStudiedAt = 0;
   let todayCount = 0;
   let totalCount = 0;
   const perDay = {};
+  const perDayReview = {};   // perDay のうち復習（mode が review / dueReview）の件数
   const today = todayKeyJST();
 
   unitKeys().forEach(unit => {
@@ -597,11 +598,12 @@ function buildSummary() {
       const jst = new Date(r.timestamp + 9 * 3600 * 1000);
       const key = jst.getUTCFullYear() + "-" + String(jst.getUTCMonth() + 1).padStart(2, "0") + "-" + String(jst.getUTCDate()).padStart(2, "0");
       perDay[key] = (perDay[key] || 0) + 1;
+      if (r.mode === "review" || r.mode === "dueReview") perDayReview[key] = (perDayReview[key] || 0) + 1;
       if (key === today) todayCount++;
     });
   });
 
-  return { lastStudiedAt, todayCount, totalCount, perDay };
+  return { lastStudiedAt, todayCount, totalCount, perDay, perDayReview };
 }
 
 /* =========================================================
@@ -636,30 +638,40 @@ function dailyQuestWindowStart() {
   return start < MIN_DAY ? MIN_DAY : start;
 }
 
-// existing：dailyquest-logs.kyotsuMathAuto（{ 日付: { count, ... } }）／counts：{ 日付: 件数 }
-// 書くべき日だけを { 日付: エントリ } で返す純関数。既存より増えた日だけ（同数・減少は書かない）。
-function planKyotsuAutoUpdates(existing, counts, nowMs) {
+// existing：dailyquest-logs.kyotsuMathAuto（{ 日付: { count, breakdown?, ... } }）／counts：{ 日付: 件数 }／reviews：{ 日付: 復習の件数 }（省略可）
+// 書くべき日だけを { 日付: エントリ } で返す純関数。件数は減らさない（減少は書かない）。
+//   ・既存より件数が増えた日：書く。reviews があれば内訳 breakdown:{normal, review}（合計＝count）を併記する
+//   ・同じ件数で、既存に有効な内訳が無い日：内訳だけを付けて書く（対象はここに渡された直近の日だけ。窓の外の過去日には触れない）
+//   ・同じ件数で、既存に有効な内訳がある日：書かない
+function planKyotsuAutoUpdates(existing, counts, nowMs, reviews) {
+  const validBreakdown = (b, count) => !!b && typeof b === "object" &&
+    Number.isInteger(b.normal) && Number.isInteger(b.review) && b.normal >= 0 && b.review >= 0 && b.normal + b.review === count;
   const updates = {};
   Object.keys(counts || {}).forEach(key => {
     const count = counts[key];
     if (!(count > 0)) return;
     const prev = existing && existing[key];
     const prevCount = Number(prev && prev.count) || 0;
-    if (count <= prevCount) return;
-    updates[key] = { date: key, source: "kyotsu-math", count, updatedAt: nowMs };
+    if (count < prevCount) return;
+    const rv = reviews ? reviews[key] || 0 : null;
+    const breakdown = (rv !== null && Number.isInteger(rv) && rv >= 0 && rv <= count) ? { normal: count - rv, review: rv } : null;
+    if (count === prevCount && !(breakdown && !validBreakdown(prev && prev.breakdown, prevCount))) return;
+    const e = { date: key, source: "kyotsu-math", count, updatedAt: nowMs };
+    if (breakdown) e.breakdown = breakdown;
+    updates[key] = e;
   });
   return updates;
 }
 
-// perDay：buildSummary().perDay。fromDay 〜 今日 の日だけを対象にする。
-async function syncKyotsuAuto(gen, perDay, fromDay) {
+// perDay / perDayReview：buildSummary() の同名の値。fromDay 〜 今日 の日だけを対象にする。
+async function syncKyotsuAuto(gen, perDay, fromDay, perDayReview) {
   const today = todayKeyJST();
   const counts = {};
   Object.keys(perDay || {}).forEach(k => { if (k >= fromDay && k <= today) counts[k] = perDay[k]; });
   const dayKeys = Object.keys(counts);
   if (dayKeys.length === 0) return { ok: true, updatedDays: 0, totalDaysFound: 0 };
   // すでに確認・書き込み済みの件数で足りているなら、通信しない（回答のたびに読み取りが走らないように）
-  if (Object.keys(planKyotsuAutoUpdates(dqAutoCache, counts, 0)).length === 0) {
+  if (Object.keys(planKyotsuAutoUpdates(dqAutoCache, counts, 0, perDayReview || {})).length === 0) {
     return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
   }
   const ref = doc(db, "dailyquest-logs", targetUid());
@@ -669,13 +681,13 @@ async function syncKyotsuAuto(gen, perDay, fromDay) {
   const existing = snap.data().kyotsuMathAuto || {};
   Object.keys(existing).forEach(k => {
     const c = Number(existing[k] && existing[k].count) || 0;
-    if (c > ((dqAutoCache[k] && dqAutoCache[k].count) || 0)) dqAutoCache[k] = { count: c };
+    if (!dqAutoCache[k] || c >= dqAutoCache[k].count) dqAutoCache[k] = { count: c, breakdown: existing[k] && existing[k].breakdown };
   });
-  const updates = planKyotsuAutoUpdates(existing, counts, Date.now());
+  const updates = planKyotsuAutoUpdates(existing, counts, Date.now(), perDayReview || {});
   const updatedDays = Object.keys(updates).length;
   if (updatedDays === 0) return { ok: true, updatedDays: 0, totalDaysFound: dayKeys.length };
   await setDoc(ref, { kyotsuMathAuto: updates }, { merge: true });
-  Object.keys(updates).forEach(k => { dqAutoCache[k] = { count: updates[k].count }; });
+  Object.keys(updates).forEach(k => { dqAutoCache[k] = { count: updates[k].count, breakdown: updates[k].breakdown }; });
   return { ok: true, updatedDays, totalDaysFound: dayKeys.length };
 }
 
@@ -684,7 +696,7 @@ async function pushDailyQuestAuto(s, gen) {
   if (gen === undefined) gen = ctxGen;
   if (!alive(gen)) return;
   try {
-    await syncKyotsuAuto(gen, s && s.perDay, dailyQuestWindowStart());
+    await syncKyotsuAuto(gen, s && s.perDay, dailyQuestWindowStart(), s && s.perDayReview);
   } catch (e) {
     console.warn("[sync] dailyquest push失敗", e);
   }
@@ -728,7 +740,8 @@ async function backfillDailyQuestLogs(opts) {
     ? opts.fromDay
     : dailyQuestWindowStart();
   try {
-    return await syncKyotsuAuto(gen, buildSummary().perDay, fromDay);
+    const s = buildSummary();
+    return await syncKyotsuAuto(gen, s.perDay, fromDay, s.perDayReview);
   } catch (e) {
     console.warn("[sync] backfill失敗", e);
     return { ok: false, reason: String(e) };
