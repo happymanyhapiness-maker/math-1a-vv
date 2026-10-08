@@ -1748,3 +1748,115 @@ body.exam-mode .main-layout{
   font-weight: 500;
 }
 .app-shell > .guardian-banner { margin: 8px 16px 0; }
+
+/* =========================
+   追加: お知らせ（ベル＋モーダル）（reco.js が注入）
+   モーダルの枠は .unit-strength-modal 系を共用。ここは reco 固有の部分だけ。
+========================= */
+.reco-bell {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.reco-bell[hidden] { display: none; }
+.reco-bell-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-sizing: content-box;
+}
+.reco-bell-dot[hidden] { display: none; }
+
+/* スマホ幅ではヘッダーが縦積みになるので、ベルだけ右上に重ねて 1 行増えないようにする */
+@media (max-width: 900px) {
+  .topbar.has-reco-bell { position: relative; }
+  .topbar.has-reco-bell .reco-bell {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+  }
+  .topbar.has-reco-bell .brand { padding-right: 46px; }
+}
+
+.reco-modal .unit-strength-modal-box { max-width: 480px; }
+.reco-date {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.reco-section { margin-bottom: 12px; }
+.reco-section-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.reco-text {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reco-editor {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+.reco-field {
+  display: block;
+  margin-top: 10px;
+}
+.reco-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.reco-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 110px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;   /* iOS で入力時に画面が拡大されないように */
+  line-height: 1.6;
+  resize: vertical;
+}
+.reco-count {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  text-align: right;
+  color: #6b7280;
+}
+.reco-count-over { color: #b91c1c; font-weight: 700; }
+.reco-status {
+  min-height: 1.4em;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.reco-status-ok { color: #166534; }
+.reco-status-ng { color: #b91c1c; }
+.reco-save { width: 100%; margin-top: 4px; }

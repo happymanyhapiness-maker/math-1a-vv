@@ -30,6 +30,7 @@
 | `verify_unanswered_session.js` | — | 「未挑戦の問題だけ」の対象リストをメモリだけで持つ変更の回帰テスト（Phase 7A-2c） | 同上 |
 | `verify_uid_context.js` | — | 学習データのアカウント分離（`storage-ns.js`）と context の世代管理、保護者表示の判定（`isGuardianCtx`）の回帰テスト（Phase 8A） | **`storage-ns.js`・`firebase-sync.js`・ログイン周りを触ったとき** |
 | `verify_kyotsu_math_auto.js` | — | 数学アプリ → デイリークエスト連携（kyotsuMathAuto 方式）の最小回帰テスト | **summary・デイリークエスト連携を触ったとき** |
+| `verify_reco.js` | — | お知らせ（ベル）`reco.js` の回帰テスト。「純粋な関数」の BEGIN/END の間だけを抜き出して、文字の掃除（制御文字・改行・U+2028/2029）、文字数/バイト数の数え方（絵文字含む）、日本時間の日付の境界、payload の読み書き、入力の検証（3000/1500文字）、最大入力が 19000 バイトに収まること、未読の印・更新日の表示を検査。あわせて静的チェック（innerHTML・eval 等が無い／回答履歴をコメント以外で読まない／index.html の script の順番と `?v=`／SDK の版が `firebase-sync.js` と同じ）。Firestore・DOM には触らない | **`reco.js`・お知らせ周りの `style.css`・`index.html` の script 行を触ったとき** |
 | `test-context.js` | — | テスト用の小道具（Auth 判定前は学習データを開かない app.js を、テストから context 確定済みにする） | 単体では走らせない（各 verify から使う） |
 
 ※ 高難度タスクの進め方（SKILLS.md）の正本は mdファイル/SKILLS.md（private repo kyotsu-math-docs）と high-effort-workflow スキル。public には置かない。
