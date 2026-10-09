@@ -2,8 +2,9 @@
 // verify_reco.js
 // お知らせ（ベル）reco.js の回帰テスト。
 //  ・reco.js の「純粋な関数」（BEGIN / END の間）だけを抜き出して vm で試す。DOM・Firebase・localStorage には触らない。
-//      cleanText / cpLen / utf8Len / jstDateKey / parsePayload / validateInput / buildPayload /
-//      versionKey / displayDate / savedAtMs
+//      cleanText / cleanUnit / cpLen / utf8Len / jstDateKey / parsePayload / validateInput / buildPayload /
+//      versionKey / displayDate / savedAtMs / shouldShowCard
+//    おすすめ単元（payload.unit・任意・30文字まで）と、旧データ（unit 無し）との互換もここで見る。
 //  ・静的チェック：reco.js に innerHTML / insertAdjacentHTML / eval / document.write 等が無いこと、
 //    回答履歴（answerLog / questionHistory）をコメント以外で読んでいないこと、
 //    index.html の script の順番（firebase-sync.js → reco.js）と ?v=、SDK の版が firebase-sync.js と同じこと。
@@ -52,17 +53,17 @@ function constLine(name) {
   if (!m) { console.log("❌ reco.js に const " + name + " が見つからない"); process.exit(1); }
   return m[0];
 }
-const consts = ["PAYLOAD_VERSION", "MAX_REVIEW", "MAX_NEXT", "MAX_PAYLOAD_BYTES"].map(constLine).join("\n");
+const consts = ["PAYLOAD_VERSION", "MAX_REVIEW", "MAX_NEXT", "MAX_UNIT", "MAX_PAYLOAD_BYTES"].map(constLine).join("\n");
 const sandbox = { TextEncoder };
 const R = vm.runInNewContext(
-  consts + "\n" + pureBlock + "\n({ cleanText, cpLen, utf8Len, jstDateKey, formatDateLabel, parsePayload, validateInput, buildPayload, versionKey, displayDate, savedAtMs, PAYLOAD_VERSION, MAX_REVIEW, MAX_NEXT, MAX_PAYLOAD_BYTES });",
+  consts + "\n" + pureBlock + "\n({ cleanText, cleanUnit, cpLen, utf8Len, jstDateKey, formatDateLabel, parsePayload, validateInput, buildPayload, versionKey, displayDate, savedAtMs, shouldShowCard, PAYLOAD_VERSION, MAX_REVIEW, MAX_NEXT, MAX_UNIT, MAX_PAYLOAD_BYTES });",
   sandbox
 );
 
 section("抜き出した範囲は純粋（DOM・Firebase・保存領域に触れない）");
 ok(!/\b(document|window|localStorage|sessionStorage|getDoc|setDoc|doc\(|fetch|getAuth|getApp)\b/.test(pureBlock.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")),
   "純粋な関数の範囲に document / window / localStorage / Firebase 呼び出しが無い");
-eq([R.PAYLOAD_VERSION, R.MAX_REVIEW, R.MAX_NEXT, R.MAX_PAYLOAD_BYTES], [2, 3000, 1500, 19000], "定数: version 2 / 3000 / 1500 / 19000");
+eq([R.PAYLOAD_VERSION, R.MAX_REVIEW, R.MAX_NEXT, R.MAX_UNIT, R.MAX_PAYLOAD_BYTES], [2, 3000, 1500, 30, 19000], "定数: version 2 / 3000 / 1500 / unit 30 / 19000");
 
 /* ---------- cleanText ---------- */
 section("cleanText");
@@ -113,7 +114,7 @@ eq(R.jstDateKey(0), "1970-01-01", "エポック（JST 9:00）");
 section("parsePayload");
 const NOW = U(2026, 9, 7, 16, 0, 0);   // JST 2026-10-08
 const rt = R.parsePayload(R.buildPayload("ダミー文A\nダミー文B", "ダミー文C", NOW));
-eq(rt, { review: "ダミー文A\nダミー文B", next: "ダミー文C", updatedAt: "2026-10-08" }, "往復: buildPayload → parsePayload で同じ内容（改行も保持）");
+eq(rt, { review: "ダミー文A\nダミー文B", next: "ダミー文C", updatedAt: "2026-10-08", unit: "" }, "往復: buildPayload → parsePayload で同じ内容（改行も保持）");
 const mk = (o) => JSON.stringify(o);
 eq(R.parsePayload(mk({ version: 1, review: "x", next: "y" })), null, "version 1 は未登録扱い");
 eq(R.parsePayload(mk({ version: 3, review: "x", next: "y" })), null, "version 3 は未登録扱い");
@@ -121,12 +122,12 @@ eq(R.parsePayload(mk({ version: "2", review: "x", next: "y" })), null, "version 
 eq(R.parsePayload(mk({ review: "x", next: "y" })), null, "version 無しは未登録扱い");
 eq(R.parsePayload(mk({ version: 2, review: "", next: "" })), null, "両方空は未登録扱い");
 eq(R.parsePayload(mk({ version: 2, review: " \n\t ", next: "  " })), null, "両方空白だけも未登録扱い");
-eq(R.parsePayload(mk({ version: 2, review: "x" })), { review: "x", next: "", updatedAt: "" }, "片方だけ（review のみ）は読める");
-eq(R.parsePayload(mk({ version: 2, next: "y" })), { review: "", next: "y", updatedAt: "" }, "片方だけ（next のみ）は読める");
-eq(R.parsePayload(mk({ version: 2, review: 5, next: "ok" })), { review: "", next: "ok", updatedAt: "" }, "文字列でない review は空扱い");
+eq(R.parsePayload(mk({ version: 2, review: "x" })), { review: "x", next: "", updatedAt: "", unit: "" }, "片方だけ（review のみ）は読める");
+eq(R.parsePayload(mk({ version: 2, next: "y" })), { review: "", next: "y", updatedAt: "", unit: "" }, "片方だけ（next のみ）は読める");
+eq(R.parsePayload(mk({ version: 2, review: 5, next: "ok" })), { review: "", next: "ok", updatedAt: "", unit: "" }, "文字列でない review は空扱い");
 eq(R.parsePayload(mk({ version: 2, review: "x", next: "y", updatedAt: "2026-10-8" })).updatedAt, "", "updatedAt の形が違えば空");
 eq(R.parsePayload(mk({ version: 2, review: "x", next: "y", updatedAt: "2026-10-08" })).updatedAt, "2026-10-08", "updatedAt が YYYY-MM-DD なら保持");
-eq(R.parsePayload(mk({ version: 2, review: "a" + ch(7) + "b", next: "c" + LS + "d" })), { review: "ab", next: "cd", updatedAt: "" }, "読むときにも制御文字を除去");
+eq(R.parsePayload(mk({ version: 2, review: "a" + ch(7) + "b", next: "c" + LS + "d" })), { review: "ab", next: "cd", updatedAt: "", unit: "" }, "読むときにも制御文字を除去");
 eq(R.parsePayload(mk({ version: 2, review: "<img src=x onerror=alert(1)>", next: "y" })).review, "<img src=x onerror=alert(1)>", "HTML っぽい文は加工せずそのまま（描画側が textContent）");
 ["{bad", "", "null", "[]", "123", "\"str\"", "true", "{\"version\":2"].forEach((s) => {
   eq(R.parsePayload(s), null, "壊れた/想定外のJSON " + JSON.stringify(s) + " は null");
@@ -171,7 +172,7 @@ maxCases.forEach(function (c) {
   ok(bytes <= LIMIT, c[0] + ": payload が " + LIMIT + " バイト以下", bytes + "バイト");
   ok(bytes < 20000, c[0] + ": Rules の size() < 20000 にバイト数でも収まる", bytes + "バイト");
   ok(p.length < 20000, c[0] + ": Rules の size() < 20000 に UTF-16 長でも収まる", p.length);
-  eq(R.parsePayload(p), { review, next, updatedAt: "2026-10-08" }, c[0] + ": 往復で同じ内容");
+  eq(R.parsePayload(p), { review, next, updatedAt: "2026-10-08", unit: "" }, c[0] + ": 往復で同じ内容");
 });
 const bp = JSON.parse(R.buildPayload("r", "n", NOW));
 eq(Object.keys(bp).sort(), ["next", "review", "updatedAt", "version"], "payload のキーは version / updatedAt / review / next の4つだけ");
@@ -214,6 +215,107 @@ eq(R.savedAtMs({ toMillis: function () { return 0; } }), 0, "toMillis() が 0 �
 eq([R.savedAtMs(null), R.savedAtMs(undefined)], [null, null], "null / undefined は null（Console で savedAt 無し）");
 eq([R.savedAtMs({}), R.savedAtMs("2026-10-08"), R.savedAtMs(5), R.savedAtMs({ toMillis: "x" })], [null, null, null, null], "timestamp 型でないもの（空 object・文字列・数値・toMillis が関数でない）は null");
 eq(R.savedAtMs(new Date(0)), null, "Date は toMillis を持たないので null");
+
+/* ---------- おすすめ単元（unit） ---------- */
+// テストデータはダミー名だけ（実際の単元名・学習内容は書かない）
+const UA = "ダミー単元A";
+section("cleanUnit");
+eq(R.cleanUnit(UA), UA, "ふつうの単元名はそのまま");
+eq(R.cleanUnit("  " + UA + "  "), UA, "前後の空白を落とす");
+eq(R.cleanUnit("ダミー\n単元"), "ダミー 単元", "改行は空白にする（1行にする）");
+eq(R.cleanUnit("ダミー\r\n単元\r別"), "ダミー 単元 別", "\\r\\n・\\r も空白にする");
+eq(R.cleanUnit("ダミー\t単元"), "ダミー 単元", "タブは空白にする");
+eq(R.cleanUnit("ダミー" + LS + "単元" + PS + "別"), "ダミー 単元 別", "U+2028 / U+2029 は空白にする");
+eq(R.cleanUnit("a   b \n\n c"), "a b c", "続く空白・改行は空白1つにまとめる");
+eq(R.cleanUnit("a" + ch(0) + "b" + ch(7) + "c" + ch(0x1b) + "d" + ch(0x7f) + "e" + ch(0x80) + "f" + ch(0x9f) + "g"), "abcdefg", "制御文字（C0・DEL・C1）を除去");
+eq(R.cleanUnit("a" + ch(0x0b) + "b" + ch(0x0c) + "c" + ch(0x0e) + "d" + ch(0x1f) + "e"), "abcde", "VT・FF・SO・US も除去");
+eq(R.cleanUnit("ダミー　単元"), "ダミー　単元", "全角スペースはそのまま");
+eq(R.cleanUnit("<b>x</b>&amp;"), "<b>x</b>&amp;", "HTML っぽい文字は加工しない（描画側が textContent）");
+eq(R.cleanUnit("⭐" + UA), "⭐" + UA, "絵文字はそのまま");
+eq([R.cleanUnit(null), R.cleanUnit(undefined), R.cleanUnit(5), R.cleanUnit({}), R.cleanUnit(["x"])], ["", "", "", "", ""], "文字列でなければ空文字");
+eq(R.cleanUnit(" \n\t "), "", "空白だけなら空文字");
+
+section("validateInput（unit は任意・30文字）");
+eq(R.validateInput("x", "y"), null, "unit を渡さなくても通る（今までの呼び方）");
+eq(R.validateInput("x", "y", ""), null, "unit が空でも通る（任意）");
+eq(R.validateInput("x", "y", UA), null, "unit ありでも通る");
+eq(R.validateInput("x", "y", A.repeat(30)), null, "ちょうど 30 文字は通る");
+ok(R.validateInput("x", "y", A.repeat(31)) !== null, "31 文字はエラー");
+ok(/30/.test(R.validateInput("x", "y", A.repeat(31))), "超過のメッセージに上限 30 が入る");
+ok(/おすすめ単元/.test(R.validateInput("x", "y", A.repeat(31))), "超過のメッセージに項目名が入る");
+eq(R.validateInput(emoji(0x1f600).repeat(30), "y", emoji(0x1f600).repeat(30)), null, "絵文字ちょうど 30 個は通る（コードポイントで数える）");
+ok(R.validateInput("x", "y", emoji(0x1f600).repeat(31)) !== null, "絵文字 31 個はエラー");
+ok(R.validateInput("", "y", UA) !== null && R.validateInput("x", "", UA) !== null, "unit があっても review / next が空ならエラー（今までどおり両方必須）");
+ok(/3000/.test(R.validateInput(A.repeat(3001), "y", A.repeat(31))), "review 超過があれば review のメッセージを先に出す");
+
+section("buildPayload / parsePayload（unit）");
+// 過去に登録された形（unit が無い）。このまま読めて、unit 無しで組み立てても同じ文字列になること
+const LEGACY = "{\"version\":2,\"updatedAt\":\"2026-10-08\",\"review\":\"ダミー文A\",\"next\":\"ダミー文B\"}";
+eq(R.parsePayload(LEGACY), { review: "ダミー文A", next: "ダミー文B", updatedAt: "2026-10-08", unit: "" }, "旧データ（unit 無し）: review / next / updatedAt は今までどおり、unit は空");
+eq(R.buildPayload("ダミー文A", "ダミー文B", NOW), LEGACY, "unit 無しで組み立てると、旧データと全く同じ文字列（キーも順番も同じ）");
+eq(R.buildPayload("ダミー文A", "ダミー文B", NOW, ""), LEGACY, "unit が空文字でもキーを入れない");
+eq(R.buildPayload("ダミー文A", "ダミー文B", NOW, " \n "), LEGACY, "unit が空白だけでもキーを入れない");
+eq(R.buildPayload("ダミー文A", "ダミー文B", NOW, undefined), LEGACY, "unit が undefined でもキーを入れない");
+const withUnit = R.buildPayload("ダミー文A", "ダミー文B", NOW, UA);
+eq(JSON.parse(withUnit), { version: 2, updatedAt: "2026-10-08", review: "ダミー文A", next: "ダミー文B", unit: UA }, "unit ありの payload: 5つのキー、version は 2 のまま");
+eq(Object.keys(JSON.parse(withUnit)).sort(), ["next", "review", "unit", "updatedAt", "version"], "unit ありのキーは version / updatedAt / review / next / unit");
+eq(R.parsePayload(withUnit), { review: "ダミー文A", next: "ダミー文B", updatedAt: "2026-10-08", unit: UA }, "往復: unit を保存して読める");
+eq(JSON.parse(R.buildPayload("r", "n", NOW, "  ダミー\n単元  ")).unit, "ダミー 単元", "組み立てるときにも cleanUnit を通す");
+eq(R.parsePayload(R.buildPayload("r", "n", NOW, A.repeat(30))).unit, A.repeat(30), "ちょうど 30 文字は読める");
+eq(R.parsePayload(R.buildPayload("r", "n", NOW, E.repeat(30))).unit, E.repeat(30), "絵文字 30 個も読める");
+const mkU = (u) => mk({ version: 2, review: "x", next: "y", unit: u });
+eq(R.parsePayload(mkU(A.repeat(31))).unit, "", "31 文字（Console 手入力など）は空扱い＝カードを出さない");
+eq(R.parsePayload(mkU(E.repeat(31))).unit, "", "絵文字 31 個も空扱い");
+eq(R.parsePayload(mkU(A.repeat(31))), { review: "x", next: "y", updatedAt: "", unit: "" }, "unit が長すぎても、他の項目は今までどおり読める");
+[5, null, true, [], {}, ["x"], { a: 1 }].forEach(function (v) {
+  eq(R.parsePayload(mkU(v)).unit, "", "unit が文字列でない（" + JSON.stringify(v) + "）なら空");
+});
+eq(R.parsePayload(mkU("a" + ch(7) + "b" + ch(0x1b) + "c")).unit, "abc", "読むときにも制御文字を除去");
+eq(R.parsePayload(mkU("ダミー\n単元")).unit, "ダミー 単元", "読むときにも改行を空白にする");
+eq(R.parsePayload(mkU("  ")).unit, "", "空白だけの unit は空");
+eq(R.parsePayload(mkU("<img src=x onerror=alert(1)>")).unit, "<img src=x onerror=alert(1)>", "HTML っぽい unit は加工せずそのまま（描画側が textContent）");
+eq(R.parsePayload(mk({ version: 1, review: "x", next: "y", unit: UA })), null, "version 1 は unit があっても未登録扱い");
+eq(R.parsePayload(mk({ version: 3, review: "x", next: "y", unit: UA })), null, "version 3 は unit があっても未登録扱い");
+eq(R.parsePayload(mk({ version: 2, review: "", next: "", unit: UA })), null, "unit だけで review / next が空なら未登録扱い（カードもベルも出さない）");
+eq(R.parsePayload(mk({ version: 2, review: "x", next: "y", unit: UA, extra: "z" })), { review: "x", next: "y", updatedAt: "", unit: UA }, "知らないキーが混ざっていても無視して読める");
+
+// 最悪ケース（本文が上限いっぱい＋unit が 30 文字）でも 19000 バイトに収まる
+[
+  ["日本語", A.repeat(3000), "い".repeat(1500), "う".repeat(30)],
+  ["絵文字（1文字4バイト＝最悪）", E.repeat(3000), E.repeat(1500), E.repeat(30)],
+  ["エスケープされる文字（\\ と \"）", "\"\\".repeat(1500), "\"\\".repeat(750), "\"\\".repeat(15)]
+].forEach(function (c) {
+  const r = R.cleanText(c[1]), n = R.cleanText(c[2]), u = R.cleanUnit(c[3]);
+  ok(R.validateInput(r, n, u) === null, "unit 付き最大入力（" + c[0] + "）: validateInput を通る");
+  const p = R.buildPayload(r, n, NOW, u);
+  const bytes = R.utf8Len(p);
+  ok(bytes <= R.MAX_PAYLOAD_BYTES, "unit 付き最大入力（" + c[0] + "）: " + R.MAX_PAYLOAD_BYTES + " バイト以下", bytes + "バイト");
+  ok(bytes < 20000 && p.length < 20000, "unit 付き最大入力（" + c[0] + "）: Rules の size() < 20000 に収まる", bytes + "バイト / " + p.length);
+  eq(R.parsePayload(p), { review: r, next: n, updatedAt: "2026-10-08", unit: u }, "unit 付き最大入力（" + c[0] + "）: 往復で同じ内容");
+});
+console.log("  （参考）unit 付き最悪ケースの実サイズ: " + R.utf8Len(R.buildPayload(E.repeat(3000), E.repeat(1500), NOW, E.repeat(30))) + " バイト / 上限 " + LIMIT);
+
+section("shouldShowCard（次のおすすめカードを出す条件）");
+const dataOf = (unit) => ({ review: "ダミー文A", next: "ダミー文B", updatedAt: "", unit, savedMs: null, payload: "", key: "" });
+const stOf = (role, readOk, data) => ({ role, authUid: "u1", target: "t1", readOk, data });
+eq(R.shouldShowCard(stOf("learner", true, dataOf(UA))), true, "学習者・読めた・unit あり → 出す");
+eq(R.shouldShowCard(stOf("guardian", true, dataOf(UA))), true, "保護者・読めた・unit あり → 出す");
+eq(R.shouldShowCard(null), false, "st が無い（ゲスト・unauthorized・ログアウト）→ 出さない");
+eq(R.shouldShowCard(undefined), false, "st が undefined → 出さない");
+eq(R.shouldShowCard(stOf("learner", false, null)), false, "読み込み失敗・permission-denied（readOk=false, data=null）→ 出さない");
+eq(R.shouldShowCard(stOf("guardian", false, null)), false, "保護者でも読めていなければ出さない");
+eq(R.shouldShowCard(stOf("learner", true, null)), false, "未登録（読めたが data=null）→ 出さない");
+eq(R.shouldShowCard(stOf("guardian", true, null)), false, "保護者でも未登録なら出さない（ベルとは違う）");
+eq(R.shouldShowCard(stOf("learner", true, dataOf(""))), false, "旧データ（unit が空）→ 出さない");
+eq(R.shouldShowCard(stOf("guardian", true, dataOf(""))), false, "保護者でも unit が空なら出さない");
+eq(R.shouldShowCard(stOf("learner", false, dataOf(UA))), false, "readOk=false なら data があっても出さない（念のため）");
+eq(R.shouldShowCard(stOf("learner", true, { review: "x", next: "y" })), false, "unit のキーが無い data でも落ちずに出さない");
+eq(R.shouldShowCard(stOf("learner", true, dataOf(5))), false, "unit が文字列でなければ出さない");
+eq(R.shouldShowCard(stOf("learner", true, dataOf(null))), false, "unit が null なら出さない");
+// 実際の流れ：payload 文字列 → parsePayload → 出す／出さない
+eq(R.shouldShowCard(stOf("learner", true, R.parsePayload(LEGACY))), false, "旧データを読んだ結果 → カードを出さない");
+eq(R.shouldShowCard(stOf("learner", true, R.parsePayload(withUnit))), true, "unit ありのデータを読んだ結果 → カードを出す");
+eq(R.shouldShowCard(stOf("learner", true, R.parsePayload(mkU(A.repeat(31))))), false, "31 文字の unit を読んだ結果 → カードを出さない");
 
 /* ---------- 静的チェック: reco.js ---------- */
 section("静的チェック: reco.js");
@@ -285,6 +387,43 @@ ok(/getApp\(\)/.test(code) && /try\s*\{\s*app\s*=\s*getApp\(\)/.test(code), "get
 ok(/onAuthStateChanged\(/.test(code), "認証は onAuthStateChanged 経由");
 ok(/console\.warn/.test(code) && !/console\.error|throw\s/.test(code), "失敗は console.warn だけ（error・throw を使わない）");
 
+// 「次のおすすめ」カード（コメントを除いたコードで見る）
+function fnBody(name) {
+  const i = code.indexOf("function " + name + "(");
+  if (i < 0) return "";
+  const j = code.indexOf("\nfunction ", i + 1);
+  return code.slice(i, j < 0 ? code.length : j);
+}
+const cardFns = ["ensureCard", "updateCard", "removeCard"];
+cardFns.forEach(function (n) { ok(fnBody(n) !== "", "reco.js に " + n + " がある"); });
+const cardCode = cardFns.map(fnBody).join("\n");
+["markSeen", "seenKey", "isUnread", "reco-bell-dot", "lsSet", "lsGet", "writeCache", "localStorage"].forEach(function (w) {
+  ok(cardCode.indexOf(w) < 0, "カードの関数に " + w + " が無い（既読の扱い・赤い点なし）");
+});
+const ec = fnBody("ensureCard");
+ok(/getElementById\("unitCardList"\)/.test(ec), "カードは #unitCardList を基準に置く");
+ok(/parent\.insertBefore\(c,\s*list\)/.test(ec) && /list\.parentNode/.test(ec), "カードは #unitCardList の親に insertBefore で入れる（#unitCardList の外・直前）");
+ok(!/list\.(appendChild|insertBefore|prepend|append|replaceChildren)\b/.test(cardCode) && !/list\.(innerHTML|textContent)/.test(cardCode), "#unitCardList の中身には触らない（buildUnitSelectCards が作り直す領域）");
+ok(/c\.type\s*=\s*"button"/.test(ec) && /createElement\("button"\)/.test(ec), "カードは <button type=\"button\">");
+ok(/addEventListener\("click",\s*openModal\)/.test(ec), "カードの click は openModal（ベルと同じお知らせモーダル）");
+ok(!/selectUnit|UNIT_META|showUnitSelect|loadUnit|location/.test(cardCode), "カードは単元を開かない（selectUnit などを呼ばない）");
+const uc = fnBody("updateCard");
+ok(/shouldShowCard\(st\)/.test(uc), "updateCard は shouldShowCard(st) で出す／消すを決める");
+ok(/\.textContent\s*=\s*unit/.test(uc) && !/innerText|innerHTML/.test(uc), "単元名は textContent で入れる");
+ok(/c\.hidden\s*=\s*examActive\(\)/.test(uc), "出題中（examActive）はカードを隠す");
+ok(/function updateBell\(\)\s*\{\s*updateCard\(\);/.test(code), "updateBell の冒頭で updateCard() を呼ぶ（ベルの早期 return より前）");
+ok(/function onUser[\s\S]*?removeCard\(\);[\s\S]*?\n\}/.test(code), "onUser（ログイン状態の変化）でカードを消す");
+ok(/function removeCard\(\)/.test(code) && /removeChild\(c\)/.test(fnBody("removeCard")), "removeCard はカードを DOM から外す");
+
+// 登録欄の「おすすめ単元」
+ok(/"おすすめ単元（任意）"/.test(code), "登録欄に「おすすめ単元（任意）」がある");
+ok(/inp\.type\s*=\s*"text"/.test(code), "おすすめ単元は input type=\"text\"");
+ok(!/maxlength/i.test(code), "maxlength は付けない（cpLen で数える）");
+ok(/cpLen\(cleanUnit\(inp\.value\)\)/.test(code) && /n\s*\+\s*" \/ "\s*\+\s*MAX_UNIT/.test(code), "カウンタは n / MAX_UNIT をコードポイントで数える");
+ok(/cleanUnit\(fUnit\.inp\.value\)/.test(code) && /validateInput\(review,\s*next,\s*unit\)/.test(code) && /buildPayload\(review,\s*next,\s*Date\.now\(\),\s*unit\)/.test(code), "保存は登録欄の値（cleanUnit を通した値）で検証・組み立てる");
+ok(!/st\.data\s*\?\s*st\.data\.unit\s*:/.test(code), "保存済みの unit を引き継ぐ暫定処理は外れている（登録欄の値が正）");
+ok(/inp\.value\s*=\s*d\s*\?\s*d\.unit\s*:\s*""/.test(code), "保存済みの unit を登録欄に読み込む");
+
 // 保存・キャッシュのキー
 ok(/CACHE_PREFIX\s*\+\s*st\.authUid\s*\+\s*"_"\s*\+\s*st\.target/.test(code), "キャッシュのキーは authUid と対象uidで分ける");
 ok(/SEEN_PREFIX\s*\+\s*st\.authUid\s*\+\s*"_"\s*\+\s*st\.target/.test(code), "未読（最後に見た値）のキーも authUid と対象uidで分ける");
@@ -329,7 +468,8 @@ if (syncTags.length === 1 && recoTags.length === 1) {
   else console.log("  （git から HEAD の index.html を読めなかったので firebase-sync.js の ?v= 比較は省略）");
 }
 const cssV = INDEX.match(/<link[^>]*href="style\.css\?v=(\d+)"/);
-ok(!!cssV && Number(cssV[1]) >= 24, "style.css の ?v= が 24 以上", cssV && cssV[1]);
+ok(!!cssV && Number(cssV[1]) >= 25, "style.css の ?v= が 25 以上（カードのスタイル追加で 24 から更新）", cssV && cssV[1]);
+if (recoTags.length === 1) ok(Number(recoTags[0].v.slice(0, 8)) >= 20261009 && recoTags[0].v !== "20261008-1", "reco.js の ?v= が 20261008-1 から更新されている（" + recoTags[0].v + "）");
 ok(/^\s*<script[^>]*src="unit-strength\.js\?v=/m.test(INDEX), "unit-strength.js（分析ボタン）の script が残っている");
 // reco.js が app.js / questions を変えていないこと（読み込み順は firebase-sync.js の後）
 const appIdx = INDEX.indexOf("app.js?v="), recoIdx = INDEX.indexOf("reco.js?v=");
@@ -344,6 +484,12 @@ ok(/\.reco-text\s*\{[^}]*white-space:\s*pre-wrap/.test(CSS), ".reco-text は whi
 ok(/\.reco-bell\[hidden\]\s*\{\s*display:\s*none/.test(CSS), ".reco-bell[hidden] が効く（display 指定に負けない）");
 ok(/\.reco-textarea\s*\{[^}]*font-size:\s*16px/.test(CSS), "入力欄は 16px（iOS で拡大されない）");
 ok(/@media\s*\(max-width:\s*900px\)\s*\{\s*\.topbar\.has-reco-bell/.test(CSS), "スマホ幅のベル配置（.topbar.has-reco-bell）がある");
+ok(/\.reco-next-card\s*\{[^}]*min-height:\s*44px/.test(CSS), ".reco-next-card は min-height: 44px");
+ok(/\.reco-next-unit\s*\{[^}]*overflow-wrap:\s*anywhere/.test(CSS), ".reco-next-unit は overflow-wrap: anywhere（長い単元名が折り返す）");
+ok(/\.reco-next-card\[hidden\]\s*\{\s*display:\s*none/.test(CSS), ".reco-next-card[hidden] が効く（display 指定に負けない）");
+ok(/\.reco-next-card\s*\{[^}]*background:\s*#eff6ff[^}]*\}/.test(CSS) && /\.reco-next-card\s*\{[^}]*border:\s*1px solid #bfdbfe/.test(CSS), ".reco-next-card は青系（.badge と同じ #eff6ff / #bfdbfe）");
+ok(/\.reco-input\s*\{[^}]*font-size:\s*16px/.test(CSS), "おすすめ単元の入力欄は 16px（iOS で拡大されない）");
+ok(!/\.reco-next-card[^{]*\{[^}]*(position:\s*absolute|reco-bell)/.test(CSS), "カードのスタイルはベルと独立（ベルのスタイルを流用・変更していない）");
 
 // 実データが紛れていないこと（このテストと reco.js / CSS にダミー以外の学習内容を書かない運用の確認用：UID・メールが入っていない）
 section("静的チェック: 機微な値が入っていない");

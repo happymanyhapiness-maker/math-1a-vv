@@ -1860,3 +1860,59 @@ body.exam-mode .main-layout{
 .reco-status-ok { color: #166534; }
 .reco-status-ng { color: #b91c1c; }
 .reco-save { width: 100%; margin-top: 4px; }
+
+/* =========================
+   追加: 「次のおすすめ」カード（reco.js が #unitCardList の直前に注入）
+   青系（.badge 寄り）。スマホで押しやすい高さ。単元名は長くても折り返す。
+========================= */
+.reco-next-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  box-sizing: border-box;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.reco-next-card[hidden] { display: none; }
+.reco-next-card:hover { background: #dbeafe; }
+.reco-next-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+.reco-next-unit {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* 登録欄の「おすすめ単元」（1行入力） */
+.reco-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;   /* iOS で入力時に画面が拡大されないように */
+  line-height: 1.6;
+}
+.reco-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6b7280;
+}

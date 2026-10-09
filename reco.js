@@ -4,9 +4,11 @@
    ・app.js / firebase-sync.js / questions_*.js は変更しない後付けモジュール（unit-strength.js と同じ方式）。
    ・保護者が貼り付けた文章（ふり返り / 次にやること）を、学習者と保護者がベルのモーダルで読む。
    ・保存先: kyotsu-math-reco/{子のuid}  { payload: JSON文字列, savedAt: serverTimestamp }
-       payload = { version: 2, updatedAt: "YYYY-MM-DD", review: "...", next: "..." }
+       payload = { version: 2, updatedAt: "YYYY-MM-DD", review: "...", next: "...", unit?: "..." }
+       unit（おすすめ単元・1行・30文字まで）は任意。無い（過去の登録データ）ときは「おすすめ」を出さないだけで、他は今までどおり。
      読む権限は 本人 / 保護者、書く権限は 保護者のみ（Firestore Rules。クライアントの判定は見た目だけ）。
    ・回答履歴（answerLog / questionHistory）は読まない。文章は textContent で描画する（HTMLとして解釈しない）。
+   ・おすすめ単元（unit）があるときだけ、単元選択画面の単元カード群の上に「⭐ 次のおすすめ」カードを出す（押すとお知らせモーダル）。
    ・読み込み失敗・permission-denied・未登録・guest・unauthorized では何も出さない（保護者の「読めた」場合を除く）。
    ・firebase-sync.js より先に実行されても落ちない（getApp を再試行し、認証は onAuthStateChanged 経由）。
    ・読み込み順: firebase-sync.js の後に <script type="module"> で追加する。
@@ -19,6 +21,7 @@ const COLLECTION = "kyotsu-math-reco";
 const PAYLOAD_VERSION = 2;
 const MAX_REVIEW = 3000;        // 画面側の文字数上限（コードポイント数）
 const MAX_NEXT = 1500;
+const MAX_UNIT = 30;            // おすすめ単元（1行）
 const MAX_PAYLOAD_BYTES = 19000; // Rules の payload.size() < 20000 より手前。size() が文字数でもバイト数でも通る値
 const CACHE_PREFIX = "kyotsu_reco_cache_v1_";
 const SEEN_PREFIX = "kyotsu_reco_seen_v1_";
@@ -32,6 +35,16 @@ function cleanText(s) {
   return s
     .replace(/\r\n?/g, "\n")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g, "")
+    .trim();
+}
+
+// 1行の短い文字（単元名）用。改行・タブ・行区切りは空白にし、残りの制御文字は除去、続く空白は1つにして前後を落とす
+function cleanUnit(s) {
+  if (typeof s !== "string") return "";
+  return s
+    .replace(/[\r\n\t\u2028\u2029]+/g, " ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+    .replace(/ {2,}/g, " ")
     .trim();
 }
 
@@ -58,6 +71,7 @@ function formatDateLabel(key) {
 }
 
 // payload（JSON文字列）を読む。形が違う・どちらの文章も空のときは null（＝未登録と同じ扱い）
+// unit は任意: 無い・文字列でない・30文字を超える（途中で切ると誤解を招く）ときは ""（＝おすすめを出さない）
 function parsePayload(str) {
   if (typeof str !== "string" || !str) return null;
   let o;
@@ -67,20 +81,27 @@ function parsePayload(str) {
   const next = cleanText(o.next);
   if (!review && !next) return null;
   const updatedAt = typeof o.updatedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.updatedAt) ? o.updatedAt : "";
-  return { review, next, updatedAt };
+  let unit = cleanUnit(o.unit);
+  if (cpLen(unit) > MAX_UNIT) unit = "";
+  return { review, next, updatedAt, unit };
 }
 
-// 保護者の入力を検証する。問題なければ null、あれば画面に出す文
-function validateInput(review, next) {
+// 保護者の入力を検証する。問題なければ null、あれば画面に出す文（unit は任意。渡すときは cleanUnit を通した値）
+function validateInput(review, next, unit) {
   if (!review || !next) return "「ふり返り」と「次にやること」の両方を入れてね";
   if (cpLen(review) > MAX_REVIEW) return "「ふり返り」は" + MAX_REVIEW + "文字までだよ（いま" + cpLen(review) + "文字）";
   if (cpLen(next) > MAX_NEXT) return "「次にやること」は" + MAX_NEXT + "文字までだよ（いま" + cpLen(next) + "文字）";
+  if (unit && cpLen(unit) > MAX_UNIT) return "「おすすめ単元」は" + MAX_UNIT + "文字までだよ（いま" + cpLen(unit) + "文字）";
   return null;
 }
 
 // 保存する payload（JSON文字列）。updatedAt は端末の日付（表示の第一候補ではない。savedAt が無いときの予備）
-function buildPayload(review, next, nowMs) {
-  return JSON.stringify({ version: PAYLOAD_VERSION, updatedAt: jstDateKey(nowMs), review, next });
+// unit が空のときはキー自体を入れない（過去の登録データと同じ形のまま）
+function buildPayload(review, next, nowMs, unit) {
+  const o = { version: PAYLOAD_VERSION, updatedAt: jstDateKey(nowMs), review, next };
+  const u = cleanUnit(unit);
+  if (u) o.unit = u;
+  return JSON.stringify(o);
 }
 
 function hashStr(s) {
@@ -106,13 +127,19 @@ function savedAtMs(v) {
   return v && typeof v.toMillis === "function" ? v.toMillis() : null;
 }
 
+// 「次のおすすめ」カードを出してよい状態か（出題中の非表示は DOM 側で別に見る）。
+// 学習者・保護者で読めて、おすすめ単元が空でないときだけ。ゲスト・unauthorized は st 自体が作られない（null）
+function shouldShowCard(s) {
+  return !!(s && s.readOk && s.data && typeof s.data.unit === "string" && s.data.unit);
+}
+
 /* ---- 純粋な関数（END） ---- */
 
 /* ---------- 状態 ---------- */
 let db = null;
 let gen = 0;            // ログイン状態が変わるたびに増える。古い非同期処理の結果は捨てる
 let saving = false;
-let st = null;          // { role, authUid, target, readOk, data: {review,next,updatedAt,savedMs,key,payload} | null }
+let st = null;          // { role, authUid, target, readOk, data: {review,next,updatedAt,unit,savedMs,key,payload} | null }
 
 function warn(msg, e) {
   try { console.warn("[reco] " + msg, (e && e.code) || e || ""); } catch (x) { /* 何もしない */ }
@@ -152,6 +179,7 @@ function applyDoc(payloadStr, savedMs) {
     review: p.review,
     next: p.next,
     updatedAt: p.updatedAt,
+    unit: p.unit,
     savedMs,
     payload: payloadStr,
     key: versionKey(savedMs, payloadStr)
@@ -217,7 +245,45 @@ function shouldShowBell() {
   return !!st.data;                               // 学習者は、読める内容があるときだけ
 }
 
+/* ---------- 「次のおすすめ」カード ---------- */
+// 置き場所: 単元選択画面の中、#unitCardList の直前（兄弟）。#unitCardList の中は buildUnitSelectCards() が作り直すので入れない。
+// 単元選択画面そのものが出題中・単元の中では display:none になるので、そのとき一緒に隠れる（examActive でも二重に隠す）。
+// 既読の扱い・赤い点は無い。押すとベルと同じお知らせモーダルを開く。単元を開く動きは付けない。
+function ensureCard() {
+  let c = document.getElementById("recoNextCard");
+  if (c) return c;
+  const list = document.getElementById("unitCardList");
+  const parent = list && list.parentNode;
+  if (!parent) return null;
+  c = document.createElement("button");
+  c.type = "button";
+  c.id = "recoNextCard";
+  c.className = "reco-next-card";
+  c.appendChild(h("span", "reco-next-label", "⭐ 次のおすすめ"));
+  c.appendChild(h("span", "reco-next-unit"));
+  c.addEventListener("click", openModal);
+  parent.insertBefore(c, list);
+  return c;
+}
+
+function removeCard() {
+  const c = document.getElementById("recoNextCard");
+  if (c && c.parentNode) c.parentNode.removeChild(c);
+}
+
+function updateCard() {
+  if (!shouldShowCard(st)) { removeCard(); return; }
+  const c = ensureCard();
+  if (!c) return;
+  const unit = st.data.unit;
+  const u = c.querySelector(".reco-next-unit");
+  if (u && u.textContent !== unit) u.textContent = unit;   // 単元名は textContent だけ（HTMLとして解釈しない）
+  c.setAttribute("aria-label", "次のおすすめ　" + unit + "。お知らせを開く");
+  c.hidden = examActive();
+}
+
 function updateBell() {
+  updateCard();   // カードの表示条件はベルと別（保護者でも未登録ならカードは出さない）。ベルが早期 return する前に更新する
   if (!shouldShowBell()) { removeBell(); closeModal(); return; }
   const b = ensureBell();
   if (!b) return;
@@ -305,6 +371,30 @@ function buildEditor(viewBox) {
   sec.appendChild(fReview.wrap);
   sec.appendChild(fNext.wrap);
 
+  // おすすめ単元（任意・1行）。maxlength は UTF-16 単位で絵文字とずれるので付けず、cpLen で数える
+  const fUnit = (function () {
+    const wrap = h("label", "reco-field");
+    wrap.appendChild(h("span", "reco-field-label", "おすすめ単元（任意）"));
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "reco-input";
+    inp.autocomplete = "off";
+    inp.value = d ? d.unit : "";
+    const count = h("span", "reco-count");
+    function refresh() {
+      const n = cpLen(cleanUnit(inp.value));
+      count.textContent = n + " / " + MAX_UNIT;
+      count.classList.toggle("reco-count-over", n > MAX_UNIT);
+    }
+    inp.addEventListener("input", refresh);
+    refresh();
+    wrap.appendChild(inp);
+    wrap.appendChild(count);
+    wrap.appendChild(h("span", "reco-hint", "トップに出す短い単元名だけ。空にして保存すると、トップのカードは消えるよ。"));
+    return { wrap, inp };
+  })();
+  sec.appendChild(fUnit.wrap);
+
   const status = h("div", "reco-status");
   status.setAttribute("role", "status");
   const btn = h("button", "btn primary reco-save", "保存する");
@@ -319,9 +409,10 @@ function buildEditor(viewBox) {
     if (saving || !st || st.role !== "guardian" || !db) return;
     const review = cleanText(fReview.ta.value);
     const next = cleanText(fNext.ta.value);
-    const invalid = validateInput(review, next);
+    const unit = cleanUnit(fUnit.inp.value);
+    const invalid = validateInput(review, next, unit);
     if (invalid) { setStatus(invalid, false); return; }
-    const payload = buildPayload(review, next, Date.now());
+    const payload = buildPayload(review, next, Date.now(), unit);   // unit が空ならキーごと無し＝カードも消える
     if (utf8Len(payload) > MAX_PAYLOAD_BYTES) { setStatus("文章が長すぎるよ。少し短くしてね", false); return; }
 
     const g = gen;
@@ -344,6 +435,7 @@ function buildEditor(viewBox) {
       markSeen();              // 自分が保存したものは、自分の端末では既読
       fReview.ta.value = review;
       fNext.ta.value = next;
+      fUnit.inp.value = unit;
       renderView(viewBox);
       updateBell();
       setStatus("保存したよ", true);
@@ -451,6 +543,7 @@ function onUser(user) {
   gen++;
   st = null;
   removeBell();
+  removeCard();
   closeModal();
   if (!user) return;   // guest: 何も出さない
   start(user, gen, 0);
